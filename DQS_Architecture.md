@@ -1,10 +1,5 @@
 # DynamicQuestSystem -- Documentation Architecture Exhaustive
 
-> Document genere par analyse complete des ~180 fichiers source du plugin.
-> Derniere mise a jour : 2026-03-23
-
----
-
 ## 1. Vue d'ensemble
 
 Le **DynamicQuestSystem** est un framework de quetes modulaire pour UE5, concu pour un jeu multijoueur (client/serveur dedie) avec un monde procedural (WorldScape). Il gere le cycle de vie complet des quetes : definition, assignation, progression, completion, persistance binaire, et interface utilisateur.
@@ -1153,5 +1148,3 @@ Private/
 ```
 
 ---
-
-*Fin du document. Tous les fichiers source (headers et implementations) ont ete lus et analyses.*
