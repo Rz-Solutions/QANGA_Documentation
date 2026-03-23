@@ -1,7 +1,5 @@
 # QAI - Architecture Technique
 
-Documentation interne a destination du co-developpeur en charge du refactoring.
-
 ## Etat reel de l'architecture
 
 L'intention de design originale etait un **"Data-Driven ECS avec FSM Hierarchique et Batch Processing"**. En pratique, le code actuel est plus precisement un :
