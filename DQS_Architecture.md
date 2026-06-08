@@ -48,7 +48,7 @@ DynamicQuestSystemDebug  DynamicQuestSystemObjectives
 | MultiStageQuestTemplate | Core | **Complet** | 5 archetypes multi-etapes |
 | QuestStringTableRuntime | Core | **Complet** | Resolution de textes localises via StringTables |
 | InteractableMeshDatabase | Core | **Complet** | Classification de meshes par mots-cles (~200 entrees) |
-| LevelMeshScanner | Core | **Partiel** | Scan de niveaux. `PerformAsyncScan` cree des UObjects hors game thread (bug). |
+| LevelMeshScanner | Core | **Complet** | Scan de niveaux. `PerformAsyncScan` differe la passe UObject sur le game thread. |
 | QuestEditorWindow | Editor | **Complet** | Editeur principal, 8 onglets |
 | QuestFlowGraph | Editor | **Lecture seule** | Graphe visuel. `SaveToQuestDefinition()` est vide. |
 | EditorJsonQuestDataSource | Editor | **Complet** | Persistance JSON editeur avec migration binaire legacy |
@@ -881,7 +881,7 @@ struct FQuestNotificationPayload {
 
 1. **QuestRelevancyManager** : `IsPlayerQuestParticipant` retourne toujours `true`. `IsPlayerOnSameTeam` retourne toujours `true`. La resolution de PlayerID utilise `GetPlayerName()` au lieu du Steam ID. Le systeme de relevance est donc fonctionnellement un broadcast a tous.
 
-2. **LevelMeshScanner::PerformAsyncScan** : Cree des UObjects (`NewObject`) et accede des composants d'acteurs depuis un thread pool. C'est **unsafe** -- les operations UObject doivent etre sur le game thread.
+2. **LevelMeshScanner::PerformAsyncScan** *(corrige)* : la passe UObject (iteration d'acteurs, `GetComponents`, acces mesh, `NewObject`) est desormais differee sur le game thread via `AsyncTask(ENamedThreads::GameThread, ...)`. Auparavant elle tournait sur un thread pool et derefencait des acteurs liberes pendant le chargement de niveau (crash use-after-free dans `IsA<ABrush>`).
 
 3. **InteractionComponent** : `bCanEverTick = true` toujours, meme quand le timer est utilise (tick ne fait rien dans ce cas -- gaspillage). La distance de l'interface (`GetInteractionDistance()`) n'est jamais interrogee.
 
