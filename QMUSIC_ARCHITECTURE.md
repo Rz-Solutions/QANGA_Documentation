@@ -3,6 +3,7 @@
 > Document de conception. État : **DESIGN VALIDÉ, NON IMPLÉMENTÉ** (phase écriture, aucune ligne de code écrite).
 > Plugin cible : **`QMusicDirector`** (nouveau, haut-niveau).
 > À lire avant toute implémentation. Met à jour ce document si le code diverge.
+> **Vérifié contre le code le 2026-06-26** : tous les systèmes réutilisés existent (symboles réels notés dans le doc). Un seul hook manque et doit être ajouté — un délégué d'observation public sur le manager (§9.4) ; sans lui, le yield « OnRep » n'est pas bindable tel quel.
 
 ---
 
@@ -22,7 +23,7 @@ La musique d'ambiance est une **décision de présentation locale**. Chaque clie
 - ne tourne **pas** sur le serveur dédié (early-return si `IsRunningDedicatedServer()`),
 - agit uniquement sur le **joueur local**.
 
-La seule chose réseau dans tout le tableau est **pré-existante** : le manager partagé de `QAmbientAudio` (utilisé par la quête et les beds d'environnement). QMusic ne fait que **l'observer localement** (un simple callback `OnRep` côté client) pour savoir quand se taire. Il n'ajoute aucune réplication.
+La seule chose réseau dans tout le tableau est **pré-existante** : le manager partagé de `QAmbientAudio` (utilisé par la quête et les beds d'environnement). QMusic ne fait que **l'observer localement** (un délégué broadcasté depuis l'`OnRep` du manager — petit renfort §9.4, **aucune réplication ajoutée**) pour savoir quand se taire. Il n'ajoute aucune réplication.
 
 ---
 
@@ -87,13 +88,16 @@ Une seule couche de musique audible à la fois, la plus prioritaire gagne. La pi
 | Exploration (défaut, biome / jour-nuit) | 0 | couche de fond | QMusicDirector (local) |
 | QRadio diégétique (véhicule actif) | n/a | la musique perso **CÈDE** (silence) | QMusicDirector cède le pas |
 
+> ⚠️ **Les priorités 90-100 de la quête sont des valeurs par défaut, pas une bande imposée.** `UControlAmbientAudioAction::OverridePriority` (=100) / `NextPriority` (=90) sont des `int32` `EditAnywhere` **non clampés** : un designer peut poser une quête sous le mood `Chase` (60-80) et casser le « la quête gagne toujours ». → **Réserver/clamper une bande de priorité quête** (≥ tous les moods du Director). La pile du manager (`AQAmbientAudioManager::LayerStack`) est un **stack LIFO strict** : `PushLayer` rejette toute requête de priorité < sommet courant (ce n'est pas une file triée).
+
 ### 4.2 Ducking (baisse le VOLUME, ne change pas le morceau)
 Quand Tona parle ou qu'une notif s'affiche, on **n'enlève pas** la musique : on la baisse de quelques dB le temps de la voix, puis on remonte. Mécanisme : un **SoundMix** poussé/retiré sur la SoundClass de musique (voir §7).
 
 ### 4.3 Règles de "yield" (le Director se tait localement)
 Le Director observe **localement** (callbacks, aucun réseau ajouté) et coupe sa propre musique tant que :
-- le **manager partagé** joue une musique (quête / bed scripté) : observation via le `OnRep_AmbientState` du manager (callback déjà local côté client) ;
-- la **QRadio** est active pour le joueur local (il conduit / écoute) : observation de l'état radio local du pawn possédé ;
+- le **manager partagé** joue une musique **prioritaire** (quête / bed scripté) : l'état `ActiveState` (`FQAmbientReplicatedState`) de `AQAmbientAudioManager` est déjà répliqué (`DOREPLIFETIME`) et son rep-notify `OnRep_AmbientState` se déclenche sur chaque client. ⚠️ **`OnRep_AmbientState` est une `UFUNCTION()` protégée qui ne fait que rappeler `ApplyReplicatedState` — ce n'est PAS un délégué bindable.** Le Director ne peut pas s'y abonner tel quel : il faut le **renfort §9.4** (un multicast delegate public sur le manager, broadcasté depuis `OnRep_AmbientState`).
+- ⚠️ **Discriminer par priorité, pas par « ça joue ».** Le lit d'ambiance par défaut transite par le **même** `ActiveState` à `Priority=0`. Un yield sur « quelque chose joue ? » rendrait le Director muet en permanence. Le yield doit se déclencher sur `ActiveState.Priority >= seuil_quête` (et `PlayState == Playing`, `ActiveDefinition` non nul).
+- la **QRadio** est active pour le joueur local : `UQRadioComponent::IsPlaying()` existe mais renvoie vrai aussi pour une radio **3D distante** (autre conducteur). Il faut le **gater par `IsLocallyControlled()`** sur le pawn possédé, ou ajouter un petit getter public `IsLocalDriver()` (aujourd'hui privé).
 - (le ducking voix, lui, ne fait pas taire mais baisser : c'est la couche C).
 
 Résultat : **jamais deux musiques empilées**. La musique de quête prend toujours le dessus ; l'ambiance reprend en crossfade dès que la quête se termine.
@@ -140,11 +144,18 @@ Section `[/Script/QMusicDirector.QMusicDirectorSettings]` dans `DefaultGame.ini`
 ### 6.2 Entrées v1 (toutes event-driven, aucun poll)
 | Signal | Source (déjà existante) | Délégué | Mood déduit |
 |---|---|---|---|
-| Niveau de recherche | `UQWantedSystemService` | `OnWantedLevelChanged`, `OnEscalationTriggered` | `Chase` (intensité selon niveau) |
-| Entrée/sortie de zone | `UTriggerZoneComponent` | `OnTriggerZoneEntered` / `OnTriggerZoneExited` | `SafeZone` / `Tension` selon tag de zone |
-| Musique de quête active | manager `QAmbientAudio` | `OnRep_AmbientState` (callback local) | yield (se tait) |
-| Radio véhicule active | état radio du pawn local | callback local d'état radio | yield (se tait) |
-| Notif / dialogue (Tona) | `UQNotificationManager` | `OnNotificationDisplayedNative` / `OnNotificationDismissedNative` | déclenche le **ducking** (couche C) |
+| Niveau de recherche | `UQWantedSystemService` ¹ | `OnWantedLevelChanged`, `OnEscalationTriggered` | `Chase` (intensité selon niveau) |
+| Entrée/sortie de zone | `UTriggerZoneComponent` ² | `OnTriggerZoneEntered` / `OnTriggerZoneExited` | `SafeZone` / `Tension` (voir ² : pas de tag natif) |
+| Musique de quête active | `AQAmbientAudioManager` ³ | `OnRep_AmbientState` → **délégué à ajouter (§9.4)** | yield (se tait) |
+| Radio véhicule active | `UQRadioComponent` ⁴ | `IsPlaying()` + gate local | yield (se tait) |
+| Notif / dialogue (Tona) | `UQNotificationManager` ⁵ | `OnNotificationDisplayedNative` / `OnNotificationDismissedNative` | déclenche le **ducking** (couche C) |
+
+**Notes de vérification (2026-06-26, contre le code) :**
+1. `UQWantedSystemService` est un **UObject service** (pas un subsystem) : récupérer l'instance vivante (via `UQPoliceSubsystem`) pour binder. Délégués confirmés (`BlueprintAssignable`).
+2. `UTriggerZoneComponent` (module `QTriggerZone`) + délégués confirmés, **mais aucun tag SafeZone/Tension** : `EQTriggerZoneType` = `Sound`/`Teleport`/`Custom`. Les zones pilotent **déjà** `AQAmbientAudioManager` via leur propre `AmbientDefinition`. → définir une **convention** sur `ZoneID`/`ZoneName` (ou ajouter un champ tag) ; le Director coexiste avec l'ambiance jouée par les zones, ce n'est pas un flux séparé.
+3. `ActiveState` (`FQAmbientReplicatedState`) est répliqué ; `OnRep_AmbientState` est **protégé et non bindable** → renfort §9.4. Yield à gater sur `Priority` (le lit par défaut passe par le même état à `Priority=0`).
+4. `UQRadioComponent::IsPlaying()` est vrai aussi pour une radio **3D distante** → gater par `IsLocallyControlled()` ou ajouter `IsLocalDriver()` public.
+5. `OnNotificationDisplayedNative`/`DismissedNative` sont des **délégués natifs STATIQUES** (non `BlueprintAssignable`) : binder en C++ via les accesseurs statiques `GetOnNotification*Native()`, instance via `UQNotificationManager::GetManagerInstance()`. Gérer la durée de vie des bindings (statiques).
 
 Le mood "Exploration" est le **défaut** quand aucune autre condition n'est vraie. Sa teinte (biome, jour/nuit) est un raffinement (voir §10).
 
@@ -154,7 +165,7 @@ Le mood "Exploration" est le **défaut** quand aucune autre condition n'est vrai
 - Le changement de mood déclenche un **crossfade** via la couche A (déjà géré par `QAmbientAudio`).
 
 ### 6.4 Lecture locale
-Le Director joue la musique **localement** en réutilisant le composant de lecture de `QAmbientAudio` (crossfade, chargement async, MetaSound déjà résolus), **sans passer par le manager répliqué**. Il construit son état de lecture en local (temps local, pas de temps serveur requis pour une couche perso). Voir §9 pour le petit renfort nécessaire.
+Le Director joue la musique **localement** en réutilisant le composant de lecture de `QAmbientAudio` (crossfade, chargement async, MetaSound déjà résolus), **sans passer par le manager répliqué**. Il construit son état de lecture en local (un `FQAmbientReplicatedState` rempli côté client, temps local) et le pousse via `UQAmbientPlaybackComponent::ApplyReplicatedState` (point d'entrée déjà existant, early-return sur serveur dédié). Voir §9.2 pour le wrapper local nécessaire.
 
 ---
 
@@ -196,10 +207,11 @@ Le plugin **AudioModulation est déjà activé mais inutilisé**. Migration futu
 
 ## 9. Renforts nécessaires sur `QAmbientAudio` (chirurgical)
 1. **`SoundClassOverride`** appliqué par le composant de lecture pour router l'ambiance vers la SoundClass dédiée (sinon le ducking ne sait pas quoi cibler).
-2. **Chemin de lecture local** : pouvoir piloter un `UQAmbientPlaybackComponent` en local (état construit côté client) sans passer par le manager répliqué. Le composant accepte déjà un état de lecture ; il faut juste un point d'entrée local propre.
+2. **Chemin de lecture local** : pouvoir piloter un `UQAmbientPlaybackComponent` en local (état construit côté client) sans passer par le manager répliqué. Le point d'entrée existe (`ApplyReplicatedState(NewState, PreviousState)`, qui early-return sur serveur dédié) ; il faut juste un wrapper local propre qui construit un `FQAmbientReplicatedState` côté client.
 3. **`UDeveloperSettings`** pour QAmbientAudio (aujourd'hui absent) : fades par défaut, SoundClass par défaut.
+4. **Délégué d'observation d'état (LE bridge quête, à ajouter)** : aujourd'hui `AQAmbientAudioManager::OnRep_AmbientState` est une `UFUNCTION()` **protégée** qui ne fait que rappeler `PlaybackComponent->ApplyReplicatedState` — le module n'expose **aucun delegate, aucun subsystem, aucun event**. Ajouter un `DECLARE_DYNAMIC_MULTICAST_DELEGATE` public (ex. `OnAmbientStateChanged(const FQAmbientReplicatedState& NewState, const FQAmbientReplicatedState& PreviousState)`) **broadcasté depuis `OnRep_AmbientState`** (qui tourne déjà sur les clients et possède déjà `PreviousState` pour différencier start/stop). C'est ce hook — et non `OnRep` directement — auquel le Director s'abonne pour le yield. (À défaut : sonder `GetActiveRequestId()` / un nouveau getter, moins propre.)
 
-Ces 3 points sont additifs, ne changent aucune API publique existante, ne cassent pas le chemin quête actuel.
+Ces 4 points sont additifs, ne changent aucune API publique existante, ne cassent pas le chemin quête actuel.
 
 ---
 
@@ -207,9 +219,12 @@ Ces 3 points sont additifs, ne changent aucune API publique existante, ne cassen
 
 ### À confirmer avant implémentation
 - **Source jour/nuit** : non identifiée de façon fiable (rien de probant côté AtmoScape ; piste `PlanetScape`). Tant que non confirmée, la teinte jour/nuit du mood Exploration reste optionnelle.
-- **`QPassiveMix_Base`** : rôle exact à inspecter (réutilisable comme base de ducking ?).
+- **`QPassiveMix_Base`** : rôle exact à inspecter (réutilisable comme base de ducking ?). _(Existence confirmée : `Content/Sounds/_SoundClass/QPassiveMix_Base`.)_
 - **Ducker la radio** quand Tona parle : oui/non (défaut : non).
 - **Profil par niveau** : comment associer un `UQMusicProfile` à chaque monde (DeveloperSettings vs tag de niveau).
+- **Bande de priorité quête** : réserver/clamper (les 90-100 sont des defaults non clampés ; voir §4.1).
+- **Mapping zone → mood** : définir une convention sur `ZoneID`/`ZoneName` ou un nouveau champ tag — il n'y a **pas** de tag SafeZone/Tension natif (`EQTriggerZoneType` = `Sound`/`Teleport`/`Custom`), et les zones pilotent déjà `AQAmbientAudioManager` (voir §6.2 note 2).
+- **Getter radio local** : exposer `IsLocalDriver()` public sur `UQRadioComponent` (ou gater `IsPlaying()` par `IsLocallyControlled()`) pour distinguer la radio 2D du joueur d'une radio 3D distante.
 
 ### Évolutions (hors v1, voie propre)
 - **Détection de combat IA** : ajouter un délégué `OnCombatStateChanged` (CombatComponent / QAI) plutôt que poller `bInCombat`. Ouvre le mood `Combat` / `Boss`.
@@ -218,6 +233,7 @@ Ces 3 points sont additifs, ne changent aucune API publique existante, ne cassen
 - **AudioModulation** : ducking et intensité continue via Control Buses.
 - **Layering vertical** (remix additif : lit d'ambiance + couche d'intensité par-dessus) au lieu du remplacement couche-unique actuel.
 - **Per-player quest scoping** : le manager partagé joue la musique de quête pour tout le monde dans le monde (OK au tuto, discutable à 500 joueurs). À traiter séparément, ce n'est pas dans le périmètre QMusic.
+- **Crossfade apparié** : la couche A fade aujourd'hui seulement la piste précédente (mono-buffer : `FadeOutActive` sur l'ancien composant pendant que le nouveau démarre) ; un fondu équal-power apparié lisserait les swaps rapides.
 
 ---
 
