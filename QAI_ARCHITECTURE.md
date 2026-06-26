@@ -1,21 +1,30 @@
 # QAI - Architecture Technique
 
+> Document mis a jour pour refleter l'etat du plugin au 26 juin 2026 (UE 5.7). Depuis la
+> premiere redaction (police only, 3 behaviors, FSM plate a 7 etats), le plugin a triple de
+> perimetre : ~13 archetypes routes par behavior, pathfinding par flow field, tier impostor VAT,
+> significance/LOD + paliers d'allegement, module de factions dedie, trafic aerien, partage
+> d'animation. Ce document decrit ce que le code livre REELLEMENT aujourd'hui.
+
 ## Etat reel de l'architecture
 
-L'intention de design originale etait un **"Data-Driven ECS avec FSM Hierarchique et Batch Processing"**. En pratique, le code actuel est plus precisement un :
+L'intention de design originale etait un **"Data-Driven ECS avec FSM Hierarchique et Batch Processing"**. En pratique, le code actuel est un :
 
-**"Data-Oriented Batch Processing Architecture avec FSM Plate et Behaviors Routes par Archetype"**
+**"Data-Oriented Batch Processing avec FSM plate, Behaviors routes par Archetype, et un pipeline de presentation multi-paliers (live / impostor dormant / partage d'anim)"**
 
-Voici ou le code livre reellement, et ou il reste du chemin :
+| Label original         | Realite dans le code                                                                 | Statut    |
+|------------------------|--------------------------------------------------------------------------------------|-----------|
+| **Batch Processing**   | ParallelFor, SIMD SSE/NEON, SoA cache-aligne, prefetch, fusion State->Mvt->Combat    | Livre     |
+| **Data-Driven**        | `UQAI_PawnConfig` (DataAsset) par archetype + `FQAI_*Config` par type ; mais la FSM et la matrice de factions restent hardcodees en C++ | Partiel ameliore |
+| **ECS**                | Entity handles (sparse+generation) + Systems (processeurs) ; toujours pas de composition dynamique de composants (chaque agent porte TOUS les `FQAI_*Config`) | Inspire   |
+| **FSM Hierarchique**   | FSM plate (`EQAI_AgentState`) + Strategy par archetype (`FQAI_*Behavior`) ; pas de super/sous-etats | Non       |
 
-| Label original            | Realite dans le code                                          | Statut    |
-|--------------------------|---------------------------------------------------------------|-----------|
-| **Batch Processing**     | ParallelFor, SIMD SSE/NEON, cache-aligned SoA, prefetch      | Livre     |
-| **Data-Driven**          | Layout SoA et configs par archetype, mais FSM et factions hardcodees en C++ | Partiel   |
-| **ECS**                  | Entity handles + Systems (processeurs), mais pas de composition dynamique de composants | Inspire   |
-| **FSM Hierarchique**     | FSM plate a 7 etats + Strategy pattern par archetype, pas de super-etats/sous-etats | Non       |
-
-**Ce que ca implique pour le refactoring** : les fondations performantes (SoA, SIMD, batch) sont solides. Ce qui manque pour atteindre le design original, c'est la composition dynamique (ECS), la configurabilite (data-driven), et l'imbrication d'etats (HFSM). Ces ecarts sont detailles dans la [section 15 (Guide pour le refactoring)](#15-guide-pour-le-refactoring).
+**Ce qui a change depuis la v1** : la composition par archetype a beaucoup progresse (13 behaviors,
+configs typees, DataAsset d'authoring), le module de factions duplique a ete consolide
+(`QAI_FactionLib`), un vrai systeme de pathfinding existe (flow field), et une couche entiere de
+performance a ete ajoutee (significance/LOD, tier impostor, partage d'anim). Ce qui manque toujours
+pour atteindre le design original : la composition memoire dynamique (vrai ECS) et l'imbrication
+d'etats (HFSM). Voir la [section 19 (Guide pour le refactoring)](#19-guide-pour-le-refactoring).
 
 ---
 
@@ -24,19 +33,24 @@ Voici ou le code livre reellement, et ou il reste du chemin :
 1. [Pourquoi cette architecture pour QANGA](#1-pourquoi-cette-architecture-pour-qanga)
 2. [Vue d'ensemble du pipeline](#2-vue-densemble-du-pipeline)
 3. [Le Registre SoA (Structure of Arrays)](#3-le-registre-soa-structure-of-arrays)
-4. [Optimisations SIMD et cache](#4-optimisations-simd-et-cache)
+4. [SIMD, cache et constantes](#4-simd-cache-et-constantes)
 5. [Les Processeurs (Batch Processing)](#5-les-processeurs-batch-processing)
 6. [La FSM (State Machine)](#6-la-fsm-state-machine)
 7. [Le systeme de Comportement par Archetype](#7-le-systeme-de-comportement-par-archetype)
-8. [Architecture Client/Serveur](#8-architecture-clientserveur)
-9. [Coordination et sous-systemes auxiliaires](#9-coordination-et-sous-systemes-auxiliaires)
-10. [Spatial Hash Grid et Sensing](#10-spatial-hash-grid-et-sensing)
-11. [Composants de mouvement](#11-composants-de-mouvement)
-12. [Systeme de factions](#12-systeme-de-factions)
-13. [Configuration et settings](#13-configuration-et-settings)
-14. [Structures de donnees de reference](#14-structures-de-donnees-de-reference)
-15. [Guide pour le refactoring](#15-guide-pour-le-refactoring)
-16. [Fichiers et emplacements](#16-fichiers-et-emplacements)
+8. [Catalogue des archetypes](#8-catalogue-des-archetypes)
+9. [Pathfinding par Flow Field](#9-pathfinding-par-flow-field)
+10. [Le tier Impostor (VAT) et la dormance](#10-le-tier-impostor-vat-et-la-dormance)
+11. [Significance / LOD et paliers d'allegement](#11-significance--lod-et-paliers-dallegement)
+12. [Spaceship AI et trafic aerien](#12-spaceship-ai-et-trafic-aerien)
+13. [Architecture Client/Serveur et multijoueur](#13-architecture-clientserveur-et-multijoueur)
+14. [Systeme de factions](#14-systeme-de-factions)
+15. [Spatial Hash Grid et Sensing](#15-spatial-hash-grid-et-sensing)
+16. [Composants de mouvement et d'animation](#16-composants-de-mouvement-et-danimation)
+17. [Spawners et cycle de vie](#17-spawners-et-cycle-de-vie)
+18. [Configuration, Settings et CVars](#18-configuration-settings-et-cvars)
+19. [Guide pour le refactoring](#19-guide-pour-le-refactoring)
+20. [Structures de donnees de reference](#20-structures-de-donnees-de-reference)
+21. [Fichiers et emplacements](#21-fichiers-et-emplacements)
 
 ---
 
@@ -44,75 +58,100 @@ Voici ou le code livre reellement, et ou il reste du chemin :
 
 ### Le probleme
 
-QANGA est un jeu multijoueur en monde ouvert avec des planetes entieres. Les AIs ne sont pas cantonnees a un niveau : elles existent sur des surfaces planetaires, dans l'espace, en vol atmospherique, et au sol. Le systeme doit gerer :
+QANGA est un jeu multijoueur en monde ouvert avec des planetes entieres (LWC). Les AIs existent sur
+des surfaces planetaires courbes, dans l'espace, en vol atmospherique, et au sol. Le systeme doit gerer :
 
-- **Des centaines d'agents simultanement** sur un serveur dedie (drones, unites au sol, vaisseaux spatiaux)
-- **Trois domaines de locomotion distincts** (vol, sol, espace) avec des physiques radicalement differentes
-- **Une architecture client/serveur asymetrique** : le serveur gere l'etat et le combat, les clients gerent le mouvement
-- **Des performances serveur critiques** : le serveur est headless, pas de GPU, chaque milliseconde compte
+- **Des centaines d'agents simultanement** : cyborgs, creatures (Sangline, Infected, Animal...), drones police, vaisseaux de trafic.
+- **Plusieurs domaines de locomotion** (sol, surface, vol, espace) avec des physiques radicalement differentes.
+- **Une architecture client/serveur asymetrique** : le serveur est autoritaire sur l'etat, le mouvement et le combat ; les clients allegent la presentation.
+- **Un serveur dedie SANS meshes** (par design) : aucune collision/geometrie cote serveur, ce qui interdit NavMesh et line-traces fiables.
+- **Des performances critiques** : objectif ~60 fps editeur PIE (Slate inclus) avec 100 AI en combat.
 
 ### Pourquoi pas le systeme AI natif d'Unreal ?
 
-Le systeme AI d'Unreal (Behavior Trees, AIController, NavMesh) est concu pour des agents individuels :
-- **1 AIController par Pawn** = overhead UObject par agent
-- **Behavior Trees individuels** = aucune coherence de cache entre agents
-- **NavMesh** = non fonctionnel sur des planetes spheriques ou dans l'espace
-- **Pas de batch processing** = chaque agent tick independamment, zero vectorisation
+- **1 `AIController` par Pawn** = overhead UObject par agent, zero coherence de cache.
+- **Behavior Trees / StateTree individuels** = aucune vectorisation, aucun batch.
+- **NavMesh** = non fonctionnel sur planetes spheriques, dans l'espace, et absent sur serveur dedie.
+
+L'ancien pipeline BP (`Qanga_AI_Controller` + StateTree + `AI_Manager` + `AI_Spawner`) a ete
+**entierement migre en C++** : plus d'`AAIController` custom (le `AAIController` stock suffit), plus
+de StateTree assets, plus de BTT. Tout est dans le pipeline SoA + behaviors.
 
 ### La solution : architecture Data-Oriented inspiree de l'ECS
 
-L'architecture QAI emprunte des patterns ECS tout en restant dans l'ecosysteme UObject d'Unreal :
+| Concept ECS        | Equivalent QAI                                                  | Fidelite |
+|--------------------|----------------------------------------------------------------|----------|
+| Entity             | `FQAI_AgentHandle` (index sparse + generation)                  | Fidele   |
+| Component (data)   | Arrays SoA dans `UQAI_AgentRegistry`                            | Partiel (layout fixe, pas composable) |
+| System             | Processeurs (`State`, `Movement`, `Combat`)                     | Fidele   |
+| Archetype          | `EQAI_AgentArchetype` + `FQAI_*Behavior` + `FQAI_*Config`       | Route le behavior et la config typee, pas le layout memoire |
 
-| Concept ECS          | Equivalent QAI                                      | Fidelite au pattern |
-|----------------------|-----------------------------------------------------|---------------------|
-| Entity               | `FQAI_AgentHandle` (index sparse + generation)      | Fidele              |
-| Component (data)     | Arrays SoA dans `UQAI_AgentRegistry`                | Partiel (fixe, pas composable) |
-| System               | Processeurs (`State`, `Movement`, `Combat`)          | Fidele              |
-| Archetype (ECS)      | `EQAI_AgentArchetype` + `FQAI_AgentBehaviorBase`    | Divergent (route le behavior, pas le layout memoire) |
-
-**Ce qui fonctionne** : les donnees de N agents sont dans des tableaux contigus. Un processeur qui itere sur tous les agents touche la memoire sequentiellement, optimisant les prefetch CPU et permettant la vectorisation SIMD.
-
-**Ce qui manque par rapport a un vrai ECS** :
-- **Pas de composition dynamique** : chaque agent a TOUJOURS toutes les donnees (HotData + PoliceState + PoliceAgent_Data + OwnerActor + WeaponCoordinator + TaserComponent). On ne peut pas avoir un agent avec Movement mais sans Combat.
-- **Pas de queries par composant** : impossible de demander "toutes les entites avec Position + Velocity mais sans Physics". C'est "itere sur tous les agents actifs".
-- **Layout memoire identique pour tous** : un drone, une unite au sol, et un vaisseau occupent exactement la meme empreinte memoire dans le registre, meme si 90% de leur config est inutilisee (ex: un drone a quand meme `SpaceshipConfig` et `AutonomousConfig` en memoire).
+**Dependances du plugin** (`QAI.uplugin`) : `QWeapon`, `GameplayAbilities`, `Cy_Trace`,
+`FlyVehicleMovement`, `GravityScape`, `AnimToTexture`, et `WorldScape` (optionnel). Module `QAI`
+charge en `PostDefault`.
 
 ---
 
 ## 2. Vue d'ensemble du pipeline
 
+Le subsysteme `UQAI_SubSystem` (un `UWorldSubsystem`) possede et orchestre tout :
+
+- `UQAI_AgentRegistry` (stockage SoA)
+- `UQAI_AgentBehaviorRegistry` (1 behavior par archetype)
+- Les 3 processeurs : `UQAI_StateProcessor`, `UQAI_MovementProcessor`, `UQAI_CombatProcessor`
+- `UQAI_FlowFieldManager` (pose sur un acteur-hote transient `QAI_PathfindingManager` au `OnWorldBeginPlay`)
+
+Le tick est une **custom tick function** (`FCustomTickFunction RealTime`) enregistree en
+`TG_PrePhysics`, intervalle `0` (chaque frame). Le subsysteme ne s'auto-desactive que via
+`bDisableSubsystemTick` (config).
+
 ```
-                      UQAI_SubSystem (WorldSubsystem)
-                              |
-                      RealTimeTick(DeltaTime)
-                              |
-                  +-----------+-----------+
-                  |                       |
-              [SERVEUR]              [CLIENT]
-                  |                       |
-      +---------+--------+         MovementProcessor
-      |                  |              seulement
-StateProcessor    CombatProcessor
-      |                  |
-      v                  v
-  FSM transitions    Behavior->
-  + state exec       ComputeCombatDecision()
-      |
-      v
-  MarkAgentForProcessing(Combat|Movement)
+UQAI_SubSystem::RealTimeTick(DeltaTime)   [TG_PrePhysics, chaque frame]
+        |
+        +-- UpdateAgentSignificance()   <- stampe SignificanceLOD de chaque agent (distance au viewer)
+        |
+        +-- selon NetMode :
+        |
+   [NM_Standalone] ----------------------------------------------------------------
+        | LifecycleTick() (~0.5 Hz)  +  AutoDiscoverAgents() (~0.5 Hz)
+        | ProcessAllPhasesPipelined(dt)   <- State->Movement->Combat FUSIONNES
+        |                                    en UN seul ParallelFor (1 barriere)
+        |
+   [NM_DedicatedServer / NM_ListenServer] -----------------------------------------
+        | LifecycleTick() (~0.5 Hz)  +  AutoDiscoverAgents() (~0.5 Hz)
+        | sync transforms acteur->registre (mouvement client-authoritatif)
+        | StateProcessor.ProcessBatch()   (3 ProcessBatch sequentiels, car le
+        | MovementProcessor.ProcessBatch()  Movement ne tourne que pour les agents
+        | CombatProcessor.ProcessBatch()    a ServerSimulate=true -> sous-ensembles differents)
+        |
+   [NM_Client] --------------------------------------------------------------------
+        | State + Movement UNIQUEMENT pour les agents locaux/proxy (unites police a marker)
+        |   -> les creatures serveur-autoritatives sont ignorees (sinon double-simulation)
+        | AutoDiscoverAgents() (~0.5 Hz)
+        | UpdateClientTrafficShips()      <- presentation lean des vaisseaux de trafic
+        | UpdateClientCreatureImpostors() <- impostors VAT cote client pour les creatures lointaines
 ```
 
-### Ordre d'execution des processeurs
+### Ordre d'execution des processeurs (deterministe)
 
-L'ordre est **deterministe et critique** :
+1. **State** (`StateMachine`) — transitions FSM, acquisition de cible, pauses de patrouille, gestion du flow field, marque `Movement`/`Combat` pour la suite.
+2. **Movement** (`Movement`) — calcule l'intention via le behavior, l'applique (rotation, ground-snap, FPM/vehicule/spaceship).
+3. **Combat** (`Combat`) — execute la decision de combat (tir, melee, detonation, armes vaisseau).
 
-1. **StateProcessor** - Evalue les transitions FSM, met a jour les timers, marque les flags de processing
-2. **MovementProcessor** - Calcule et applique le mouvement via le Behavior, synchronise avec l'actor
-3. **CombatProcessor** - Execute les decisions de combat via le Behavior, applique les degats
+Cet ordre garantit que l'etat est a jour avant le mouvement, et le mouvement avant le combat
+(distance/LOS correctes). En standalone, les trois phases sont **fusionnees** dans un unique
+`ParallelFor` ou chaque worker traite State->Movement->Combat pour un agent (`ProcessAllPhasesPipelined`),
+ce qui remplace 3 `TickCompletionEvents.Wait` par 1.
 
-Cet ordre garantit que :
-- L'etat est a jour avant de calculer le mouvement (ex: passer en Flee change le mouvement)
-- Le mouvement est a jour avant le combat (ex: la distance au target est correcte)
+### CVars de diagnostic du pipeline
+
+| CVar | Defaut | Role |
+|------|--------|------|
+| `QAI.Disable.State` / `QAI.Disable.Movement` / `QAI.Disable.Combat` | 0 | Saute le `ProcessBatch` d'un processeur (profilage par elimination). |
+| `QAI.Debug` | off | Overlay ecran (totaux, par archetype, par etat, spawners). Commande console. |
+| `QAI.DumpAgents` / `QAI.DumpSpawners` / `QAI.DumpFPM` | - | Dumps one-shot vers `LogQAI`. |
+| `QAI.Verbose [0\|1]` | off | Active les logs verbeux a runtime (override `bVerboseLogging`). |
+| `QAI.StressBench <count> <classpath>` | - | Benchmark crowd headless (spawn spirale + capture trace cpu,frame). |
 
 ---
 
@@ -124,1103 +163,1108 @@ Cet ordre garantit que :
 
 ### Architecture memoire
 
-Le registre stocke les donnees des agents dans des **tableaux paralleles** (SoA), classes par frequence d'acces :
+Donnees des agents en **tableaux paralleles**, classees par frequence d'acces.
 
 ```
-HOT DATA (chaque frame, cache-aligne 64 bytes)
-+----------------------------------------------+
-| FQAI_AgentHotData[]  (TQAICacheAlignedArray) |
-|   - Location      (FVector, 12B)             |
-|   - Velocity      (FVector, 12B)             |
-|   - Rotation      (FQuat, 16B)               |
-|   - Scale         (FVector, 12B)             |
-|   - ProcessingFlags (uint8, 1B)              |
-|   - Padding       (3B)                       |
-|   - LastUpdateTime (float, 4B)               |
-|   = 60 bytes -> tient dans 1 cache line 64B  |
-+----------------------------------------------+
+HOT DATA (chaque frame, struct alignas(64))
++-----------------------------------------------------------+
+| TQAICacheAlignedArray<FQAI_AgentHotData> HotData          |
+|   - Location      (FVector, 12B)                          |
+|   - Velocity      (FVector, 12B)                          |
+|   - Rotation      (FQuat,   16B)                          |
+|   - Scale         (FVector, 12B)                          |
+|   - ProcessingFlags  (uint8, 1B)                          |
+|   - SignificanceLOD  (uint8, 1B)   <- NOUVEAU (band LOD)  |
+|   - bImpostorDormant (uint8, 1B)   <- NOUVEAU (dormance)  |
+|   - Padding          (uint8, 1B)                          |
+|   - LastUpdateTime   (float, 4B)                          |
+|   = 60 octets, tient dans 1 cache line de 64B             |
++-----------------------------------------------------------+
 
 WARM DATA (a chaque transition d'etat)
-+----------------------------------------------+
-| FQAI_PoliceState[]   (TArray standard)       |
-|   - CurrentState, StateTimer, PatrolCenter   |
-|   - PursuitTarget, FlankPosition, etc.       |
-+----------------------------------------------+
++-----------------------------------------------------------+
+| TArray<FQAI_AgentState> PoliceStates                      |  (nom historique ; couvre police ET creatures)
++-----------------------------------------------------------+
 
-COLD DATA (rarement accede apres creation)
-+----------------------------------------------+
-| FQAI_PoliceAgent_Data[] (config complete)    |
-| TWeakObjectPtr<AActor>[] (actors proprietaires)|
-| TWeakObjectPtr<UActorComponent>[] (armes)    |
-| TWeakObjectPtr<UActorComponent>[] (tasers)   |
-+----------------------------------------------+
+COLD DATA (rarement accede)
++-----------------------------------------------------------+
+| TArray<FQAI_AgentData> AgentConfigs   (tous les FQAI_*Config + Archetype) |
+| TArray<TWeakObjectPtr<AActor>> OwnerActors                 |
+| TArray<TWeakObjectPtr<UActorComponent>> WeaponCoordinators |  (par nom de classe au CreateAgent)
+| TArray<TWeakObjectPtr<UActorComponent>> TaserComponents    |
+| TWeakObjectPtr<AActor> CachedWorldScapeRoot  <- NOUVEAU    |  (resolu GameThread, lu en parallele)
++-----------------------------------------------------------+
+
+SPARSE/DENSE
+  TArray<int32> SparseToDense, DenseToSparse ; TArray<uint32> Generations
 ```
 
-### Pourquoi cette separation est critique
+`SignificanceLOD` est stampe une fois par frame (GameThread, `UpdateAgentSignificance`) et lu
+lock-free pendant la phase parallele (stride du cerveau + throttle de tick du mouvement).
+`bImpostorDormant` vaut 1 quand le pawn est l'ancre cachee/figee d'un impostor ISM/VAT.
+`CachedWorldScapeRoot` existe pour une raison de **thread-safety** : les behaviors doivent lire le
+root WorldScape ici pendant la phase parallele, jamais via `TActorIterator` sur un worker (le
+`check(IsInGameThread())` de `FActorIteratorState` est compile out en Shipping -> corruption de heap
+silencieuse).
 
-Quand le MovementProcessor itere sur 200 agents pour mettre a jour leurs positions, il ne touche que `HotData[]`. Comme chaque element fait 60 bytes (< 64 bytes cache line), un prefetch CPU charge exactement 1 agent par cache line. Le CPU n'a jamais besoin de charger les configs, les targets, ou les references d'actors.
-
-**Comparaison** : si tout etait dans un seul struct (comme un `AAIController`), chaque acces a la position chargerait aussi tous les parametres de config, les pointeurs d'actors, les etats de combat, etc. -> pollution massive du cache.
-
-### Le systeme Sparse/Dense
-
-Les agents sont references par des **handles** (`FQAI_AgentHandle`) et non par des pointeurs :
+### Le systeme Sparse/Dense + generation
 
 ```cpp
-struct FQAI_AgentHandle
-{
-    int32 Index;      // Index dans le sparse array
-    uint32 Generation; // Compteur de generation (invalide les vieux handles)
-};
+struct FQAI_AgentHandle { int32 Index = INDEX_NONE; uint32 Generation = 0; };
 ```
 
-Le mapping interne fonctionne ainsi :
-
-```
-Handle.Index  -->  SparseToDense[Index]  -->  DenseIndex (position dans les arrays)
-DenseIndex    -->  DenseToSparse[Dense]  -->  SparseIndex (retour vers le handle)
-Generations[] -->  Valide que le handle est toujours actuel
-```
-
-**Suppression d'agent** : swap-and-pop. L'agent supprime est echange avec le dernier element, maintenant un tableau dense sans trous. Cout O(1).
-
-**Avantage du compteur de generation** : si un agent est supprime et qu'un autre code conserve son handle, le handle sera invalide (generation differente) plutot que de pointer vers un agent incorrect.
+`HandleToDenseIndex` valide bornes + `SparseToDense != INDEX_NONE` + `Generations[idx] == Handle.Generation`.
+La suppression est un **swap-and-pop** (`RemoveAgent`) : O(1), tableau dense sans trous ; `FreeSparseSlot`
+**incremente la generation** (invalide les vieux handles). `RemoveAgent` nettoie explicitement la queue
+des tableaux warm/cold pour eviter que le GC trace des `AActor*` morts (`PursuitTarget`/`OriginalTarget`
+dans `FQAI_AgentState`).
 
 ### TQAICacheAlignedArray
 
-Template d'allocation memoire personnalisee pour le hot data :
-
-```cpp
-template<typename T>
-class TQAICacheAlignedArray
-{
-    // Allocation alignee sur QAIPerformance::CACHE_LINE_SIZE (64 bytes)
-    void Reserve(int32 NewCapacity)
-    {
-        // Arrondi a SIMD_BATCH_SIZE (4) pour les operations vectorisees
-        int32 AlignedCapacity = RoundUp(NewCapacity, SIMD_BATCH_SIZE);
-        void* NewData = FMemory::Malloc(RequiredBytes, CACHE_LINE_SIZE);
-        // ...
-    }
-    // Suppression par swap-and-pop (pas de decalage memoire)
-    void RemoveAtSwap(int32 Index);
-};
-```
-
-Avantages :
-- Memoire alignee sur 64 bytes = pas de cache line split
-- Capacite arrondie a des multiples de 4 = operations SIMD sans depassement
-- Allocation via `FMemory::Malloc` avec alignement (pas `new T[]` qui n'aligne pas)
-- Non-copyable (move semantics uniquement) = pas de copie accidentelle d'arrays entiers
+Allocation `FMemory::Malloc(bytes, CACHE_LINE_SIZE=64)`, capacite arrondie a `SIMD_BATCH_SIZE`,
+non-copyable (move-only), `RemoveAtSwap`. Utilise **uniquement** pour `HotData` ; les tableaux
+warm/cold sont des `TArray` standard. Note : les `BatchUpdate*`/`BatchExtract*` du registre sont des
+boucles scalaires avec prefetch (le code SSE/NEON sert surtout au spatial hash).
 
 ---
 
-## 4. Optimisations SIMD et cache
+## 4. SIMD, cache et constantes
 
 ### Fichiers
 - `Public/Performance/QAI_SIMD.h`
 - `Public/Performance/QAI_PerformanceConstants.h`
 
-### Intrinsiques SIMD
+### Intrinsiques SIMD (namespace `QAISIMD`)
 
-Le systeme fournit des fonctions qui traitent **4 agents simultanement** en une seule instruction CPU :
+Traitement de **4 agents par instruction** : `CalculateDistancesSquared4_SSE/_NEON/_Scalar`,
+`NormalizeVectors4_*` (rsqrt rapide + 1 iteration Newton-Raphson), `RangeCheckBatch` (`_mm_cmple_ps` +
+`_mm_movemask_ps`). API haut niveau auto-dispatch : `CalculateDistancesSquaredBatch`,
+`NormalizeVectorsBatch`, `RangeCheckBatch` (boucles de 4 + reste scalaire). Selection via
+`#if QAI_SIMD_AVAILABLE` (SSE Win/Linux, NEON Mac).
 
-#### Calcul de distance (SSE sur Windows/Linux)
-```cpp
-// Traite 4 paires de positions en parallele
-void CalculateDistancesSquared4_SSE(
-    const FVector* PositionsA,  // 4 positions d'agents
-    const FVector* PositionsB,  // 4 positions cibles
-    float* OutDistancesSquared  // 4 distances carrees
-)
-{
-    // Charge 4 coordonnees X en un registre 128-bit
-    __m128 ax = _mm_set_ps(A[3].X, A[2].X, A[1].X, A[0].X);
-    // ... idem pour Y, Z, et les positions B
-    // dx^2 + dy^2 + dz^2 en 3 instructions (sub, mul, add)
-    __m128 distSq = _mm_add_ps(_mm_add_ps(dx2, dy2), dz2);
-    _mm_storeu_ps(OutDistancesSquared, distSq);
-}
-```
+### Constantes pre-calculees (`namespace QAIPerformance`)
 
-#### Normalisation de vecteurs (avec Newton-Raphson)
-```cpp
-void NormalizeVectors4_SSE(const FVector* In, FVector* Out)
-{
-    // rsqrt rapide + 1 iteration Newton-Raphson pour precision
-    __m128 rsqrt = _mm_rsqrt_ps(magSq);
-    // Raffinement : rsqrt * (1.5 - magSq * rsqrt^2 * 0.5)
-    // Resultat : 4 vecteurs normalises en ~10 instructions
-}
-```
+Toutes les distances de range check sont au carre en `constexpr` (`TRACE_ATTACK_RANGE_SQUARED`,
+`MELEE_RANGE_SQUARED`, `TASER_RANGE_SQUARED`, `DRONE_ACCEPTANCE_RADIUS_SQUARED`...), plus les timings
+(`DRONE_FIRE_RATE=0.125`, `TASER_COOLDOWN=3.0`, `MELEE_ATTACK_COOLDOWN=1.5`...) et les tailles de batch
+(`AGENT_BATCH_SIZE=64`, `SIMD_BATCH_SIZE=4`, `CACHE_LINE_SIZE=64`, `SIMD_ALIGN_BYTES=16`).
 
-#### Range check par batch
-```cpp
-void RangeCheckBatch(
-    TArrayView<const float> DistancesSquared,
-    float RangeSquared,
-    TArrayView<bool> OutResults)
-{
-    __m128 threshold = _mm_set1_ps(RangeSquared);
-    __m128 distances = _mm_loadu_ps(&DistancesSquared[i]);
-    __m128 cmp = _mm_cmple_ps(distances, threshold);
-    int mask = _mm_movemask_ps(cmp);
-    // 4 comparaisons de range en 3 instructions
-}
-```
+**NOUVEAU — bandes de significance/LOD** :
 
-**Support multi-plateforme** : implementations ARM NEON pour Mac/iOS, fallbacks scalaires pour les autres plateformes. La selection est automatique via `#if QAI_SIMD_AVAILABLE`.
+| Constante | Valeur | Role |
+|-----------|--------|------|
+| `NUM_LOD_BANDS` | 4 | nombre de bandes (0 = le plus proche / le plus detaille) |
+| `LOD_BrainStride[4]` | `{1, 2, 4, 8}` | stride (en frames) de re-evaluation du cerveau (State+Combat), phase par index d'agent |
+| `LOD_MoveTickInterval[4]` | `{0, 0.05, 0.1, 0.25}` | intervalle de tick (s) du FloatingPawnMovement par bande |
+| `ClampLODBand(int)` | - | clamp dans `[0, NUM_LOD_BANDS-1]` |
 
-### API haut niveau
+### Prefetch
 
-```cpp
-// Utilisation dans un processeur
-QAISIMD::CalculateDistancesSquaredBatch(agentPositions, targetPositions, outDistances);
-QAISIMD::NormalizeVectorsBatch(movementInputs, normalizedOutputs);
-QAISIMD::RangeCheckBatch(distances, TRACE_ATTACK_RANGE_SQUARED, inRangeResults);
-```
-
-Le batch processing itere en groupes de `SIMD_BATCH_SIZE` (4), puis traite le reste en scalaire.
-
-### Constantes pre-calculees
-
-Toutes les distances de range check sont stockees au carre en `constexpr` :
-
-```cpp
-namespace QAIPerformance
-{
-    constexpr float TRACE_ATTACK_RANGE_SQUARED = 2500.0f * 2500.0f;
-    constexpr float MELEE_RANGE_SQUARED = 200.0f * 200.0f;
-    constexpr float DRONE_ACCEPTANCE_RADIUS_SQUARED = 800.0f * 800.0f;
-    // ...
-    constexpr bool IsInRangeSquared(float DistSq, float RangeSq) { return DistSq <= RangeSq; }
-}
-```
-
-Cela evite les `sqrt()` a runtime. Comparer `DistSquared` a `RangeSquared` est mathematiquement equivalent mais ~4x plus rapide.
-
-### Prefetching memoire
-
-Le registre expose des helpers de prefetch pour les operations batch :
-
-```cpp
-// Prefetch pour lecture (charge en cache L2)
-FORCEINLINE void PrefetchForRead(const void* Address) const
-{
-    _mm_prefetch(static_cast<const char*>(Address), _MM_HINT_T2);
-}
-
-// Prefetch pour ecriture (charge en cache L1)
-FORCEINLINE void PrefetchForWrite(const void* Address) const
-{
-    _mm_prefetch(static_cast<const char*>(Address), _MM_HINT_T0);
-}
-```
-
-**Utilisation dans BatchExtractPositions** :
-```cpp
-// Prefetch "rolling" : pendant qu'on traite l'element i,
-// on prefetch l'element i+4 pour qu'il soit en cache quand on y arrive
-for (int32 i = 0; i < Count; ++i)
-{
-    if (i + PrefetchBatch < Count)
-        PrefetchForRead(&HotData[AgentIndices[i + PrefetchBatch]]);
-    OutPositions[i] = HotData[AgentIndices[i]].Location;
-}
-```
-
-Ce pattern de "rolling prefetch" masque la latence memoire : le CPU charge les donnees futures pendant qu'il traite les donnees presentes.
+`PrefetchForRead` (`_MM_HINT_T2`) / `PrefetchForWrite` (`_MM_HINT_T0`) avec un pattern de "rolling
+prefetch" (charger l'element i+4 pendant qu'on traite i) dans les `BatchExtract*`/`BatchUpdate*`.
 
 ---
 
 ## 5. Les Processeurs (Batch Processing)
 
 ### Fichiers
-- `Public/Processor/QAI_ProcessorBase.h` / `Private/Processor/QAI_ProcessorBase.cpp`
-- `Public/Processor/QAI_StateProcessor.h` / `Private/Processor/QAI_StateProcessor.cpp`
-- `Public/Processor/QAI_MovementProcessor.h` / `Private/Processor/QAI_MovementProcessor.cpp`
-- `Public/Processor/QAI_CombatProcessor.h` / `Private/Processor/QAI_CombatProcessor.cpp`
+- `Public+Private/Processor/QAI_ProcessorBase.{h,cpp}`
+- `Public+Private/Processor/QAI_StateProcessor.{h,cpp}`
+- `Public+Private/Processor/QAI_MovementProcessor.{h,cpp}`
+- `Public+Private/Processor/QAI_CombatProcessor.{h,cpp}`
 
-### ProcessorBase - Le framework de batch processing
+### ProcessorBase — le framework
 
-Chaque processeur herite de `UQAI_ProcessorBase` et suit un pipeline strict :
+Chaque processeur herite de `UQAI_ProcessorBase` (`UCLASS(Abstract)`) et declare son nom + son flag
+via la macro `DECLARE_QAI_PROCESSOR(Class, "Name", Flag)`.
 
 ```
 ProcessBatch(Registry, DeltaTime)
-    |
-    +-> ShouldProcess() -- gate de frame time / enabled
-    |
-    +-> GetAgentsForProcessing(ProcessingFlags) -- filtre par bitmask
-    |
-    +-> PreProcessBatch() -- setup par-frame
-    |
-    +-> InternalProcessBatch()
-    |       |
-    |       +-> Si AgentCount >= MinAgentsForParallel (100) :
-    |       |       ParallelFor par chunks de AgentsPerChunk (64)
-    |       |
-    |       +-> Sinon : ProcessChunk sequentiel
-    |               |
-    |               +-> Pour chaque agent du chunk :
-    |                       ShouldProcessAgent() -> ProcessAgent()
-    |
-    +-> PostProcessBatch() -- stats / logging
-    |
-    +-> Clear ProcessingFlags des agents traites
+    +-> ShouldProcess()                 (skip si DeltaTime*1000 > FrameTimeThresholdMs=16ms)
+    +-> GetAgentsForProcessing(Flag)    (filtre par bitmask de processing flags)
+    +-> PreProcessBatch()               (setup GameThread)
+    +-> InternalProcessBatch()          (TOUJOURS ParallelFor par chunks de AgentsPerChunk)
+    |       +-> ProcessChunk() -> par agent: IsValid -> PassesSignificanceStride -> ShouldProcessAgent -> ProcessAgent
+    +-> PostProcessBatch()              (apply GameThread)
+    +-> efface le flag de processing des agents traites
 ```
 
-### Configuration de processing
-
-```cpp
-struct FQAI_ProcessingConfig
-{
-    bool bUseParallelProcessing = true;    // Activer ParallelFor
-    int32 MinAgentsForParallel = 100;      // Seuil pour passer en parallele
-    int32 AgentsPerChunk = 64;             // Taille de chunk (= 1 batch cache-friendly)
-    float MaxProcessingTimeMs = 5.0f;      // Budget max par processeur
-    bool bSkipOnHighFrameTime = false;     // Skip si frame trop longue (desactive pour QAI)
-    float FrameTimeThresholdMs = 33.3f;    // Seuil = 30 FPS
-};
-```
-
-**Note importante** : QAI desactive `bSkipOnHighFrameTime` a l'initialisation. L'IA doit toujours etre mise a jour, meme si le frame rate est bas. Sinon les agents se figent sous charge, ce qui est pire que le ralentissement lui-meme.
+**Changements vs v1** :
+- Le traitement est **toujours parallele** : le toggle `bEnableParallelProcessing` et le seuil
+  `MinAgentsForParallel` ont disparu (un petit effectif collapse en un seul chunk). `AgentsPerChunk` = 16 (ctor).
+- **Significance brain-stride** : `PassesSignificanceStride` lit `SignificanceLOD`, et ne traite l'agent
+  que si `(FrameCounter + AgentIndex) % LOD_BrainStride[band] == 0` (phase par index pour eviter un pic periodique).
+  Le **Movement** opte OUT (`UsesSignificanceStride() -> false` : il reste reactif, son cout lointain est rabote par le throttle de tick FPM).
+- **Pipeline fusionne** : `BeginPipelinedBatch / RunPreBatch / RunPerAgent / RunPostBatch /
+  ClearProcessingFlags / EndPipelinedBatch` permettent au subsysteme de fusionner les 3 processeurs
+  dans un seul `ParallelFor` (utilise en Standalone).
 
 ### Processing Flags (bitmask)
 
-Chaque agent a un byte de flags dans son HotData :
-
 ```cpp
-enum class EQAI_AgentProcessingFlags : uint8
-{
-    None       = 0,
-    Movement   = 1 << 0,  // Le MovementProcessor doit traiter cet agent
-    StateMachine = 1 << 1, // Le StateProcessor doit traiter cet agent
-    Combat     = 1 << 2,  // Le CombatProcessor doit traiter cet agent
-    Sensing    = 1 << 3,  // Reserve pour futur SensingProcessor
-    All        = Movement | StateMachine | Combat | Sensing
+enum class EQAI_AgentProcessingFlags : uint8 {
+    None = 0, Movement = 1<<0, StateMachine = 1<<1, Combat = 1<<2, Sensing = 1<<3,
+    All = Movement | StateMachine | Combat | Sensing
 };
 ```
+`Sensing` est reserve (pas de SensingProcessor batch ; le sensing est evenementiel, voir section 15).
 
-**Flux** : le StateProcessor marque un agent pour `Combat | Movement` quand il passe en etat Attack. Le MovementProcessor ne traite que les agents marques `Movement`. Apres traitement, le flag est efface.
+### Le pattern parallel-compute / GameThread-apply
 
-Cela evite de traiter les agents en Idle qui n'ont besoin ni de mouvement ni de combat.
+Les processeurs Movement et Combat sont **en deux phases** pour la securite de thread :
 
-### Profiling integre
+- **Phase parallele** (`ProcessAgent`, dans le `ParallelFor`) : appelle le behavior
+  (`ComputeMovementInput` / `ComputeCombatDecision`), PURE (pas de `TActorIterator`, pas de
+  `ProcessEvent`, pas de line trace bloquant), et capture la decision dans un slot
+  (`FQAI_MovementApply` / `FQAI_CombatApply`) indexe par agent.
+- **Phase GameThread** (`PostProcessBatch`) : rejoue chaque decision capturee et touche les acteurs,
+  composants, physique et `ProcessEvent` (interdits sur worker).
 
-Chaque processeur a :
-- `SCOPE_CYCLE_COUNTER(STAT_QAIProcessorBatch)` pour Unreal Insights
-- `FQAI_ProcessorProfiler` pour le timing interne
-- `FQAI_ProcessingStats` avec moyenne glissante (EMA 0.9/0.1)
-- Alerte si le temps de processing depasse `MaxProcessingTimeMs`
+Les appels BP necessaires depuis la phase parallele (ex: cosmetiques de vol des vaisseaux) sont
+deferres au GameThread via `AsyncTask` avec un handle faible.
+
+### Profiling
+
+`SCOPE_CYCLE_COUNTER(STAT_QAIProcessorBatch/Agent)`, `FQAI_ProcessorProfiler` (wall-clock),
+`FQAI_ProcessingStats` (EMA 0.9/0.1), avertissement si > `MaxProcessingTimeMs` (5 ms). Tous les traces
+sont wrappes en `TRACE_CPUPROFILER_EVENT_SCOPE` (`QAI_State_ProcessAgent`, `QAI_Move_ComputeInput`...)
+pour de-blober les traces `ParallelFor Task`.
 
 ---
 
 ## 6. La FSM (State Machine)
 
-### Etat actuel vs. intention
+### Etat actuel vs intention
 
-L'intention etait une **FSM hierarchique (HFSM)** avec des super-etats contenant des sous-etats. En realite, la FSM est **plate** : 7 etats au meme niveau, sans imbrication.
+Toujours une **FSM plate** (pas de HFSM). Deux niveaux de decision decouples : (1) la FSM plate
+(`StateProcessor`) entre etats, (2) les behaviors par archetype (Strategy). C'est un "FSM + Strategy",
+pas une HFSM.
 
-Une vraie HFSM aurait par exemple :
-```
-Combat (super-etat, gere les transitions communes flee/return)
-  ├── Attack (sous-etat)
-  ├── Taser (sous-etat)
-  └── Flanking (sous-etat)
-```
-
-Ce qui existe a la place, c'est **deux niveaux de decision decouples** :
-1. **FSM plate** (StateProcessor) → transitions entre les 7 etats
-2. **Behaviors** (par archetype) → actions specifiques au sein d'un etat (le SpaceshipBehavior a ses propres sous-etats de mouvement internes, mais c'est dans le behavior, pas dans la FSM)
-
-C'est un **"FSM + Strategy Pattern"**, pas une HFSM. Le refactoring devrait evaluer si une vraie HFSM est necessaire (voir section 15).
-
-### Etats
+### Etats (`EQAI_AgentState`, dans `Data/QAI_State_Struct.h`)
 
 ```cpp
-enum class EQAI_PoliceState : uint8
-{
-    Idle,    // Inactif, transition immediate vers Patrol ou Pursue
-    Patrol,  // Patrouille circulaire (drones) ou waypoints aleatoires (sol)
-    Pursue,  // Poursuite active d'une cible
-    Attack,  // En combat, tire sur la cible
-    Taser,   // Attaque taser (capitaine drone seulement)
-    Flee,    // Fuite vers un point eloigne, despawn a l'arrivee
-    Return   // Retour vers la zone de patrouille
+enum class EQAI_AgentState : uint8 {
+    Idle, Patrol, Pursue, Attack, Taser, Flee, Return,   // les 7 exerces par le StateProcessor
+    Wander, Melee, Investigate                            // ajoutes a l'enum, PAS encore references par la FSM
 };
 ```
+L'enum a ete renomme `EQAI_PoliceState` -> `EQAI_AgentState` (couvre police ET creatures). Les 3
+derniers etats existent pour de futurs comportements mais ne sont pas branches dans le switch.
 
-### Graphe de transitions
+### Transitions (hardcodees dans `UpdateStateTransitions`)
 
-```
-                    +--------+
-                    |  Idle  |
-                    +---+----+
-                        |
-            cible?------+------pas de cible
-            |                       |
-            v                       v
-        +--------+            +---------+
-        | Pursue |<-----------| Patrol  |
-        +---+----+            +---------+
-            |                      ^
-  a portee--+--timeout/perte cible-+
-            |                      |
-            v                      |
-        +--------+                 |
-        | Attack |--perte cible--->+
-        +---+----+            +--------+
-            |                 | Return |
-    capitaine-+---fuite?----->+--------+
-    +taser    |                    ^
-            v                      |
-        +-------+   timeout        |
-        | Taser |--+---------------+
-        +-------+  |
-                    v
-                +------+
-                | Flee |---arrive au point de fuite---> Destroy()
-                +------+
-```
+> Note : un `TArray<FQAI_StateTransition> StateTransitions` existe dans le header mais est **mort** —
+> la FSM vivante est le `switch` C++.
 
-### Transitions conditionnelles
+| Depuis  | Vers    | Condition |
+|---------|---------|-----------|
+| Idle    | Pursue / Patrol | cible valide -> Pursue, sinon Patrol |
+| Patrol  | Pursue | cible valide |
+| Pursue  | Attack | distance <= `AttackEngagementDistance` (60000) |
+| Pursue  | Flee   | `ShouldTransitionToFlee` (cible aerienne/injoignable + hostilite/degats recents) |
+| Pursue  | Patrol(garde) / Return | cible perdue/timeout |
+| Attack  | Taser  | `WantsTaser` (capitaine drone a portee) |
+| Attack  | Pursue | melee sol bloque, ou cible hors `AttackEngagementDistance*2` |
+| Attack  | Flee / Patrol(garde) / Return | selon perte/distance |
+| Taser   | Flee / Attack | apres `StateTimer>3s` |
+| Flee    | Attack/Pursue / Return | redevenu non-fuyant + cible, sinon (drones non-capitaine) Return apres 10s |
+| Return  | Patrol | a `< DefaultPatrolRadius*0.5` du `PatrolCenter` ou `StateTimer>15s` |
 
-| Depuis   | Vers    | Condition                                                |
-|----------|---------|----------------------------------------------------------|
-| Idle     | Patrol  | Pas de cible                                             |
-| Idle     | Pursue  | Cible valide (`PursuitTarget != nullptr`)                |
-| Patrol   | Pursue  | Cible valide                                             |
-| Pursue   | Attack  | Distance <= `AttackEngagementDistance` (60000 unites)     |
-| Pursue   | Flee    | `ShouldTransitionToFlee()` (actuellement: toujours false) |
-| Pursue   | Return  | Cible perdue OU distance > `MaxPursuitDistance` OU timeout |
-| Attack   | Taser   | `Behavior->WantsTaser()` (capitaine drone + a portee)    |
-| Attack   | Flee    | `ShouldTransitionToFlee()`                               |
-| Attack   | Return  | Cible perdue OU trop loin                                |
-| Attack   | Pursue  | Cible hors de portee d'attaque (2x engagement distance)  |
-| Taser    | Attack  | Timeout 3s                                               |
-| Taser    | Flee    | `ShouldTransitionToFlee()`                               |
-| Flee     | Return  | Timer > 10s ET cible hors de `MaxPursuitDistance`        |
-| Return   | Patrol  | Arrive pres du `PatrolCenter` OU timeout 15s             |
+Particularites : **Cyborg et creatures ne reviennent jamais** (`ShouldReturnToPatrol` les exempte ;
+ils s'engagent indefiniment dans leur portee). Les **Spaceship** ont un `MaxPursuitDistance` override
+de 5 000 000 (ne lachent jamais). Cooldown de transition `StateTransitionCooldown` = 0.5 s.
 
-### Cooldown de transition
+### Acquisition de cible (`AcquireCreatureTarget`)
 
-Un cooldown de `StateTransitionCooldown` (0.5s) empeche les transitions trop rapides. La `StateTimer` est remise a zero a chaque changement d'etat.
+- Discrimine creatures `{Sangline, SuperSangline, Flyer, SandDigger, Infected, GazSac, Animal,
+  Creature_Autonomus, Nanite}` et police `{Drone, Autonomous, Cyborg}` (les autres recoivent leur cible
+  de l'exterieur). Rayon de detection par archetype, clampe a un min projet `MinAggroRangeCm=8000` (80 m) ;
+  Cyborg cap a `MaxCyborgAggroRangeCm=12000`.
+- **Scan via le spatial hash** (`QueryActorsInRange`), jamais `TActorIterator`. Le scan voisins est
+  **stride par index** (`ScanStride=16` : le scan complet coute ~36 ms/frame a 100 animaux ; le keep/drop
+  sur la cible courante tourne lui chaque tick).
+- **Hysteresis de poursuite** (`PursuitDropMultiplier=1.75`) : garde la cible jusqu'a 1.75x le rayon.
+- Regles animales (`ShouldAnimalFleeFrom` / `ShouldAnimalAttackTarget`, proie/predateur/apex).
+- A l'acquisition : ponte la cible dans le `CombatComponent` BP via `SetTargetOnCombatComponent`.
 
-### Hooks d'entree/sortie d'etat
+### Pauses de patrouille, routes de garde, cohesion d'escouade
 
-`OnStateEntered()` execute des effets secondaires :
-- **Patrol** : mode de vol "Cruise", train d'atterrissage rentre
-- **Attack/Taser** : `bInCombat = true`, flags du `PoliceUnitMarkerComponent`, mode de vol "Combat"
-- **Flee** : `bInCombat = false`, mode de vol "Cruise"
-- **Return** : mode de vol "Landing", train d'atterrissage sorti
+`FQAI_AgentState` porte des champs nouveaux pilotes par les processeurs :
+- **Pauses de patrouille** : `PatrolPauseUntil` / `NextPatrolPauseAt` (le MovementProcessor centralise
+  la pause "regarde autour" : tous les ~6-12 s, duree 0.5-2 s, plafonnee a 2 s ; Flyer/Drone/GazSac exemptes).
+- **Route de garde** : `PatrolPointA/B`, `bRouteHeadingToB`, `GuardDefendRadius`. Un Cyborg avec les deux
+  endpoints non-nuls marche A<->B (pas de disque aleatoire) et defend son segment. Seede au spawn par
+  `UQAI_AgentComponent::SetPatrolRoute`. "Garde" est un **etat runtime**, pas un flag de config/archetype.
+- **Escouade** : `SquadAnchor`, `SquadAnchorLocation` (snapshot GameThread en `PreProcessBatch`),
+  `SquadSlot`, `SquadSize`. Un garde avec ancre est un suiveur qui se forme en anneau autour de l'ancre.
+  Seede par `SetSquadInfo`.
+- **Freeze post-attaque** : `MovementFreezeUntil` (le combat fige le mouvement apres une attaque).
+- **Specifiques Flyer** : `bFlyerIsAirborne`, `FlyerPullUpUntil`, `FlyerAttackRunUntil`,
+  `NextFlyerMeleeCheckTime` (arc plonge -> impact -> ressource).
 
-Ces effets utilisent la reflexion UE (`FindFunctionByName`) pour appeler des fonctions Blueprint sur les composants de l'actor, sans couplage C++ direct.
+### Hooks d'etat
+
+`OnStateEntered` / `OnStateExited` pilotent le bitmask `StateFlags` du `PoliceUnitMarkerComponent`
+(0x01 patrol / 0x02 combat / 0x04 flee) ET les cosmetiques de vaisseau (`QAI_TrySetFlightModeByName`
+"Cruise"/"Combat"/"Landing", `QAI_TryEnsureLandingGear`) — ces appels BP sont deferres au GameThread.
+
+> Stubs : `ExecuteIdleState` est vide ; `IsAgentAlive` retourne toujours `true`. Les flee-destroy
+> sont deferres au GameThread (`PendingFleeDestroys` -> `SafeDestroyPawn`) pour eviter un UAF Chaos.
 
 ---
 
 ## 7. Le systeme de Comportement par Archetype
 
 ### Fichiers
-- `Public/Behavior/QAI_AgentArchetype.h`
-- `Public/Behavior/QAI_AgentBehavior.h`
-- `Public/Behavior/QAI_AgentBehaviorRegistry.h` / `Private/Behavior/QAI_AgentBehaviorRegistry.cpp`
-- `Private/Behavior/QAI_DroneBehavior.cpp`
-- `Private/Behavior/QAI_AutonomousBehavior.cpp`
-- `Private/Behavior/QAI_SpaceshipBehavior.cpp`
+- `Public/Behavior/QAI_AgentArchetype.h` (enum)
+- `Public/Behavior/QAI_AgentBehavior.h` (interface + decisions)
+- `Public/Behavior/QAI_BehaviorHelpers.h` (helpers partages)
+- `Public+Private/Behavior/QAI_AgentBehaviorRegistry.{h,cpp}`
+- `Private/Behavior/QAI_*Behavior.cpp` (un par archetype)
 
 ### Archetypes
 
 ```cpp
-enum class EQAI_AgentArchetype : uint8
-{
-    Unknown,     // Resolu dynamiquement (legacy)
-    Drone,       // Unite volante (police aerienne)
-    Autonomous,  // Unite au sol (infanterie)
-    Spaceship    // Vaisseau spatial
+enum class EQAI_AgentArchetype : uint8 {
+    Unknown,
+    Drone, Autonomous, Spaceship,                          // police (pipeline d'origine)
+    Sangline, SuperSangline, Flyer, SandDigger, Infected,  // creatures
+    GazSac, Animal, Creature_Autonomus,
+    Cyborg,                                                 // humanoide sol (ex AIC_Cyborg_V2)
+    Nanite                                                  // kamikaze blink-bomber (ex AIC_Nanite)
 };
 ```
 
-### Resolution d'archetype
-
-```cpp
-// QAIArchetype::ResolveArchetype()
-EQAI_AgentArchetype ResolveArchetype(Registry, AgentIndex)
-{
-    const auto& Cfg = Configs[AgentIndex];
-    if (Cfg.Archetype != Unknown)  // Archetype explicite -> utiliser directement
-        return Cfg.Archetype;
-    if (Cfg.DroneConfig.bCanFly)   // Inference legacy : bCanFly -> Drone
-        return Drone;
-    return Autonomous;             // Par defaut : sol
-}
-```
-
-**Important pour le refactoring** : toujours setter `Archetype` explicitement sur les nouveaux types. L'inference legacy ne gere que Drone/Autonomous.
+`QAIArchetype::ResolveArchetype` : si `Archetype != Unknown` -> direct ; sinon inference legacy
+(`DroneConfig.bCanFly` -> Drone, sinon Autonomous). **Toujours setter l'archetype explicitement** pour
+les nouveaux types.
 
 ### Interface de comportement
 
+Deux declinaisons coexistent : `IQAI_AgentBehavior` (UInterface) et `FQAI_AgentBehaviorBase` (classe
+C++ pure). La **classe pure est celle utilisee** par le registry (zero overhead GC, destruction
+deterministe, `TUniquePtr`).
+
 ```cpp
-class FQAI_AgentBehaviorBase  // Classe C++ pure, PAS un UObject (zero overhead GC)
-{
-    // Mouvement : retourne direction + vitesse + point a regarder
-    virtual bool ComputeMovementInput(
-        Registry, AgentIndex, DeltaTime,
-        FVector& OutMovementInput,   // Direction normalisee
-        float& OutSpeedScale,        // Multiplicateur de vitesse (0.2 - 2.25)
-        FVector& OutTargetToFace     // Point que l'agent doit regarder
-    ) = 0;
+class FQAI_AgentBehaviorBase {
+    virtual bool ComputeMovementInput(Registry, AgentIndex, DeltaTime,
+        FVector& OutMovementInput, float& OutSpeedScale, FVector& OutTargetToFace) = 0;
+    virtual FQAI_CombatDecision ComputeCombatDecision(Registry, AgentIndex, DeltaTime,
+        const FQAI_CombatParams& Params);            // defaut: None
+    virtual bool WantsTaser(Registry, AgentIndex, const FQAI_CombatParams&) const; // defaut: false
+};
+```
 
-    // Combat : retourne quelle action effectuer
-    virtual FQAI_CombatDecision ComputeCombatDecision(
-        Registry, AgentIndex, DeltaTime,
-        const FQAI_CombatParams& Params  // Ranges, config capitaine, etc.
-    );
-
-    // Etat : est-ce que l'agent veut utiliser le taser ?
-    virtual bool WantsTaser(Registry, AgentIndex, Params) const;
+```cpp
+enum class EQAI_CombatAction : uint8 {
+    None, Drone_TraceAttack, Drone_Taser, Auto_Melee, Auto_Ranged, Auto_Jump,
+    Spaceship_PrimaryWeapons, Spaceship_Missiles, Spaceship_Flares, Auto_Detonate
 };
 ```
 
 ### Le BehaviorRegistry
 
-```cpp
-// Initialise au demarrage du subsysteme
-void UQAI_AgentBehaviorRegistry::Initialize()
-{
-    BehaviorByType.Add(Drone, MakeUnique<FQAI_DroneBehavior>());
-    BehaviorByType.Add(Autonomous, MakeUnique<FQAI_AutonomousBehavior>());
-    BehaviorByType.Add(Spaceship, MakeUnique<FQAI_SpaceshipBehavior>());
-}
+`UQAI_AgentBehaviorRegistry::Initialize()` enregistre **13 behaviors** (tous les archetypes sauf
+`Unknown`) : Drone, Autonomous, Spaceship, Sangline, SuperSangline, Flyer, SandDigger, Infected,
+GazSac, Animal, Creature_Autonomus, Cyborg, Nanite. `GetBehavior(Registry, AgentIndex)` resout
+l'archetype puis lookup O(1). **Pas de fallback** : un archetype sans behavior abandonne le traitement
+de l'agent avec une erreur (politique NO FALLBACK).
 
-// Lookup : archetype -> behavior (O(1) via TMap)
-FQAI_AgentBehaviorBase* GetBehavior(Registry, AgentIndex)
-{
-    EQAI_AgentArchetype Type = QAIArchetype::ResolveArchetype(Registry, AgentIndex);
-    return BehaviorByType[Type];
-}
-```
+### Helpers partages (`QAI_BehaviorHelpers`)
 
-**Design delibere** : les behaviors sont des `TUniquePtr<FQAI_AgentBehaviorBase>` (classes C++ pures) et non des UObjects. Raison : zero overhead du garbage collector, pas besoin de reflexion, et destruction deterministe.
+Le coeur partage des behaviors sol/creature :
 
-### Delegation depuis les processeurs
-
-Les processeurs ne contiennent **aucune logique specifique a un type d'agent**. Ils delegent tout au behavior :
-
-```cpp
-// Dans MovementProcessor::ProcessAgent()
-FQAI_AgentBehaviorBase* Behavior = BehaviorRegistry->GetBehavior(Registry, AgentIndex);
-if (Behavior)
-{
-    FVector MovementInput; float SpeedScale; FVector TargetToFace;
-    Behavior->ComputeMovementInput(Registry, AgentIndex, DeltaTime,
-                                    MovementInput, SpeedScale, TargetToFace);
-    // Appliquer le mouvement...
-}
-// Si pas de behavior -> erreur explicite, pas de fallback
-```
-
-### Les 3 behaviors existants
-
-#### DroneBehavior (vol atmospherique)
-- Integration GravityScape : calcule le "haut local" a la position du drone (planetes spheriques)
-- Mouvement 3D avec altitude cible au-dessus de la target
-- Bande de tolerance verticale (120u proche, 250u loin) pour eviter les oscillations
-- Speed scaling dynamique : 0.85x proche, 1.75x loin, 2.25x en fuite
-- Slowdown progressif a l'approche (`SlowdownAlpha`)
-- Combat : tir trace ou taser selon distance et role de capitaine
-
-#### AutonomousBehavior (sol)
-- Mouvement 2D avec `GetSafeNormal2D()`
-- Acceptance radius adaptative (reduite en combat via `PoliceUnitMarkerComponent.StateFlags`)
-- Speed scaling selon etat : 1.2x en poursuite/attaque, 0.8x sinon
-- Combat : melee, ranged, ou jump selon distance
-
-#### SpaceshipBehavior (espace)
-- Sous-etats de mouvement : Idle, Patrol, Hunt, Combat, Evade, Return
-- Obstacle avoidance
-- Tracking d'altitude relative au joueur
-- Vitesse max : 200,000 km/h (55,555 m/s en unites UE)
-- Combat : armes primaires, missiles, flares
+- **`PursueViaFlowField(...)`** : la fonction de steering unique. Resout le but via `ResolveNavGoal`
+  (priorite **flee > flank cyborg > cible de poursuite > waypoint de patrouille > centre de retour >
+  derniere position connue**), stoppe a l'`AcceptanceRadius`, puis :
+  - si l'archetype est "pathfinding-enabled" (`UQAI_Settings::PathfindingEnabledArchetypes`, ou Cyborg avec
+    `bAlwaysUsePathfinding`, ou **stuck-escalation**) -> echantillonne le flow field ;
+  - sinon -> **steering direct** (ligne droite projetee sur le plan de gravite).
+  - La stuck-escalation passe en flow field apres `StuckEscalateGracePeriodSec=0.3 s` de blocage, avec un
+    fallback en steering direct si le champ echoue (le pawn continue d'essayer).
+- `ResolveNavGoal` : source unique du but de nav (partagee par le steering, le centrage du champ, et la
+  publication serveur->client `RepNav*`).
+- Roles animaux par nom (`ResolveAnimalCombatRole` : Bear/Rhino/... = Apex, Wolf/Lion/... = Predator,
+  Deer/Cow/... = Prey).
+- `IsGroundMeleeOnlyAgent`, `GetGroundMeleeVerticalReach`, `IsTargetVerticallyUnreachableForGroundMelee`
+  (un melee sol ne grimpe pas vers une cible aerienne).
+- `IsValidCombatPawn` (rejette les spectateurs), `IsGazSacDamageTarget` (filtre AOE de gaz),
+  `IsAmbientTrafficArchetype` / `IsAerialArchetype` (gating cruise vs hover).
 
 ---
 
-## 8. Architecture Client/Serveur
+## 8. Catalogue des archetypes
+
+Chaque archetype a sa `FQAI_*Config` (dans `QAI_Struct.h`) et son `FQAI_*Behavior`. Les valeurs ci-dessous
+sont les defauts de config.
+
+### Police
+
+- **Drone** — vol atmospherique. `FQAI_DroneConfig` (`bIsCaptainDrone`, `bHasTaser`, `AttackRange`,
+  `MinFlyHeight`/`MaxFlyHeight`, burst fire `BurstSize`/`BurstInterval`/`BurstCooldown`). Mouvement 3D avec
+  bande d'altitude au-dessus de la cible et speed scaling (`FQAI_DroneFlightConfig` du MovementProcessor :
+  0.85x pres, 1.75x loin, 2.25x en fuite). Combat : `Drone_TraceAttack` ou `Drone_Taser` (capitaine).
+  Coordonne via `DroneCoordinationSubsystem`.
+- **Autonomous** — infanterie sol "police". `FQAI_AutonomousConfig` (`MeleeRange`, `RangedRange`,
+  `MovementSpeed`, `MaxWalkSlope`). Steering via `PursueViaFlowField`. Combat : `Auto_Melee`/`Auto_Ranged`/`Auto_Jump`.
+- **Spaceship** — voir [section 12](#12-spaceship-ai-et-trafic-aerien).
+
+### Creatures (portees du monde BP `Qanga_AI_Controller` / StateTree)
+
+- **Sangline** — `MovementSpeed=800`, `MeleeRange=100`, `JumpMeleeRange=650`, `bCanJump=false` (defaut),
+  melee sol. Faction Infected (hostile a tout sauf Infected).
+- **SuperSangline** — `MovementSpeed=500`, `MeleeRange=260`, `LeapRange=1800`, plus des **tirs de pics**
+  (`SpikeMinRange=990`..`SpikeMaxRange=1500`, `SpikeChance=0.8`, `SpikeCooldown=2`). Le combat projette les
+  pics (degats programmes via `ScheduleSuperSanglineSpikeDamage`).
+- **Flyer** — `MovementSpeed=600`, vol `MinFlyHeight`/`MaxFlyHeight`, arc **plonge -> impact -> ressource**
+  (`MeleeRange=250`, `AttackRange=800`), atterrit (`LandingRange=600`) et redecolle (`TakeoffRange=1500`)
+  en basculant le BP `Replicated_OnFly(bool)`. Steering direct (pas de flow field).
+- **SandDigger** — `MovementSpeed=350`, melee + `PounceRange=1500`, **terrier** (`BurrowCooldown=8`). Le
+  combat maintient l'etat enterre/emerge ; le ground-snap l'ignore (il creuse). Reaction de garde sur
+  degats (montage `AN_SandDigger_Guard_Montage`).
+- **Infected** — `MovementSpeed=300`, `MeleeRange=160`, `bMeleeOnly=true`. Pousse le joueur (variantes
+  Infected_2/3/Boss).
+- **GazSac** — ballon de gaz lent (`MovementSpeed=180`, `PatrolSpeedScale=0.3`). S'arme
+  (`ArmingDelay=0.8`) puis explose a `ExplosionTriggerRange=250` ; nuage toxique `GasCloudRadius=600` a la
+  mort (`ScheduleGazSacServerGasDamage`, filtre `IsGazSacDamageTarget` : ignore Infected + meme faction).
+- **Animal** — faune. `FQAI_AnimalConfig` avec roles `EQAI_AnimalCombatRole {Auto, Prey, Predator,
+  ApexPredator}` (Auto deduit du nom de l'acteur). Prey fuit, Predator chasse les proies en evitant ses
+  semblables, ApexPredator attaque tout. Vitesses par allure (`WalkSpeed`/`RunSpeed`), `WanderRadius=1200`,
+  `FleeRadius=8000`.
+- **Creature_Autonomus** — creature melee/ranged generique (`MeleeRange=200`, `RangedRange=800`). Peut
+  pousser le joueur.
+
+### Speciaux
+
+- **Cyborg** — humanoide sol (ex `AIC_Cyborg_V2`). `FQAI_CyborgConfig` riche : `MeleeRange=250`,
+  `MeleeStopRange=1400`, `PatrolRadius=12800`, `PursueSpeedMultiplier=2.0`, `bCanRangedAttack`,
+  `RangedRange=1500`, `RangedMinClearance=200`, `bAlwaysUsePathfinding`. C'est le **seul archetype en flow
+  field par defaut** (`PathfindingEnabledArchetypes = {Cyborg}`) : il patrouille autour d'objectifs et a
+  besoin du champ pour contourner les obstacles. Les cyborgs de combat (Pirates, IcLabs) laissent
+  `bAlwaysUsePathfinding=false` (poursuite directe + escalation au blocage). Combat pilote directement le
+  systeme d'arme BP (`Combat_1stTrigger` en rafales, `Combat_Melee`, `Combat_EquipMelee` on-change). Tir
+  via `QAI.DirectFire` (subsysteme C++ de balles, pas le graphe BP par tir).
+- **Nanite** — kamikaze blink-bomber (ex `AIC_Nanite`). `FQAI_NaniteConfig` (`DetonationRange=250`,
+  `ArmDelay=2`, `DetonationDamage=100`, `DetonationRadius=500`). Fonce en ligne droite puis emet
+  `Auto_Detonate` : le CombatProcessor arme un timer, joue la FX BP, applique le blast radial et
+  s'autodetruit.
+
+Champs communs (`FQAI_AgentData`) : `AttackCooldown=1`, `AggressionDuration=30`,
+`RotationInterpSpeedOverride`, `bCombatEnabled`, `PoliceFaction`, et `bCanPushPlayer` (peut bloquer/pousser
+le joueur ; defaut false — true pour CreatureAutonomus/SandDigger/Infected_2/3/Boss).
+
+---
+
+## 9. Pathfinding par Flow Field
+
+### Fichiers
+- `Public/Pathfinding/QAI_FlowField.h` (structures de donnees)
+- `Public+Private/Pathfinding/QAI_FlowFieldManager.{h,cpp}`
+
+> Il n'y a **pas de NavMesh** dans QANGA (planetes LWC + serveur sans meshes). Le flow field est le seul
+> systeme de pathfinding du crowd. (La seule survivance NavMesh est `ProjectPointToNavigation` dans le
+> calcul de flanking — incoherence a nettoyer.)
+
+### Principe
+
+Champ de flux 2D par but, aligne sur le "haut local" de la planete. Walkability echantillonnee par
+sphere-sweeps descendants le long de la gravite ; cout propage depuis le but par Dijkstra (min-heap) ;
+une direction 8-connectee stockee par cellule ; le champ est **partage** entre agents proches du meme but.
+
+```
+FQAI_FlowField : grille CellsPerSide x CellsPerSide (defaut 80x80 = 6400 cellules), CellSize=50cm
+  FQAI_FlowCell : { uint8 bWalkable:1; uint16 Cost; uint8 DirectionIdx (0..7, 8=none);
+                    float GroundLocalZ; EQAI_FlowCellFail FailReason }
+  EQAI_FlowCellFail : None(walkable), NoHit, Penetrating, SteepNormal, NoHeadroom
+FQAI_FlowFieldHandle : { int32 Id } opaque
+```
+
+### `UQAI_FlowFieldManager` (UActorComponent, sur l'hote QAI_PathfindingManager)
+
+- API : `RequestField(Goal, Center, PawnHint)` (find-shareable ou alloc, `++RefCount`),
+  `SampleDirection`/`SampleDirectionDiag` (O(1), direction tangente vers le but ; recovery par
+  ring-search en poche serree), `FindReachablePatrolPoint`, `RetargetField` (re-seed Dijkstra sans
+  re-tracer), `ReleaseField`.
+- **Build asynchrone** (`BuildField`) : `AsyncSweepByChannel` (sphere `AgentRadius`, `bTraceComplex=true`)
+  pour le sol puis le headroom, polles par `FTraceDelegate`. Machine a etats
+  `DispatchFloor -> AwaitingFloor -> DispatchHeadroom -> AwaitingHeadroom -> Finalize`. Remplace l'ancien
+  `LineTraceSingleByChannel` bloquant (~740 ms GT/champ).
+- `FinalizeField` : flood de composantes connexes (filtre de pas symetrique), relocalise la graine
+  Dijkstra dans la composante du pawn si le but est bloque, BFS distance-to-obstacle pour l'evitement de
+  mur, Dijkstra min-heap, swap `PendingCells -> Cells`.
+- **Hot-swap sans stall** : le StateProcessor gere `FlowFieldHandle` + `PendingFlowFieldHandle` — un
+  rebuild ne montre jamais un champ vide (l'echantillonnage continue sur l'ancien jusqu'a ce que le
+  nouveau ait des cellules).
+- **Allocation paresseuse** : seul Cyborg consomme le champ inconditionnellement ; les autres archetypes
+  ne declenchent un build qu'a la stuck-escalation, et le champ est relache des que le pawn redecolle
+  (`UnusedFieldGraceSec=5`).
+- **Thread-safety** : `static FCriticalSection GQAIFlowFieldCS` protege `Fields` car
+  `RequestField`/`SampleDirection*`/`AllocField` sont appeles depuis le `ParallelFor` (>=100 agents).
+- **Stuck tracking** : `MovementProcessor::TickStuckTracking` (GameThread) detecte le blocage projete sur
+  la direction-au-but (un wall-slider montre du deplacement brut mais zero progres projete) ; stampe
+  `StuckSinceTime`, que `PursueViaFlowField` consulte.
+
+CVars : aucun. Tout est en `UPROPERTY EditAnywhere` sur le manager (`CellsPerSide`, `CellSize`,
+`AgentRadius`, `MaxStepHeightCm`, `MinFloorNormalDot`, `WallAvoidRange`...). Reglage runtime du debug via
+`qai.DrawDebugPaths` (CVar `ECVF_Cheat`) ou le tag acteur `QAI_DrawPath`. Le setting projet
+`bAsyncFlowFieldTraces` (defaut true) bascule entre traces async (physique) et bloquantes (diagnostic).
+
+---
+
+## 10. Le tier Impostor (VAT) et la dormance
+
+### Fichiers
+- `Public+Private/Impostor/QAI_ImpostorSubsystem.{h,cpp}`
+- Bakes references depuis `UQAI_Settings.ImpostorBakes` (`FQAI_ImpostorBake`)
+
+### Principe
+
+`UQAI_ImpostorSubsystem` (`UTickableWorldSubsystem`) rend les agents **dormants** comme des instances
+`InstancedStaticMesh` jouant un bake AnimToTexture (VAT, mode bone) au lieu d'un pawn skeletique vivant.
+Un "impostor" est un agent dont le **pawn existe toujours** (acquisition, LOS, trackers, kill-count
+fonctionnent) mais qui est cache + fige (pas d'anim, pas de tick FPM, capsule QueryOnly).
+
+- **Demotion** : temporelle — pas de hit/interaction pendant `QAI.ImpostorDemoteAfter` secondes
+  (evaluee par `UQAI_AgentComponent`).
+- **Promotion** : sur **hit / interaction uniquement** (degats, ou rayon de vue joueur / ecran /
+  proximite) — jamais par simple proximite pour les creatures. Voir `PromoteFromImpostor(reason)`.
+- **Standalone only** (et `NM_Client` pour la presentation des creatures repliquees) : aucun ISM/VAT sur
+  serveur dedie/listen.
+
+### Architecture
+- `EnsureRendererForMesh` : un `FQAI_ImpostorBakeRenderer` (ISM + textures bone-pos/rot/weight + table
+  d'anims) par mesh skeletique unique, lookup via `UQAI_Settings::FindBakeForMesh(Mesh->GetSkinnedAsset())`.
+  Le 1er ISM devient le root du `RendererHost`, les suivants s'attachent en **KeepRelativeTransform**
+  (fix LWC : un attach KeepWorld cloue l'enfant a l'origine -> dechirement fp32 de la geometrie).
+- **Ancrage camera** : `RendererHost` re-ancre sur la camera quand l'instance-local depasse ~1 km
+  (garde les coords fp32 sub-mm a toute distance ; fix LWC du "grid flottant").
+- **Stride-matching** : `WritePlayback` choisit le cycle de locomotion (FLOOR sur `AnimSpeeds`),
+  `PlayRate = clamp(SmoothedSpeed/AnimSpeed, 0.45, ~2.5)`, avec hysteresis asymetrique (cycle rapide
+  immediat, lent/maintenu attend 0.5 s — fix "freeze-then-slide"). Une entree de vitesse 0 encode la
+  pose de combat READY (cible vivante, immobile).
+- **Variantes de couleur** : recolor cyborg par palette (`Color_T*`) et tons creature (Sentinel/Infected)
+  via des ISM freres.
+- **Props** (`CaptureProps`) : armes/equipement captures en ISM rigides ou bone-driven GPU
+  (`M_QAI_ImpostorPropBoneWPO`). L'arme active reste fonctionnelle (cachee apres capture).
+- **Corps statique (vaisseaux)** : `RegisterDormantStatic` / `CaptureShipBody` capture les N plus gros
+  meshes statiques visibles (`QAI.AerialTraffic.ImpostorMaxParts=12`). Sur serveur, reussit SANS ISM
+  (dead-reckoning headless ; la coque repliquee est le corps visible).
+- **Ground-snap symetrique** : `AdjustToGround` + `TraceGround` avec clamps up/down symetriques
+  (`MaxUpSnap`/`MaxDownSnap`) — fix de l'asymetrie "fall-through-world". Ignore tous les pawns impostors
+  traces (pas de "tour de cyborgs").
+- **Tick** : pass parallele (`ParallelFor`) composant `BodyTransform = MeshRelative * GetAgentTransform`
+  (cull cone de vue, scratch par entree), puis pass serie GameThread (agregation, `WritePlayback`,
+  re-capture 1 Hz), re-ancre hote, et `BatchUpdateInstancesTransforms` **gate** (skip si rien n'a bouge —
+  evite la reconstruction du render-proxy RT / `CreateRHIBuffer`).
+
+### CVars (toutes `QAI.Impostor*` / `QAI.AerialTraffic.*`)
+
+| CVar | Defaut | Role |
+|------|--------|------|
+| `QAI.Impostor` | 1 | active le tier (demote -> pawn cache + ISM/VAT). |
+| `QAI.ImpostorDemoteAfter` | 5.0 | secondes sans hit/interaction avant demotion. |
+| `QAI.ImpostorGroundTracesPerFrame` | 8 | traces de sol par frame (round-robin sur le crowd). |
+| `QAI.ImpostorFocusRangeCm` | 300 | portee du rayon de vue qui promeut un impostor focus. |
+| `QAI.ImpostorScreenPromoteCm` | 5000 | promotion si dans le viewport sous cette distance. |
+| `QAI.AerialTraffic.ProximityPromoteCm` | 15000 | promotion d'un vaisseau de trafic par proximite joueur. |
+| `QAI.ImpostorShadows` / `QAI.ImpostorProps` / `QAI.ImpostorPropsGPU` | 1 | toggles A/B (ombres, props, props GPU). |
+| `QAI.ImpostorFreezeUpload` / `QAI.ImpostorSkipMeshMatch` / `QAI.ImpostorDebugDraw` | 0 | diagnostics. |
+| `QAI.AerialTraffic.ImpostorMaxParts` | 12 | meshes statiques captures par vaisseau dormant. |
+
+> Un mesh sans bake (`ImpostorBakes`) "ne demote jamais" (logge une fois) et reste un pawn vivant — le
+> tier impostor no-op silencieusement.
+
+---
+
+## 11. Significance / LOD et paliers d'allegement
+
+C'est une couche de performance entierement nouvelle, repartie entre le subsysteme, le registre, les
+processeurs et `UQAI_AgentComponent`. Objectif : faire scaler le head-count sous-lineairement (100 AI
+en combat <= ~20% de baisse de FPS).
+
+### Significance (autorite : `UpdateAgentSignificance`, GameThread, chaque frame)
+
+Stampe `FQAI_AgentHotData.SignificanceLOD` (byte) depuis la distance au viewer le plus proche. 4 bandes
+(`UQAI_Settings` : `LODDistance1Cm=4000`, `LODDistance2Cm=9000`, `LODDistance3Cm=18000`). Un agent en
+combat ne descend jamais sous `CombatMaxLOD=1`. Throttle combat additionnel : seuls les
+`QAI.CombatFullRateCount=8` combattants les plus proches gardent le plein regime ; les autres sont
+forces a `QAI.CombatThrottleBand=2` (stride x4) meme a bout portant.
+
+### Leviers (par bande)
+
+| Levier | Mecanisme | CVar |
+|--------|-----------|------|
+| **Brain stride** | `LOD_BrainStride={1,2,4,8}` : State+Combat re-decident moins souvent (Movement reste reactif). | (intrinseque) |
+| **Tick FPM** | `LOD_MoveTickInterval={0,0.05,0.1,0.25}` : le FloatingPawnMovement tick a intervalle. | - |
+| **Owner-tick stride** | bande 0 = tick BP du pawn ; bande >=1 = tick BP **tue** (defaut). | `QAI.OwnerTickStride` (-1 = significance) |
+| **Partage d'anim** | bande 1+ leader-pose sur des channels partages idle/walk/run. | `QAI.AnimShare` (1) |
+| **Strip skin cache** | les meshes AI sautent le GPU skin cache. | `QAI.SkinCacheOff` (1) |
+| **Far-pawn collision** | > `LODDistance1` -> capsule en Overlap ; > `LODDistance2` -> root en QueryOnly. | `QAI.FarPawnOverlap` (1), `QAI.FarPawnQueryOnly` (1) |
+| **Lean cosmetics** | remplace les item-acteurs cosmetiques (non-arme) par de simples meshes ; tue les boucles Delay latentes + timelines de recul. | `QAI.LeanCosmetics` (1) |
+| **Agent tick banding** | le `UQAI_AgentComponent` se tick a 10 Hz en bande 2+. | `QAI.AgentTickBanding` (1) |
+| **Tier impostor** | demote -> pawn cache + ISM/VAT (le palier le plus economique, supplante tout). | `QAI.Impostor` (1) |
+
+La plupart de ces leviers sont **standalone-only** (le MP a besoin d'un pass de spec visuelle repliquee
+d'abord). Plusieurs classes lean sont substituees au spawn via `UQAI_Settings.LeanClassRedirects`
+(`ResolveSpawnClass`) : QAI ne spawne jamais directement les BP de prod, il les route vers leur jumeau lean.
+
+---
+
+## 12. Spaceship AI et trafic aerien
+
+### Fichiers
+- `Public/Behavior/QAI_SpaceshipBehavior.h` / `Private/.../QAI_SpaceshipBehavior.cpp`
+- `Public+Private/Spaceship/QAI_SubSystem_Spaceship.{h,cpp}`
+- `Public+Private/Spaceship/QAI_AerialTrafficSubsystem.{h,cpp}` + `QAI_AerialTrafficSettings.{h,cpp}`
+- `Public/Spaceship/QWeaponCoordinatorComponent.h`, `QSpaceshipObstacleAvoidanceComponent.h`,
+  `QSpaceshipMovementInterface.h`, `QSimpleProjectile.h`, `QSpaceshipAIConfigDataAsset.h`,
+  `QSpaceshipAITypes.h`, `QShipAILog.h`
+
+### SpaceshipBehavior
+
+`FQAI_SpaceshipBehavior` a ses propres sous-etats de mouvement internes : **Idle, Patrol, Hunt, Combat,
+Evade, Return** (`Execute*Movement`), avec obstacle avoidance (`GetObstacleAvoidanceInput`), suivi
+d'altitude relative au joueur (`UpdateTargetAltitudeForPlayerTracking`) et generation de waypoints.
+`FQAI_SpaceshipConfig` : `CombatRange=60000`, `MaxSpeed=5 555 556` (200 000 km/h), `TargetAltitude=50000`,
+`CloseCombatStandoff`/`BrakeDistance`, `TurnRate`. Combat : `Spaceship_PrimaryWeapons` / `_Missiles` /
+`_Flares` via le `WeaponCoordinator` (par reflexion, `FQAI_SpaceshipCombatConfig` : intervalles MG/roquettes,
+flares `FlareDeployChance=0.6`, missiles).
+
+Le mouvement vaisseau est dispatche par le MovementProcessor via l'interface `QSpaceshipMovementInterface`
+(reflexion : `SetSpeed`, `MaintainAltitude`, `OrientToTarget`, `ApplyDirectMovementInput` / `MoveToLocation`),
+ou via `UVehicleMovementComponent` (FlyVehicleMovement) sinon.
+
+> Regle thread-safety critique : le `ProcessAgent` du spaceship tourne en `ParallelFor` a >=100 agents —
+> il ne doit pas faire de `TActorIterator` (utiliser `CachedWorldScapeRoot`) ; le `ProcessEvent` flyer
+> reste un crasher latent a corriger.
+
+### Trafic aerien ("living sky")
+
+`UQAI_AerialTrafficSubsystem` (serveur) maintient un budget de vaisseaux transitant le ciel autour de
+chaque joueur : chaque vaisseau **entre de loin**, traverse, et est despawne au-dela de
+`DespawnDistanceM`. Spawn via `UQAI_SubSystem::SpawnAerialAgent(ShipClass, Loc, Rot, FQAI_ShipAgentParams)`
+(ajoute interface mouvement + obstacle avoidance + weapon coordinator + agent QAI + lifecycle).
+
+`UQAI_AerialTrafficSettings` (DeveloperSettings, `[/Script/QAI.QAI_AerialTrafficSettings]`) :
+`MaxShipsPerPlayer=6`, `SpawnIntervalSeconds=1.5`, `Min/MaxSpawnDistanceM`, `Min/MaxAltitudeM`,
+`AltitudeLowBias`, `MaxRouteOffsetM`, `DespawnDistanceM=9000`, et un `Roster` de
+`FQAI_TrafficRosterEntry { Faction, Ships[], bCombatEnabled, Weight }`. Le roster est **bake en C++** (les
+lignes `+Roster` de l'ini ne survivaient pas au cook -> fallback police).
+
+Les vaisseaux de trafic sont des **impostors statiques dormants qui volent vraiment** : le
+MovementProcessor les fait dead-reckoner analytiquement (sans mesh, donc OK sur serveur dedie), tient
+l'altitude radiale (`QAI.AerialTraffic.MinClearanceCm=40000`), re-tangente la velocite sur la courbe
+planetaire, et skip le cerveau dormant (`QAI.AerialTraffic.SkipDormantBrain=1`).
+
+---
+
+## 13. Architecture Client/Serveur et multijoueur
 
 ### Separation des responsabilites
 
 ```
-SERVEUR (Dedicated/Listen)          CLIENT
-+---------------------------+       +---------------------------+
-| StateProcessor (FSM)      |       | MovementProcessor         |
-| CombatProcessor           |       |   (mouvement local)       |
-| Sync transforms depuis    |       | AutoDiscoverAgents()      |
-|   actors -> registry      |       |   (decouvre les pawns AI) |
-+---------------------------+       +---------------------------+
-         |                                    |
-         | Replication UE (PoliceUnitMarker)   |
-         +----------------------------------->|
+SERVEUR (Dedicated/Listen/Standalone autorite)     CLIENT
++-------------------------------------------+   +------------------------------------------+
+| State + Movement + Combat (SoA)           |   | State + Movement LOCAUX/PROXY uniquement |
+| sync transforms acteur->registre          |   |   (unites police a marker)               |
+| publie le but de nav (RepNav*)            |   | AutoDiscoverAgents()                     |
+| LifecycleTick (cull + caps)               |   | UpdateClientTrafficShips (leanify)       |
+|                                           |   | UpdateClientCreatureImpostors (VAT)      |
++-------------------------------------------+   +------------------------------------------+
+         |  Replication UE (IsAlive, PoliceUnitMarker, RepNav*, transforms)  ^
+         +------------------------------------------------------------------>+
 ```
 
-### Cote serveur
+### Le serveur dedie n'a PAS de meshes (par design)
 
-Le serveur ne fait **PAS de mouvement**. Il :
-1. Synchronise les transforms des actors (geres par le client) dans le registry
-2. Execute le StateProcessor pour les transitions d'etat
-3. Execute le CombatProcessor pour les actions de combat
-4. Replique `PoliceUnitMarkerComponent.TargetActor` et `.StateFlags` vers les clients
+C'est la contrainte centrale du MP. Cote serveur, FindFloor/grounding/line-traces/collision ne resolvent
+jamais la geometrie. Consequences et mitigations :
 
-### Cote client
+- **Plancher analytique WorldScape** : le mouvement utilise `GetPawnDistanceFromGround`
+  (collision-independant) comme plancher dur (FPM toutes les 0.1 s + impostors dormants), avec
+  discrimination grotte/bunker (`IsBelowWorldScapeSurfaceSheltered`).
+- **Pont de nav client** (`ClientNavDir` / `ClientNavExpiry`) : le serveur, aveugle aux murs, publie le
+  but (`RepNav*`) ; le **client le plus proche** de chaque AI (qui a, lui, les murs) fait tourner le meme
+  `UQAI_FlowFieldManager`, echantillonne une direction wall-aware et la renvoie via
+  `UQAI_Client::Server_ReportAINav`. Le MovementProcessor l'utilise a la place de sa direction aveugle
+  quand elle est fraiche. N'est envoye que quand le chemin du client est bloque (sinon silence -> le
+  steering serveur direct vers le but suffit, comme en offline).
+- **Floor-oracle client** : le client sweepe le sol (`MarkClientGrounded`) et renvoie des corrections de
+  hauteur ; le FPM client neutralise la chute verticale tant que `ClientGroundedUntil` est actif.
 
-Le client :
-1. Auto-decouvre les Pawns AI avec `UQAI_PoliceUnitMarkerComponent` (toutes les 0.5s)
-2. Cree des agents locaux dans son propre registry
-3. Execute le MovementProcessor pour le mouvement smooth et local
-4. Recupere la cible depuis le marker replique pour adapter le mouvement
+### Presentation cliente
 
-**Pourquoi le mouvement est client-side** : les drones/unites au sol doivent avoir un mouvement smooth pour le joueur. Envoyer des positions replicades a 10 Hz depuis le serveur donnerait un mouvement saccade. Le client calcule le mouvement en continu et le serveur fait confiance.
+- **Creatures** : elles bougent deja correctement en MP (serveur-autoritatif + repliquees + facing-only
+  cote client). Pour la parite perf avec le standalone, `UpdateClientCreatureImpostors` rend les
+  creatures lointaines en impostors VAT cote client (entree de presentation, sans agent registre, rendue
+  sur la transform repliquee — ne peut jamais combattre l'autorite serveur). Promotion sous
+  `QAI.Client.CreatureImpostorPromoteCm=600`.
+- **Vaisseaux de trafic** : serveur-autoritatifs, dead-reckonnes analytiquement et repliques (hull
+  transform). Cote client, `UpdateClientTrafficShips` (`LeanifyTrafficShip`) strip la copie cliente et
+  tue ses ticks de vol pour que `ReplicatedMovement` soit le seul driver. Le serveur pousse aussi la pose
+  pleine-frequence dans `SmoothTSync.ForceTransform` (`QAI_PushDormantShipToSmoothTSync`) pour un interp
+  client doux.
+- Les proxies **Cyborg** laissent la replication de mouvement engine posseder rotation+position ; les
+  creatures simples recoivent un facing local (`TickClientProxyFacing`).
+
+### Cycle de vie serveur
+
+`LifecycleTick` (~0.5 Hz) : enregistre les pawns joueurs dans le spatial hash (les joueurs n'ont pas de
+`UQAI_SensingComponent` ; c'est le SEUL chemin qui les rend visibles a `AcquireCreatureTarget`), cull des
+AI au-dela de `AI_SpawnDistanceCm=50000` du joueur le plus proche, reassigne l'autorite. Caps :
+`MaxAIPerPlayer=50`, budget global de spawn `MaxSpawnsPerFrame=4` (`TryConsumeSpawnBudget` evite le flood
+de proxies Chaos). `UnregisterQAI_Agent` relache aussi le flow field tenu par l'agent (fuite corrigee).
 
 ---
 
-## 9. Coordination et sous-systemes auxiliaires
+## 14. Systeme de factions
 
-### DroneCoordinationSubsystem
+### Fichiers
+- `Public+Private/Faction/QAI_Faction.{h,cpp}` — **module dedie NOUVEAU**
 
-**Fichiers** : `Public/Subsystem/QAI_DroneCoordinationSubsystem.h`
-
-Quand plusieurs drones attaquent le meme joueur, ce sous-systeme coordonne les tours d'attaque :
+Remplace l'ancienne logique de faction dupliquee dans `SensingComponent` et `SpatialHashGrid`. Source
+unique de verite : `namespace QAI_FactionLib` (+ wrapper BP `UQAI_FactionLibrary`).
 
 ```cpp
-struct FCoordinator {
-    TArray<TWeakObjectPtr<APawn>> AttackQueue;  // File d'attente
-    TWeakObjectPtr<APawn> CurrentAttacker;       // Drone qui attaque
-    float CurrentAttackStartTime;
-    float TurnDuration = 4.0f;                   // 4 secondes par tour
+enum class EQAI_Faction : uint8 {
+    None = 0, IcLabs = 1, Dissidence = 2, Infected = 3, Pirate = 4,
+    Animal = 5, Rogue = 6, Voss = 7   // miroir du BP E_Factions — NE PAS reordonner
 };
 ```
 
-- `RegisterDrone()` : ajoute un drone a la file pour un joueur
-- `CanDroneAttack()` : retourne true si c'est le tour de ce drone
-- `ProcessCoordination()` : fait tourner les tours, trie par priorite (distance)
+- `GetFactionForActor` : **composant + reflexion**, plus de string-match par nom de classe. (1) si le
+  pawn porte un `UQAI_PoliceUnitMarkerComponent` -> `IcLabs` ; (2) sinon trouve le composant dont la
+  classe contient "CombatComponent" (le seul match de nom restant, juste pour *localiser* le composant BP)
+  et lit sa propriete `Faction` par reflexion ; (3) sinon `None`.
+- `AreFactionsHostile(A, B)` : matrice `static constexpr bool[8][8]` directionnelle (ligne = self), lue
+  telle quelle sur la diagonale (`[Rogue][Rogue]=1` : deux Rogues se battent).
+- `IsActorHostileTo(Self, Other)`.
 
-**Importance pour le refactoring** : ce systeme est specifique aux drones police mais le concept de coordination d'attaque est generalisable a tout type d'IA.
+Matrice (ligne = self, 1 = hostile) :
 
-### PoliceUnitMarkerComponent
+| self \ other | None | IcLabs | Diss | Inf | Pirate | Animal | Rogue | Voss |
+|---|---|---|---|---|---|---|---|---|
+| **None**       | 0 | 0 | 0 | 1 | 1 | 0 | 1 | 1 |
+| **IcLabs**     | 0 | 0 | 1 | 1 | 1 | 0 | 1 | 1 |
+| **Dissidence** | 0 | 1 | 0 | 1 | 0 | 0 | 1 | 0 |
+| **Infected**   | 1 | 1 | 1 | 0 | 1 | 1 | 1 | 1 |
+| **Pirate**     | 1 | 1 | 0 | 1 | 0 | 1 | 1 | 0 |
+| **Animal**     | 0 | 0 | 0 | 1 | 1 | 0 | 1 | 0 |
+| **Rogue**      | 1 | 1 | 1 | 1 | 1 | 1 | 1 | 1 |
+| **Voss**       | 1 | 1 | 0 | 1 | 0 | 0 | 1 | 0 |
 
-Le pont entre les systemes :
-- **Replicated** : `TargetActor` et `StateFlags` sont repliques serveur -> clients
-- **StateFlags** : bitmask (0x01 = patrol, 0x02 = combat, 0x04 = flee)
-- **VFX Multicast** : `MC_PlayShotVFX`, `MC_PlayShotVFXEx` pour les effets visuels de tir
-- **JumpImpulse** : `MC_ApplyJumpImpulse` pour les attaques de saut (autonomes)
+`Rogue` (slot 6, ex-"Guard") = cyborgs malfonctionnants/hackes, hostiles a TOUT (y compris eux-memes).
+`Voss` (7) = humanoides derives des pirates. Les gardes IcLabs sont des unites de **faction IcLabs**, pas
+une faction dediee. Les decisions de plus haut niveau (wanted-level, PvE/PvP, SafeArea) restent dans le
+BP `CombatComponent::CheckTargetIsAllowedCombat` — ce module est de la relation de faction pure.
 
 ---
 
-## 10. Spatial Hash Grid et Sensing
+## 15. Spatial Hash Grid et Sensing
 
 ### Fichiers
-- `Public/Performance/QAI_SpatialHashGrid.h` / `Private/Performance/QAI_SpatialHashGrid.cpp`
-- `Public/Sensing/QAI_SensingComponent.h` / `Private/Sensing/QAI_SensingComponent.cpp`
-- `Public/Sensing/QAI_SensingEmitterComponent.h` (stub, non implemente)
-- `Public/Sensing/QAI_SensingFunctionLibrary.h` / `Private/Sensing/QAI_SensingFunctionLibrary.cpp`
+- `Public+Private/Performance/QAI_SpatialHashGrid.{h,cpp}`
+- `Public+Private/Sensing/QAI_SensingComponent.{h,cpp}`
+- `Public/Sensing/QAI_SensingFunctionLibrary.h`, `QAI_Sensing_Vision_Library.{h}`, `QAI_Sensing_Vision_Struct.h`
+- `Public+Private/Sensing/QAI_SensingEmitterComponent.{h,cpp}` (stub)
+- `Public/Data/QAI_Sensing_Struct.h`
 
 ### Spatial Hash Grid
 
-Systeme complet de partitionnement spatial pour les requetes de proximite O(1) au lieu de O(n).
+Partitionnement spatial 2D (XY ; le Z est filtre en distance 3D mais pas hashe) pour des requetes de
+proximite O(1). `FQAI_SpatialHashGrid` thread-safe (`FCriticalSection`, snapshot-and-release pendant le
+filtrage). `CellSize=1500`, primes de hash `(73856093, 19349663, 83492791)`. Le subsysteme tickable
+`UQAI_SpatialHashGridSubsystem` re-pousse chaque acteur enregistre par tick, maintenance ~1 Hz. API BP :
+`RegisterActor`, `QueryActorsInRange`, `QueryHostileActorsInRange` (delegue a `QAI_FactionLib`).
 
-**Architecture** :
-```
-FQAI_SpatialHashGrid (class C++ pure, thread-safe via FCriticalSection)
-    |
-    +-- SpatialCells: TMap<int32, FQAI_SpatialCell>   // Hash -> cellule
-    +-- ActorToCellHash: TMap<Actor, int32>            // Reverse lookup
-    +-- CellSize = 1500 unites (configurable)
-    +-- CellSizeInv = 1/CellSize (division rapide)
-    +-- Hash function: primes (73856093, 19349663, 83492791) XOR
-```
-
-**Grille 2D** : la grille n'utilise que X/Y (pas Z) car les requetes de sensing sont principalement horizontales. Le Z est stocke dans les entrees mais pas utilise pour le hashing.
-
-**Requetes optimisees SIMD** :
-```cpp
-void QueryActorsInRange(Position, Range, OutActors, OutDistances)
-{
-    // 1. Calcule les cellules dans le range (O(cells) = O(1) pour des ranges raisonnables)
-    GetCellsInRange(Position, Range, CellHashes);
-    // 2. Collecte les entrees des cellules
-    // 3. Calcule les distances avec QAISIMD::CalculateDistancesSquaredBatch()
-    // 4. Filtre par range, trie par distance
-}
-```
-
-**Requetes batch** : `BatchQueryActorsInRange()` traite 4 requetes en parallele.
-
-**Subsysteme** : `UQAI_SpatialHashGridSubsystem` (UTickableWorldSubsystem) gere automatiquement :
-- Mise a jour des positions d'acteurs enregistres a chaque tick
-- Maintenance periodique (nettoyage des acteurs invalides, suppression des cellules vides) toutes les secondes
-- API Blueprint : `RegisterActor()`, `QueryActorsInRange()`, `QueryHostileActorsInRange()`
+C'est la source unique de candidats pour l'acquisition de cible du StateProcessor (jamais
+`TActorIterator` sur worker). Les pawns joueurs y sont enregistres par `LifecycleTick`.
 
 ### SensingComponent
 
-`UQAI_SensingComponent` est un ActorComponent qui detecte les pawns dans un rayon :
-- **Integration SpatialHashGrid** : utilise la grille spatiale au lieu de sphere overlaps (bien plus performant)
-- **Auto-sensing** : scan periodique configurable via `SensingFrequency` (defaut 0.5s)
-- **Events Blueprint** : `OnPawnDetected`, `OnHostilePawnDetected`
-- **Faction-aware** : `GetActorFaction()` et `IsActorHostile()` pour filtrer les hostiles
-- **Auto-registration** : s'enregistre dans la grille spatiale au BeginPlay, se desenregistre au EndPlay
+`UQAI_SensingComponent` (ActorComponent, hors pipeline SoA, timer-driven a `SensingFrequency=0.5s`) :
+detecte les pawns via la grille spatiale (fallback `SphereOverlapActors`), classe par hostilite
+(`QAI_FactionLib`), broadcast `OnPawnDetected`/`OnHostilePawnDetected`. Toute la logique de faction est
+deleguee a `QAI_FactionLib` (le string-sniffing par nom de classe a ete supprime).
 
-**Fallback** : si la grille spatiale n'est pas disponible, retombe sur `SphereOverlapActors` (plus lent).
+**Static defender** (`bAutoAcquireCombatTarget`, serveur-only) : un cerveau minimal qui auto-acquiert une
+cible hostile et applique un tir hitscan serveur depuis le `SM_WeaponRef`/socket `FirePoint` (vise la
+socket `Head`), via `UQWeaponBulletSubsystem::ServerFireBullet` + `SpawnBulletTracer`. CVars :
 
-### SensingFunctionLibrary
+| CVar | Defaut |
+|------|--------|
+| `QAI.StaticDefenderDirectFire` | 1 |
+| `QAI.StaticDefenderFireInterval` | 0.5 |
+| `QAI.StaticDefenderFireDamage` | 12.0 |
+| `QAI.StaticDefenderFireRange` | 30000 |
 
-Bibliotheque Blueprint de fonctions de sensing avancees (vision, son, etc.) :
-- `QAI_Sensing_Vision_GetBasicAngleToTarget()` - angle vers une cible
-- `QAI_Sensing_Vision_ComputeVisionScore()` - score de visibilite composite
-- `QAI_Sensing_Vision_GetSizeProjection()` - taille apparente d'une cible
-- `QAI_Sensing_Vision_LineTraceTarget_Multi()` - line trace avec score de vision
-- `QAI_Sensing_Vision_HaveSeeTarget()` - detection complete (taille + vue + ligne de vue)
+### Vision
 
-Ces fonctions consomment les structs `FQAI_Sensing_Vision` definies dans les donnees de sensing. Elles sont actuellement appelees depuis des Blueprints mais pourraient etre integrees dans un futur SensingProcessor.
+Deux familles de structs/libs de vision **coexistent** (heritage du fold-in de l'ancien plugin QSensing) :
+la nouvelle (`FQAI_Vision`/`UQAI_Sensing_Vision_Library`) et l'ancienne
+(`FQAI_Sensing_Vision`/`UQAI_SensingFunctionLibrary`). Calculs d'angle, score FOV, projection ecran,
+line-traces LOS. Son / electromagnetique / odorat sont des **structs stub** (declares, pas implementes).
+`UQAI_SensingEmitterComponent` est un **stub vide** (tick active mais ne fait rien).
 
 ---
 
-## 11. Composants de mouvement
+## 16. Composants de mouvement et d'animation
 
 ### QAI_FloatingPawnMovement
-
-**Fichier** : `Public/Component/QAI_FloatingPawnMovement.h`
-
-Extension de `UFloatingPawnMovement` d'Unreal avec :
-- **Gravite spherique** : `SimulateGravity` avec `GravityForce` configurable, interpolation de gravite
-- **Mouvement au sol** : `MovementOnlyOnGround` pour les unites terrestres
-- **Replication integree** : input replique via RPC serveur, location replicade avec seuil d'interpolation
-- **Ownership** : systeme de changement de proprietaire (`QAI_ChangeOwner()`, `QAI_GetClientIsOwner()`)
-- **Custom tick** : tick functions separees pour la replication d'input et de location (intervals configurables)
-- **Sweep au sol** : `GravitySweepByTrace`, `TraceGround` pour detection du sol
-
-C'est le composant de mouvement principal utilise par les drones et unites au sol. Le MovementProcessor lui envoie des `AddInputVector()`.
+Le mover principal de presque tous les pawns QAI (creatures, cyborgs, drones). Etend
+`UFloatingPawnMovement`, tick `TG_PrePhysics`, replique par defaut.
+- **Gravite spherique/analytique** (`SimulateGravity`, `GravityForce`), integration le long de la gravite.
+- **Plancher dur WorldScape** : `ResolveWorldScapeTerrainPenetration` toutes les 0.1 s (cache du root,
+  re-resolu toutes les 2 s), avec discrimination grotte/ceiling et `GetAgentRestOffset`.
+- **Replication** : input (`Client_SendInput`, RPC serveur, ~0.05 s) et location (~0.15 s) ; transfert
+  d'ownership (`QAI_ChangeOwner`, `QAI_GetClientIsOwner`).
+- **Proxy facing** (`bServerAuthoritativeCreature`) : les Cyborgs laissent l'engine posseder
+  rotation+position ; les creatures simples recoivent `TickClientProxyFacing` (vers le but de nav repliquE).
+- `Auto_RotateOwner` toggleable, `LockMovement`, `Jump` (fenetre `JumpGroundingSuppressUntil=2.5s`),
+  `MovementOnlyOnGround` **desactive** (trace planetaire non fiable).
 
 ### QAI_BasicMovement
-
-**Fichier** : `Public/Component/QAI_BasicMovement.h`
-
-Composant de mouvement plus simple, base sur la physique :
-- Simulation de gravite
-- Sweep collision
-- Step height
-- Jump
-- Auto-rotation vers la direction du mouvement + gravite
-- Modes : Ground, Surface, Fly, AntiGravity
-
-Utilise directement `AddInput(Direction, Scale)` et `Jump(Direction)`.
+Mover physique standalone (gravite/sweep/step/jump, modes "Ground/Surface/Fly/AntiGravity" decrits en
+commentaire mais non enum-switches). Composant alternatif/legacy, pas sur le chemin principal. (Contient
+des champs morts et des fuites de `FHitResult` — a nettoyer.)
 
 ### QAI_ShipMovementSimulation
+**Stub vide** (tick active, aucune logique). Le mouvement vaisseau passe par FlyVehicleMovement +
+`QSpaceshipMovementInterface`, pas par cette classe.
 
-**Fichier** : `Public/Component/QAI_ShipMovementSimulation.h`
+### QAI_PoliceUnitMarkerComponent
+Replique `TargetActor` (mirroir client-side -> `State.PursuitTarget`) et `StateFlags` (8 bits ; semantique
+0x01/0x02/0x04 posee par les hooks d'etat), multicast les FX de tir et le jump (`MC_PlayShotVFX`,
+`MC_PlayShotVFXEx` -> `UQWeaponBulletSubsystem::SpawnBulletTracer`, `MC_ApplyJumpImpulse`).
 
-Stub pour la simulation de mouvement de vaisseau. Actuellement vide (juste BeginPlay + TickComponent). Le mouvement des vaisseaux est gere via l'interface Blueprint `QSpaceshipMovementInterface` appelee par reflexion depuis le MovementProcessor.
-
----
-
-## 12. Systeme de factions
-
-Le systeme de factions est implemente a deux endroits (duplique pour la performance) :
-
-### Factions definies
-
-| ID | Faction      | Hostile envers                        |
-|----|-------------|---------------------------------------|
-| -1 | Unknown     | Personne                              |
-| 0  | Player      | Personne (sauf si attaque)            |
-| 1  | IcLabs      | Dissidence, Infected, Pirate, Animal  |
-| 2  | Dissidence  | IcLabs, Infected                      |
-| 3  | Infected    | Tous sauf autres Infected             |
-| 4  | Pirate      | Tous sauf autres Pirates              |
-| 5  | Animal      | Tous sauf autres Animaux              |
-
-### Detection de faction
-
-`UQAI_SensingComponent::GetActorFaction()` determine la faction d'un actor par :
-1. Presence d'un `QAI_PoliceAgentComponent` -> faction 1 (IcLabs)
-2. Presence d'un `CombatComponent` avec nom de classe contenant "Police" -> faction 1
-3. Fallback par nom de classe : "Player" -> 0, "Police" -> 1, "Dissidence" -> 2, etc.
-
-**Point d'attention pour le refactoring** : la detection par nom de classe est fragile. Idealement, la faction devrait etre stockee dans un composant ou un tag GameplayTag.
+### QAI_AnimInstance / QAI_AnimShareManager (NOUVEAU)
+- `UQAI_AnimInstance` : anim instance "lean" thread-safe qui remplace l'ALS BP sur les pawns AI (pas
+  d'event graph, pas de foot-IK). Quasi tout tourne en `NativeThreadSafeUpdateAnimation`. Expose Speed,
+  Direction, AimPitch/Yaw, `OverlayAlpha`, `bCombatReady`, `GunGrip*`, `ForcedSpeed`, `LocomotionPlayRate`.
+- `UQAI_AnimShareManager` (`UTickableWorldSubsystem`, standalone-only) : evaluation d'anim partagee
+  "bucketed". Les agents de bande lointaine leader-pose sur un petit set de meshes-driver caches
+  (idle/walk/run, `GChannelDefs={0,165,350}`), evitant ~100 evaluations de graphe d'anim
+  (`SetLeaderPoseComponent` + tick desactive sur le suiveur, refresh batch 1/3 par frame ~20 Hz).
 
 ---
 
-## 13. Configuration et settings
+## 17. Spawners et cycle de vie
 
-### QAI_Settings (DeveloperSettings)
+### Fichiers
+- `Public+Private/Spawner/QAI_AgentSpawner.{h,cpp}`
+- `Public+Private/Spawner/QAI_GuardPatrolSpawner.{h,cpp}`
+- `Public/Data/QAI_PawnConfig.h`
 
-**Fichier** : `Public/QAI_Settings.h`
+### AQAI_AgentSpawner (port C++ du BP `AI_Spawner`)
 
-Configuration globale du plugin, accessible dans Project Settings > QAI :
+Spawner generique : `AI_PawnClasses` (pick aleatoire), `SpawnQuantity`, `DelayBetweenEachSpawn`,
+`SpawnStartJitter=3s` (anti-flood Chaos), `RespawnTime`, `OutRangeDelayDestroy`, detection joueur par
+distance adaptative (`SpawnDistanceCm=20000`), cull `AI_MaxDistanceFromSpawnerCm=60000`, ciblage
+(`CustomTargetActor`, `bForceSetCustomTarget`). Champs de parite legacy (`bHasSpawnerToDestroy`,
+`SpawnerLife`, `bOverrideFaction`/`FactionOverride`, `bPropagateQuestComponentToAI`). Hooks BP (noms
+identiques au BP legacy pour le reparenting) : `WorldObjectiveAllowSpawner` (gate quete),
+`OnSpawned`, `OnPropagateQuestComponent`, `TryCompleteMissions`, `OnDeathAI`, `UpdateSpawnerVisibility`.
+Delegues natifs : `OnAllKilled`, `OnSpawnedAI`, `OnAISpawnedDestroyed`, `OnSpawnerDeath`. Enregistre ses
+pawns aupres de `UQAI_SubSystem` (`AddAI_Spawned`).
+
+### AQAI_GuardPatrolSpawner
+
+Sous-classe qui spawne des **gardes Cyborg armes** et seede a chacun une route A<->B au spawn
+(`SetPatrolRoute`). `GuardDefendRadius=4000`, `NumPatrolGroups` x `GuardsPerGroup` (chaque groupe couvre
+une sous-section du corridor), `CaptainPawnClass` optionnel (1er garde d'un groupe >=3 = capitaine).
+Endpoints draggables en viewport (`PatrolStart`/`PatrolEnd`) ou par acteurs
+(`PatrolStartActor`/`PatrolEndActor`). Faction par defaut IcLabs. Respawn maintien-de-population
+(`ShouldRespawnAfterDeath` : refill des qu'un slot s'ouvre). Forme des escouades (anchor par groupe ->
+`SetSquadInfo`).
+
+### Authoring : UQAI_PawnConfig
+
+`UPrimaryDataAsset` portant un unique `FQAI_AgentData`. Un asset par archetype de pawn (ex
+`QAI_PawnConfig_Sangline`). Le pawn porte un `UQAI_AgentComponent` referencant ce config ; a l'auto-
+discover, le config est copie dans le registre SoA et le pipeline prend la main (plus d'`AAIController`
+custom). `Archetype` DOIT etre set.
+
+### UQAI_AgentComponent (le hub par pawn)
+
+Implemente `IQAI_AgentInterface` (marqueur "ce pawn est pilote par QAI", remplace le cast vers
+l'ancien `Qanga_AI_Controller`). API : `RequestMoveTo`, `SetPursuitTarget`, `SetPatrolRoute`,
+`SetSquadInfo`, `NotifyAgentDied`, `BeginAsDormantImpostor`/`PromoteFromImpostor`/`IsImpostorDormant`,
+accesseurs de nav repliquee. C'est lui qui pilote la machine demote/promote impostor, les paliers de
+significance/LOD (owner-tick stride, throttle composants, anim-share, strip skin cache, far-pawn
+collision), les cosmetiques lean, le facing combat Cyborg/Autonomous, et le pont de nav client/serveur
+(`TickServerNavPublish` ~5 Hz, `TickClientNav` ~15 Hz). `IsAlive` replique (`OnRep_IsAlive` rejoue le
+teardown).
+
+---
+
+## 18. Configuration, Settings et CVars
+
+### UQAI_Settings (DeveloperSettings, `Project Settings > QAI`)
 
 ```cpp
-UCLASS(config=Game, defaultconfig)
-class UQAI_Settings : public UDeveloperSettings
-{
-    bool Enabled = true;                    // Active/desactive le subsysteme
-    ETickingGroup RealTimeTickGroup = TG_PrePhysics;  // Tick group du subsysteme
-    bool bDisableSubsystemTick = true;      // Desactive le tick (pour dev/debug)
-    int32 MaxAgent = 4096;                  // Nombre max d'agents
-    int32 MaxAgentPerClient = 512;          // Nombre max d'agents par client
-    int32 MaxDistanceAgent = 100000;        // Distance max d'un agent (1km en unites UE)
-};
+// SubSystem
+bool Enabled = true;
+ETickingGroup RealTimeTickGroup = TG_PrePhysics;
+bool bDisableSubsystemTick = true;
+// Agent
+int32 MaxAgent = 4096;  int32 MaxAgentPerClient = 512;  int32 MaxDistanceAgent = 100000;
+// Significance / LOD
+bool bEnableSignificanceLOD = true;
+float LODDistance1Cm = 4000;  LODDistance2Cm = 9000;  LODDistance3Cm = 18000;
+int32 CombatMaxLOD = 1;
+// Impostor
+TArray<FQAI_ImpostorBake> ImpostorBakes;            // 1 par mesh skeletique unique
+// Lean classes
+TArray<FQAI_LeanClassRedirect> LeanClassRedirects;  // ProdClass -> LeanClass au spawn
+// Logging / Pathfinding
+bool bVerboseLogging = false;
+bool bAsyncFlowFieldTraces = true;
+TSet<EQAI_AgentArchetype> PathfindingEnabledArchetypes = { Cyborg };
 ```
+Helpers statiques : `IsVerboseLogging` (fast path), `SetVerboseLoggingRuntime`, `IsPathfindingEnabledFor`,
+`FindBakeForMesh(USkeletalMesh*)`, `ResolveSpawnClass(UClass*)`. Macro de log :
+`QAI_VLOG(...)` (court-circuit gratuit si verbose off ; a utiliser partout en site per-tick/per-agent —
+jamais `UE_LOG(LogQAI, ...)` brut).
 
-### QAI_Client
+`UQAI_AerialTrafficSettings` est un DeveloperSettings separe (section 12).
 
-**Fichier** : `Public/QAI_Client.h`
+### Index des CVars (par domaine)
 
-Composant associe a chaque joueur pour l'enregistrement au subsysteme. Gere via `QAI_Register_Client()` / `QAI_UnRegister_Client()`.
-
-### QAI_AgentComponent
-
-**Fichier** : `Public/Agent/QAI_AgentComponent.h`
-
-Composant legacy associe a un actor AI :
-- `IsAlive` : boolean de vie
-- `OnAgentDied` : delegate multicast pour la mort
-- `Agent` : `FQAI_Agent_Data` (info + mouvement + sensing)
-
-Ce composant est distinct du systeme processeur/registre. Il est utilise cote Blueprint pour attacher des donnees AI a un actor.
-
-### QAI_Agent_DataAsset
-
-**Fichier** : `Public/Data/QAI_Agent_DataAsset.h`
-
-Data asset stub pour la configuration d'agents. Actuellement ne contient qu'un `Agent_Name`. Prevu pour stocker la config complete d'un type d'agent (mesh, state tree, collision, etc.).
-
-### QAI_FunctionLibrary
-
-**Fichier** : `Public/QAI_FunctionLibrary.h`
-
-Fonctions utilitaires Blueprint :
-- `QAI_GetCenterLocationFromLocations()` : calcule le centre et le rayon englobant d'un ensemble de positions
-- `QAI_Target_IsHostile_Faction()` : verifie l'hostilite entre deux structures de faction
+- **Pipeline / diag** : `QAI.Disable.{State,Movement,Combat}`, `QAI.Debug`, `QAI.Verbose`,
+  `QAI.DumpAgents/DumpSpawners/DumpFPM/DumpBlueprintAI`, `QAI.StressBench`, `QAI.StressBenchDamage`.
+- **Combat throttle** : `QAI.CombatFullRateCount` (8), `QAI.CombatThrottleBand` (2), `QAI.CrowdFirePauseScale` (6).
+- **Direct-fire cyborg** : `QAI.DirectFire` (1), `QAI.DirectFireSpreadDeg` (1.5),
+  `QAI.DirectFireSoundMaxPerFrame` (1), `QAI.DirectFireSoundFrameInterval` (2),
+  `QAI.DirectFireSoundMinInterval` (0.30), `QAI.DirectFireSoundMaxDist` (2500), `QAI.DirectFireOverflowDelayScale` (2).
+- **Static defender** : `QAI.StaticDefender{DirectFire,FireInterval,FireDamage,FireRange}`.
+- **Impostor** : `QAI.Impostor`, `QAI.ImpostorDemoteAfter`, `QAI.ImpostorGroundTracesPerFrame`,
+  `QAI.ImpostorFocusRangeCm`, `QAI.ImpostorScreenPromoteCm`, `QAI.Impostor{Shadows,Props,PropsGPU,FreezeUpload,SkipMeshMatch,DebugDraw}`.
+- **Lean / significance (agent)** : `QAI.OwnerTickStride`, `QAI.LeanCosmetics`, `QAI.FarPawnOverlap`,
+  `QAI.FarPawnQueryOnly`, `QAI.SkinCacheOff`, `QAI.AnimShare`, `QAI.AgentTickBanding`.
+- **Trafic aerien** : `QAI.AerialTraffic.SkipDormantBrain` (1), `QAI.AerialTraffic.MinClearanceCm` (40000),
+  `QAI.AerialTraffic.ProximityPromoteCm` (15000), `QAI.AerialTraffic.ImpostorMaxParts` (12).
+- **Client MP** : `QAI.Client.CreatureImpostorPromoteCm` (600).
+- **Pathfinding debug** : `qai.DrawDebugPaths` (`ECVF_Cheat`).
 
 ---
 
-## 14. Structures de donnees de reference
+## 19. Guide pour le refactoring
 
-### FQAI_PoliceAgent_Data (config complete d'un agent)
+### A. Ce qui a ETE comble depuis la v1
+
+| Ecart v1 | Statut |
+|----------|--------|
+| Factions dupliquees (SensingComponent + SpatialHashGrid) | **Resolu** — module unique `QAI_FactionLib` + matrice. |
+| Detection de faction par nom de classe | **Resolu** — composant + reflexion (`GetFactionForActor`). |
+| Seulement 3 behaviors | **Resolu** — 13 behaviors enregistres, configs typees par archetype. |
+| Pas de pathfinding (line tracing manuel) | **Resolu** — flow field async + Dijkstra + hot-swap. |
+| `DataAsset` d'agent stub | **Resolu** — `UQAI_PawnConfig` (template d'authoring complet). |
+| Inference d'archetype par `bCanFly` | **Mitige** — `Archetype` explicite + branch sur `PathType==Fly` (le `bCanFly` defaut true etait un piege). |
+
+### B. Ecarts architecturaux restants
+
+- **ECS — composition dynamique** : chaque agent porte TOUS les `FQAI_*Config` (Drone + Spaceship +
+  Sangline + ... + Nanite) en cold data. A 13 archetypes, `FQAI_AgentData` est deja volumineux. La cible
+  reste un stockage par archetype (config typee unique) ou un vrai ECS query-by-component.
+- **HFSM** : toujours une FSM plate. Les transitions communes (flee depuis tout etat de combat) sont
+  dupliquees dans le switch. Les etats `Wander/Melee/Investigate` existent dans l'enum mais ne sont pas
+  branches — soit les implementer, soit les retirer.
+- **Configs combat globales** : `FQAI_CombatConfig` / `FQAI_SpaceshipCombatConfig` vivent sur le
+  processeur (une instance pour tous). Un vaisseau cargo et un chasseur partagent les memes timings.
+
+### C. Dette / nettoyage identifie
+
+1. `StateTransitions` (`TArray<FQAI_StateTransition>`) + `FQAI_StateTransition` = **code mort** (la FSM
+   vivante est le switch hardcode).
+2. `ExecuteIdleState` vide ; `IsAgentAlive` retourne toujours `true` (stubs).
+3. `MovementProcessor::ProcessDroneMovement` / `ProcessGroundMovement` semblent **legacy non appeles** par
+   le pipeline parallele (le steering vient des behaviors). A verifier/supprimer.
+4. **Deux systemes de vision coexistent** (`FQAI_Vision` vs `FQAI_Sensing_Vision`) — deduplication a faire.
+   Son/electromagnetique/odorat sont des structs stub.
+5. `UQAI_SensingEmitterComponent` = **stub vide avec tick actif** (tick gaspille).
+6. `UQAI_ShipMovementSimulation` = stub vide ; `UQAI_BasicMovement` a des champs morts et des fuites de
+   `FHitResult`.
+7. `ProjectPointToNavigation` dans le flanking = unique survivance NavMesh dans un systeme sans NavMesh
+   (incoherence).
+8. Le `ProcessEvent` Flyer en phase parallele reste un crasher latent (a deferrer comme les autres).
+9. Plusieurs `static`/process-global non world-scoped (registre de tracers du marker, blackbox cyborg).
+
+### D. Ce qui ne doit PAS changer
+
+| Systeme | Raison |
+|---------|--------|
+| Layout SoA hot/warm/cold | Fondamental pour le cache. Ne pas fusionner les arrays. |
+| Pattern parallel-compute / GT-apply | La separation phase pure / phase acteur est ce qui rend le batch thread-safe. |
+| Handles sparse + generation | Robuste. Ne pas remplacer par des pointeurs bruts. |
+| Behaviors = classes C++ pures (`TUniquePtr`) | Zero GC, destruction deterministe. |
+| `CachedWorldScapeRoot` / interdiction `TActorIterator` en parallele | Empeche une corruption de heap Shipping. |
+| Split serveur (state+combat) / client (presentation) + pont de nav | Essentiel au netcode meshless. |
+| Tier impostor + significance/LOD | Le levier de perf principal du crowd. |
+
+### E. Ajouter un nouveau type d'IA
+
+1. Ajouter la valeur dans `EQAI_AgentArchetype`.
+2. Creer `FQAI_<Type>Config` dans `QAI_Struct.h` + le champ dans `FQAI_AgentData`.
+3. Creer `FQAI_<Type>Behavior : public FQAI_AgentBehaviorBase`, implementer `ComputeMovementInput` (souvent
+   via `QAI_BehaviorHelpers::PursueViaFlowField`) et `ComputeCombatDecision`.
+4. L'enregistrer dans `UQAI_AgentBehaviorRegistry::Initialize()`.
+5. Cas creature/combat specifique : ajouter le branch dans `AcquireCreatureTarget` (StateProcessor) et
+   l'executeur dans `ProcessCreatureCombat`/`ProcessCyborgCombat`/etc. (CombatProcessor).
+6. Authoring : un `UQAI_PawnConfig` avec `Archetype` set, pose sur le pawn via `UQAI_AgentComponent.PawnConfig`.
+7. Impostor : ajouter le bake dans `UQAI_Settings.ImpostorBakes` (sinon le pawn ne demote jamais).
+
+---
+
+## 20. Structures de donnees de reference
+
+### FQAI_AgentData (config complete d'un agent, `Data/QAI_Struct.h`)
 
 ```cpp
-struct FQAI_PoliceAgent_Data
-{
-    FQAI_Agent_Data BaseAgent;           // Info + Movement + Sensing
-    FQAI_PoliceState PoliceState;        // Etat FSM initial
-    FQAI_DroneConfig DroneConfig;        // Config drone (bCanFly, bIsCaptain, burst fire...)
-    FQAI_AutonomousConfig AutonomousConfig; // Config sol (melee/ranged ranges, speed...)
-    FQAI_SpaceshipConfig SpaceshipConfig;   // Config vaisseau (vitesse, altitude, ranges...)
-    EQAI_AgentArchetype Archetype = Unknown; // Type explicite
-    bool bCombatEnabled = true;
+struct FQAI_AgentData {
+    FQAI_Agent_Data BaseAgent;        // Info + Movement + Sensing
+    FQAI_AgentState State;            // etat FSM + tous les champs runtime (squad, route, flow field, stuck...)
+    // Police
+    FQAI_DroneConfig      DroneConfig;
+    FQAI_AutonomousConfig AutonomousConfig;
+    FQAI_SpaceshipConfig  SpaceshipConfig;
+    // Creatures
+    FQAI_SanglineConfig         SanglineConfig;
+    FQAI_SuperSanglineConfig    SuperSanglineConfig;
+    FQAI_FlyerConfig            FlyerConfig;
+    FQAI_SandDiggerConfig       SandDiggerConfig;
+    FQAI_InfectedConfig         InfectedConfig;
+    FQAI_GazSacConfig           GazSacConfig;
+    FQAI_AnimalConfig           AnimalConfig;
+    FQAI_CreatureAutonomusConfig CreatureAutonomusConfig;
+    // Speciaux
+    FQAI_CyborgConfig  CyborgConfig;
+    FQAI_NaniteConfig  NaniteConfig;
+
+    EQAI_AgentArchetype Archetype = Unknown;
+    float RotationInterpSpeedOverride = 0;   // 0 = global (6.0)
+    bool  bCombatEnabled = true;
     int32 PoliceFaction = 3;
-    float AttackCooldown = 5.5f;
+    float AttackCooldown = 1.0f;
     float AggressionDuration = 30.0f;
+    bool  bCanPushPlayer = false;
 };
 ```
 
 ### FQAI_Agent_Data (sous-structure)
+`FQAI_Info Agent_Info` (Dangerousness, Priority, `FQAI_Info_Attack`, `FQAI_Info_Faction`),
+`FQAI_Movement Agent_Movement` (`EQAI_Movement_Type {Movable, Static}`, `EQAI_Movement_PathType {Ground,
+Surface, Fly}`, `FQAI_Movement_Collision`), `FQAI_Sensing Agent_Sensing` (vision active par defaut, le
+reste stub).
 
-```cpp
-struct FQAI_Agent_Data
-{
-    FQAI_Info Agent_Info;        // Priority, Dangerousness, Faction, Attack type/range
-    FQAI_Movement Agent_Movement; // Type (Movable/Static), PathType (Ground/Surface/Fly), Collision
-    FQAI_Sensing Agent_Sensing;  // Vision, Sound, Electromagnetic, Smell (avec sensibilites)
-};
-```
+### FQAI_AgentState (les champs runtime cles)
+`CurrentState`, `StateTimer`, `PatrolCenter/Radius`, `PursuitTarget`/`OriginalTarget`, `bInCombat`,
+`bWeaponRaisedForCombat`, `LastKnownTargetLocation`/`LastTargetSightTime` ;
+**route garde** `PatrolPointA/B`, `bRouteHeadingToB`, `GuardDefendRadius` ;
+**escouade** `SquadAnchor`, `SquadAnchorLocation`, `SquadSlot`, `SquadSize` ;
+**flanking** `bIsFlanking`, `FlankPosition`, `TimeAtDistance` ; `FleeTarget` (`TOptional`) ;
+**gates** `PatrolPauseUntil`, `NextPatrolPauseAt`, `MovementFreezeUntil` ;
+**flyer** `bFlyerIsAirborne`, `FlyerPullUpUntil`, `FlyerAttackRunUntil`, `NextFlyerMeleeCheckTime` ;
+**flow field** `FlowFieldHandle`, `PendingFlowFieldHandle`, `FlowFieldRequestedForGoal/RealGoal`, `NextFlowFieldCheckAt` ;
+**stuck** `LastTrackedPosition`, `LastMovementTime`, `StuckSinceTime`, `StuckEscalateHoldUntilTime` ;
+**nav client** `ClientNavDir`, `ClientNavExpiry` ; **degats** `LastDamageTarget`, `LastDamageTime` ;
+`bDestroyOnFleeTargetReached`.
 
-### EQAI_CombatAction (actions de combat)
+### EQAI_CombatAction
+`None, Drone_TraceAttack, Drone_Taser, Auto_Melee, Auto_Ranged, Auto_Jump, Spaceship_PrimaryWeapons,
+Spaceship_Missiles, Spaceship_Flares, Auto_Detonate`.
 
-```cpp
-enum class EQAI_CombatAction : uint8
-{
-    None,
-    Drone_TraceAttack,         // Tir trace (drone standard)
-    Drone_Taser,               // Taser (capitaine drone)
-    Auto_Melee,                // Attaque melee (sol)
-    Auto_Ranged,               // Attaque a distance (sol)
-    Auto_Jump,                 // Attaque de saut (sol)
-    Spaceship_PrimaryWeapons,  // Armes principales (vaisseau)
-    Spaceship_Missiles,        // Missiles (vaisseau)
-    Spaceship_Flares           // Contre-mesures (vaisseau)
-};
-```
+### Configs combat (sur le CombatProcessor, globales)
+- `FQAI_CombatConfig` (drone : `TraceAttackRange=2500`, `AttackDamage=2.5`, `FireRate=0.125`,
+  `FireRateVariance=0.25`, burst ; autonomous : `MeleeDamage=30`, cooldowns ; flank).
+- `FQAI_SpaceshipCombatConfig` (`MachineGunFireInterval=0.16`, `RocketFireInterval=2`,
+  `FlareCooldown=6`, `FlareDeployChance=0.6`, `CombatFOVDegrees=30`, missiles).
 
-### Systeme de Sensing
+### DroneCoordinationSubsystem
+`UQAI_DroneCoordinationSubsystem` (`UWorldSubsystem`) coordonne les tours d'attaque des drones contre un
+joueur : `RegisterDrone`, `CanDroneAttack`, file `FCoordinator` (`AttackQueue`, `CurrentAttacker`,
+`TurnDuration=4s`, `MinDronesForCoordination=2`, priorite par distance).
 
-Les structs de sensing sont prepares pour une utilisation future :
-
-```cpp
-struct FQAI_Sensing
-{
-    bool Have_Vision;     FQAI_Sensing_Vision Vision;     // Angles, sensibilite nuit, etc.
-    bool Have_Sound;      FQAI_Sensing_Sound Sound;       // Sensibilite HF/MF/LF, directivite
-    bool Have_Electromagnetic; FQAI_Sensing_Electromagnetic; // Radar, etc.
-    bool Have_Smell;      FQAI_Sensing_Smell Smell;       // Odorat
-};
-```
-
-Ces structures sont consommees par la `QAI_SensingFunctionLibrary` (vision scoring, line traces) et pourraient etre integrees dans un futur SensingProcessor batch.
-
-### CombatProcessor - Details supplementaires
-
-Le CombatProcessor est le plus complexe des trois processeurs. Au-dela de la delegation au behavior, il gere :
-
-**Systeme d'armes** :
-- **Drone trace attack** : line trace avec spread configurable, degats via `ApplyDamage`
-- **Drone burst fire** : rafales de N tirs avec interval interne, cooldown entre rafales
-- **Fire rate jitter** : variance aleatoire (25%) du fire rate pour eviter que les drones tirent en sync
-- **Taser** : via `StartTaserSequenceViaComponent()`, appel par reflexion sur le composant taser
-
-**Systeme d'armes vaisseau** :
-- **WeaponCoordinator** : composant Blueprint trouve par reflexion, gere les armes primaires et secondaires
-- `FirePrimaryWeaponsViaCoordinator()`, `SetWeaponTargetViaCoordinator()`
-- `FireWeaponsByClassViaCoordinator()` pour les types d'armes specifiques
-- **Rockets** : timing de groupes, intervalle min/max entre salves
-- **Flares** : scan de menaces missiles, deploiement probabiliste (`FlareDeployChance = 0.6`)
-- **Missile targeting** : setup, cleanup periodique, refresh d'intervalle
-
-**VFX** :
-- Traceurs Niagara (bullet beam + muzzle flash) avec lifecycle management
-- Moving tracers avec vitesse configurable (`TracerSpeed = 30000`)
-- Nettoyage automatique des effets expires
-
-**Coordination** : integration avec `DroneCoordinationSubsystem` pour les tours d'attaque
-
-**Config combat** (`FQAI_CombatConfig` et `FQAI_SpaceshipCombatConfig`) :
-```cpp
-// Drone
-TraceAttackRange = 2500, AttackDamage = 2.5, FireRate = 0.125s
-AttackSpread = 2.0, BurstFire, FireRateVariance = 25%
-
-// Autonomous
-MeleeDamage = 30, MeleeAttackCooldown = 1.5s
-JumpAttackRange = 2000, JumpAttackCooldown = 8s
-
-// Spaceship
-MachineGunFireInterval = 0.16s, RocketFireInterval = 2s
-FlareCooldown = 6s, CombatFOVDegrees = 30
-```
-
-### MovementProcessor - Details supplementaires
-
-Le MovementProcessor gere la complexite de 4 systemes de mouvement differents :
-
-**Pipeline d'application du mouvement** (`ApplyMovementInput`) :
-1. Calcule la velocite desiree (`MovementInput * BaseSpeed * SpeedScale`)
-2. Interpole vers la velocite desiree (`VInterpTo`, vitesse 8.0)
-3. Cherche un composant `ObstacleAvoidance` par reflexion -> `GetSteeringDirection()`
-4. Applique l'input au `Pawn->AddMovementInput()` (pour CharacterMovement/AIController)
-5. Applique aussi a `UQAI_FloatingPawnMovement->AddInputVector()` (si present)
-6. Pour les vaisseaux : cherche `QSpaceshipMovementInterface` -> `ApplyDirectMovementInput()` ou `MoveToLocation()`
-7. Pour les vehicules sans interface spaceship : `VehicleMovementComponent->AddMoveInput()`
-8. Synchronise la transform de l'actor vers le registre
-
-**Rotation** (`UpdateAgentRotation`) :
-- Skip si archetype Spaceship ou si VehicleMovement present (rotation geree par la physique)
-- Drones : rotation horizontale seulement (pas de pitch/roll)
-- Sol : rotation complete vers la cible
-- Interpolation via `RInterpTo` a `RotationInterpSpeed` (6.0)
-
-**Flanking** (unites au sol en Attack) :
-- Apres 5s a portee de melee sans bouger, l'unite tente un flanking
-- Position calculee a 300u perpendiculairement a la direction target
-- Projete sur le NavMesh pour navigabilite
-- Alternance gauche/droite aleatoire
-
-**Fuite gravity-aware** (`CalculateGravityAwareFlee`) :
-- Calcule la direction "loin du joueur" dans le plan perpendiculaire a la gravite locale
-- Support WorldScape (planetes spheriques) et GravityScape
-- Direction de fuite = horizontale (loin du joueur) + verticale (contre gravite)
+### QAI_FunctionLibrary (helpers BP)
+`QAI_GetCenterLocationFromLocations`, `QAI_Target_IsHostile_Faction`, `DumpBlueprintAI`,
+`Mark/IsAdminSpawnedAI`, et les ponts ALS (`SetPawnRotationMode/Gait/MovementState` via `BPI_Set_*`),
+`SetTargetOnCombatComponent`/`GetTargetFromCombatComponent`, plus des helpers de ciblage AIController legacy.
 
 ---
 
-## 15. Guide pour le refactoring
-
-### A. Ecarts architecturaux a combler
-
-Ces ecarts representent la distance entre l'intention de design ("Data-Driven ECS + HFSM + Batch") et le code actuel. Les combler est necessaire pour que le systeme supporte tous les types d'IA du jeu.
-
-#### A1. ECS : ajouter la composition dynamique de composants
-
-**Probleme actuel** : chaque agent a un layout memoire fixe et identique. Un drone transporte en memoire `AutonomousConfig` + `SpaceshipConfig` (inutilises), un vaisseau transporte `DroneConfig` + `AutonomousConfig` (inutilises). On ne peut pas ajouter/retirer des "composants" de donnees par agent.
-
-**Impact** : impossible d'ajouter un nouveau type d'IA (creature, civil, vehicule) sans gonfler `FQAI_PoliceAgent_Data` pour tout le monde. A 20 types d'IA, la struct cold data deviendra enorme.
-
-**Solution proposee** : decouple le stockage par archetype.
-
-Option legere (garde le SoA mais avec configs typees) :
-```cpp
-struct FQAI_AgentData
-{
-    FQAI_Agent_Data BaseAgent;
-    EQAI_AgentArchetype Archetype;
-    // Un seul actif selon l'archetype, les autres sont null
-    TSharedPtr<void> ArchetypeConfig; // Cast selon Archetype
-};
-```
-
-Option complete (vrai ECS) : migrer vers un systeme ou chaque agent est un ensemble de composants (Position, Velocity, FSMState, CombatConfig...) et les processeurs queryent par ensemble de composants. C'est un refactoring majeur mais c'est le seul moyen de scaler a des dizaines de types d'IA sans compromis.
-
-#### A2. Data-Driven : rendre la FSM et les factions configurables
-
-**Probleme actuel** : les transitions FSM sont hardcodees dans `StateProcessor::UpdateStateTransitions()`. Les regles de faction sont hardcodees par IDs numeriques dans `AreFactionsHostile()` (dupliquees a 2 endroits). La detection de faction se fait par string match sur les noms de classe.
-
-**Impact** : ajouter un nouvel etat FSM ou une nouvelle faction necessite de modifier du C++, recompiler, et risquer des regressions.
-
-**Solution proposee** :
-- **FSM** : table de transitions en DataAsset ou DataTable. Chaque archetype reference sa propre table. Le StateProcessor lit la table au lieu d'avoir un `switch/case`.
-- **Factions** : DataTable avec matrice d'hostilite. Un composant `UQAI_FactionComponent` sur chaque actor stocke sa faction (plus de string match).
-- **Configs combat** : deplacer `FQAI_CombatConfig` et `FQAI_SpaceshipCombatConfig` depuis le processeur (global) vers la config par archetype (par-agent).
-
-#### A3. HFSM : ajouter l'imbrication d'etats
-
-**Probleme actuel** : FSM plate a 7 etats. Pas de super-etats, pas de sous-etats. Les transitions communes (ex: flee depuis n'importe quel etat de combat) sont dupliquees dans chaque case du switch.
-
-**Impact** : chaque nouvel etat multiplie les transitions a gerer. A 15+ etats (creatures, civils, etc.), le switch devient inmaintenable.
-
-**Solution proposee** : implementer une vraie HFSM ou :
-- Des super-etats (ex: `Combat`) gerent les transitions communes (flee, return)
-- Des sous-etats (ex: `Attack`, `Taser`, `Flanking`) gerent le comportement specifique
-- Les hooks `OnStateEntered`/`OnStateExited` se propagent dans la hierarchie
-
-Alternative : State Tree d'Unreal si la performance batch le permet, ou un systeme custom data-driven.
-
-### B. Generalisations necessaires
-
-#### B1. Renommer les structures "Police" -> generiques
-
-Les noms actuels sont colles au domaine police :
-- `FQAI_PoliceAgent_Data` -> `FQAI_AgentData`
-- `FQAI_PoliceState` -> `FQAI_AgentState`
-- `EQAI_PoliceState` -> `EQAI_AgentState`
-- `UQAI_PoliceUnitMarkerComponent` -> `UQAI_AgentMarkerComponent`
-
-#### B2. Creer de nouveaux behaviors
-
-Pour chaque nouveau type d'IA, suivre le pattern existant :
-
-1. Ajouter la valeur dans `EQAI_AgentArchetype`
-2. Creer `FQAI_NewTypeBehavior : public FQAI_AgentBehaviorBase`
-3. Implementer `ComputeMovementInput()` et `ComputeCombatDecision()`
-4. Enregistrer dans `UQAI_AgentBehaviorRegistry::Initialize()`
-
-Les processeurs delegueront automatiquement. Ce pattern fonctionne bien tel quel.
-
-#### B3. Completer le DataAsset d'agent
-
-`UQAI_Agent_DataAsset` est un stub vide. Il devrait stocker la config complete d'un type d'agent : archetype, configs specifiques, references mesh/animation, table de transitions FSM, etc. C'est le vecteur principal pour rendre le systeme data-driven.
-
-### C. Ce qui ne doit PAS changer
-
-| Systeme | Raison |
-|---------|--------|
-| Layout SoA hot/warm/cold | Fondamental pour les performances cache. Ne pas fusionner les arrays. |
-| Batch processing (ProcessorBase) | Le pattern ProcessBatch -> ProcessChunk -> ParallelFor est generique et fonctionne pour tout type d'agent. |
-| Handles avec generation | Le systeme sparse/dense avec compteur de generation est robuste. Ne pas remplacer par des pointeurs bruts. |
-| Architecture client/serveur | Le split state+combat serveur / mouvement client est essentiel pour le netcode de QANGA. |
-| Behaviors comme classes C++ pures | Zero overhead GC, destruction deterministe. Ne pas convertir en UObjects. |
-| Spatial Hash Grid | Performant et bien integre. Etendre plutot que remplacer. |
-| SIMD batch operations | Les intrinsiques SSE/NEON avec fallbacks scalaires sont portables et performantes. |
-
-### D. Bugs et hacks a nettoyer
-
-1. **`IsDroneAgent()` legacy** dans `MovementProcessor:1135` et `CombatProcessor:1498` : verifie `bCanFly` au lieu d'utiliser `ResolveArchetype()`. Contourne le systeme de behavior.
-
-2. **String check** dans `CombatProcessor:1112` : `ActorName.Contains("Drone")` pour sauter les animations d'attaque. Remplacer par une verification d'archetype.
-
-3. **`ShouldTransitionToFlee()`** retourne toujours `false`. A implementer proprement, idealement delegue au behavior par archetype.
-
-4. **Factions dupliquees** : `AreFactionsHostile()` est implementee identiquement dans `SensingComponent` ET `SpatialHashGrid`. Extraire dans une fonction utilitaire unique.
-
-5. **Detection de faction par nom de classe** : `GetActorFaction()` utilise des string matches ("Police", "Infected", etc.). Fragile et non extensible.
-
-6. **`SensingProcessor`** reference dans les flags (`EQAI_AgentProcessingFlags::Sensing`) mais n'existe pas. Les structures de sensing et la `SensingFunctionLibrary` sont en place, il manque le processeur batch.
-
-7. **`UQAI_SensingEmitterComponent`** est un stub vide non implemente.
-
-8. **Configs combat globales** : `FQAI_CombatConfig` et `FQAI_SpaceshipCombatConfig` sont sur le processeur (une instance pour tous les agents). Un vaisseau cargo et un chasseur utilisent les memes timings de combat.
-
-9. **La gravite locale** : seul `DroneBehavior` utilise GravityScape. `MovementProcessor::CalculateDroneMovementVector()` utilise la gravite monde (pas locale). Tout behavior volant sur planete spherique doit utiliser GravityScape.
-
----
-
-## 16. Fichiers et emplacements
+## 21. Fichiers et emplacements
 
 ```
 Plugins/QAI/Source/QAI/
 +-- Public/
-|   +-- QAI.h                                    # Module declaration + LogQAI
-|   +-- QAI_SubSystem.h                          # WorldSubsystem principal
-|   +-- QAI_Settings.h                           # DeveloperSettings (config=Game)
-|   +-- QAI_Client.h                             # Composant client/joueur
-|   +-- QAI_FunctionLibrary.h                    # Fonctions utilitaires Blueprint
+|   +-- QAI.h                                # module + LogQAI
+|   +-- QAI_SubSystem.h                      # WorldSubsystem orchestrateur + SpawnAerialAgent + lifecycle
+|   +-- QAI_Settings.h                       # DeveloperSettings (significance, impostor bakes, lean redirects, pathfinding)
+|   +-- QAI_Client.h                         # composant client/joueur + Server_ReportAINav
+|   +-- QAI_FunctionLibrary.h                # helpers BP + ponts ALS / CombatComponent
+|   +-- Interface/QAI_AgentInterface.h       # marqueur "pilote par QAI"
 |   +-- Data/
-|   |   +-- QAI_Struct.h                         # Structs de config agent + archetype configs
-|   |   +-- QAI_Info_Struct.h                    # Info agent (priorite, faction, attaque)
-|   |   +-- QAI_Movement_Struct.h                # Types de mouvement et collision
-|   |   +-- QAI_Sensing_Struct.h                 # Sensing (vision, son, EM, odeur)
-|   |   +-- QAI_State_Struct.h                   # Etats FSM + FQAI_PoliceState
-|   |   +-- QAI_Network_Struct.h                 # Structs reseau (vide)
-|   |   +-- QAI_Agent_DataAsset.h                # Data asset agent (stub)
-|   +-- Registry/
-|   |   +-- QAI_AgentRegistry.h                  # Registre SoA + handle system
+|   |   +-- QAI_Struct.h                     # FQAI_AgentData + tous les FQAI_*Config + EQAI_AnimalCombatRole
+|   |   +-- QAI_State_Struct.h               # EQAI_AgentState + FQAI_AgentState (runtime)
+|   |   +-- QAI_Info_Struct.h / QAI_Movement_Struct.h / QAI_Sensing_Struct.h / QAI_Network_Struct.h
+|   |   +-- QAI_PawnConfig.h                 # UPrimaryDataAsset d'authoring
+|   +-- Registry/QAI_AgentRegistry.h         # SoA + handles + significance/impostor accessors
 |   +-- Processor/
-|   |   +-- QAI_ProcessorBase.h                  # Framework batch processing
-|   |   +-- QAI_StateProcessor.h                 # FSM
-|   |   +-- QAI_MovementProcessor.h              # Mouvement
-|   |   +-- QAI_CombatProcessor.h                # Combat (+ VFX traceurs + systeme armes vaisseau)
+|   |   +-- QAI_ProcessorBase.h              # batch + pipelined + significance stride
+|   |   +-- QAI_StateProcessor.h             # FSM + acquisition + routes/squads + flow field
+|   |   +-- QAI_MovementProcessor.h          # steering multi-systeme + ground-snap + dormant integration
+|   |   +-- QAI_CombatProcessor.h            # combat par archetype + hitscan + VFX + armes vaisseau
 |   +-- Behavior/
-|   |   +-- QAI_AgentArchetype.h                 # Enum des archetypes
-|   |   +-- QAI_AgentBehavior.h                  # Interface + ResolveArchetype()
-|   |   +-- QAI_AgentBehaviorRegistry.h          # Registry archetype -> behavior
-|   |   +-- QAI_DroneBehavior.h                  # Behavior drone
-|   |   +-- QAI_AutonomousBehavior.h             # Behavior sol
-|   |   +-- QAI_SpaceshipBehavior.h              # Behavior vaisseau (sous-etats mouvement)
+|   |   +-- QAI_AgentArchetype.h             # EQAI_AgentArchetype (14 valeurs)
+|   |   +-- QAI_AgentBehavior.h              # interface + EQAI_CombatAction + FQAI_Combat{Params,Decision}
+|   |   +-- QAI_AgentBehaviorRegistry.h      # archetype -> behavior
+|   |   +-- QAI_BehaviorHelpers.h            # PursueViaFlowField, ResolveNavGoal, roles animaux...
+|   |   +-- QAI_{Drone,Autonomous,Spaceship}Behavior.h           # police
+|   |   +-- QAI_{Sangline,SuperSangline,Flyer,SandDigger}Behavior.h
+|   |   +-- QAI_{Infected,GazSac,Animal,CreatureAutonomus}Behavior.h
+|   |   +-- QAI_{Cyborg,Nanite}Behavior.h
 |   +-- Performance/
-|   |   +-- QAI_PerformanceConstants.h           # Constantes pre-calculees (distances^2, timings)
-|   |   +-- QAI_SIMD.h                          # Intrinsiques SSE/NEON + fallbacks scalaires
-|   |   +-- QAI_SpatialHashGrid.h               # Grille spatiale + subsysteme tickable
-|   +-- Agent/
-|   |   +-- QAI_AgentComponent.h                 # Composant legacy agent (IsAlive, OnDied)
+|   |   +-- QAI_PerformanceConstants.h       # constantes^2 + LOD_BrainStride / LOD_MoveTickInterval
+|   |   +-- QAI_SIMD.h                        # SSE/NEON + fallbacks
+|   |   +-- QAI_SpatialHashGrid.h            # grille 2D + subsysteme tickable
+|   +-- Faction/QAI_Faction.h                # EQAI_Faction + QAI_FactionLib (matrice)
+|   +-- Pathfinding/
+|   |   +-- QAI_FlowField.h                  # FQAI_FlowField/Cell/Handle + EQAI_FlowCellFail
+|   |   +-- QAI_FlowFieldManager.h           # build async + Dijkstra + sampling
+|   +-- Impostor/QAI_ImpostorSubsystem.h     # tier VAT dormant
+|   +-- Animation/
+|   |   +-- QAI_AnimInstance.h               # anim lean thread-safe
+|   |   +-- QAI_AnimShareManager.h           # channels d'anim partages
 |   +-- Component/
-|   |   +-- QAI_PoliceUnitMarkerComponent.h      # Composant replique serveur->client
-|   |   +-- QAI_FloatingPawnMovement.h           # Mouvement flottant avec gravite + replication
-|   |   +-- QAI_BasicMovement.h                  # Mouvement physique simple (gravite, sweep, jump)
-|   |   +-- QAI_ShipMovementSimulation.h         # Stub mouvement vaisseau
+|   |   +-- QAI_FloatingPawnMovement.h       # mover principal (gravite, plancher WorldScape, replication)
+|   |   +-- QAI_BasicMovement.h              # mover physique alternatif (legacy)
+|   |   +-- QAI_ShipMovementSimulation.h     # stub
+|   |   +-- QAI_PoliceUnitMarkerComponent.h  # replication target/flags + FX multicast
+|   +-- Agent/QAI_AgentComponent.h           # hub par pawn (API + impostor + significance + nav bridge)
 |   +-- Sensing/
-|   |   +-- QAI_SensingComponent.h               # Detection de pawns + integration SpatialGrid
-|   |   +-- QAI_SensingEmitterComponent.h        # Stub emetteur de signaux
-|   |   +-- QAI_SensingFunctionLibrary.h         # Vision scoring, line traces, size projection
-|   +-- Subsystem/
-|       +-- QAI_DroneCoordinationSubsystem.h     # Coordination d'attaque multi-drones
+|   |   +-- QAI_SensingComponent.h           # sensing + spatial grid + static defender
+|   |   +-- QAI_SensingEmitterComponent.h    # stub
+|   |   +-- QAI_SensingFunctionLibrary.h / QAI_Sensing_Vision_Library.h / QAI_Sensing_Vision_Struct.h
+|   +-- Spaceship/
+|   |   +-- QAI_SubSystem_Spaceship.h        # tick/own spaceship
+|   |   +-- QAI_AerialTrafficSubsystem.h     # trafic ambiant serveur
+|   |   +-- QAI_AerialTrafficSettings.h      # DeveloperSettings (roster, distances, altitudes)
+|   |   +-- QWeaponCoordinatorComponent.h / QSpaceshipObstacleAvoidanceComponent.h
+|   |   +-- QSpaceshipMovementInterface.h / QSimpleProjectile.h
+|   |   +-- QSpaceshipAIConfigDataAsset.h / QSpaceshipAITypes.h / QShipAILog.h
+|   +-- Spawner/
+|   |   +-- QAI_AgentSpawner.h               # port BP AI_Spawner
+|   |   +-- QAI_GuardPatrolSpawner.h         # gardes cyborg + routes + escouades + capitaine
+|   +-- Subsystem/QAI_DroneCoordinationSubsystem.h  # tours d'attaque multi-drones
 +-- Private/
-    +-- QAI.cpp                                  # Module startup/shutdown
-    +-- QAI_SubSystem.cpp                        # Tick pipeline, init processeurs, auto-discover
-    +-- QAI_Settings.cpp                         # Settings singleton
-    +-- QAI_Client.cpp                           # Client registration
-    +-- QAI_FunctionLibrary.cpp                  # Utilitaires BP
-    +-- Registry/QAI_AgentRegistry.cpp           # SoA ops, batch, prefetch, handle management
-    +-- Processor/QAI_ProcessorBase.cpp          # ParallelFor, chunk processing, profiling
-    +-- Processor/QAI_StateProcessor.cpp         # FSM transitions + state execution
-    +-- Processor/QAI_MovementProcessor.cpp      # 4 systemes de mouvement, flanking, fuite
-    +-- Processor/QAI_CombatProcessor.cpp        # Armes, burst fire, VFX, vaisseau combat avance
-    +-- Behavior/QAI_AgentBehaviorRegistry.cpp   # Init + lookup behaviors
-    +-- Behavior/QAI_DroneBehavior.cpp           # Vol 3D + GravityScape + speed scaling
-    +-- Behavior/QAI_AutonomousBehavior.cpp      # Sol 2D + acceptance adaptative
-    +-- Behavior/QAI_SpaceshipBehavior.cpp       # Espace + sous-etats + obstacle avoidance
-    +-- Performance/QAI_SpatialHashGrid.cpp      # Grid SIMD + subsysteme + maintenance
-    +-- Agent/QAI_AgentComponent.cpp             # Legacy agent component
-    +-- Component/QAI_PoliceUnitMarkerComponent.cpp  # Replication + VFX multicast
-    +-- Component/QAI_FloatingPawnMovement.cpp   # Mouvement + gravite + replication RPC
-    +-- Component/QAI_BasicMovement.cpp          # Mouvement physique
-    +-- Component/QAI_ShipMovementSimulation.cpp # Stub
-    +-- Sensing/QAI_SensingComponent.cpp         # Scan + spatial grid + faction detection
-    +-- Sensing/QAI_SensingEmitterComponent.cpp  # Stub
-    +-- Sensing/QAI_SensingFunctionLibrary.cpp   # Vision math (angles, scores, line traces)
-    +-- Subsystem/QAI_DroneCoordinationSubsystem.cpp  # Tour d'attaque, priorite, cleanup
-    +-- Data/QAI_Agent_DataAsset.cpp             # Stub
+    +-- ... (.cpp correspondants)
+    +-- QAI_GravityAreaResolver.h            # helper gravite/surface (reflexion Lib_GravityArea, WorldScape)
 ```
+
+---
+
+**Note de maintenance** : ce document reflete l'etat du code au 26 juin 2026. Les valeurs numeriques
+(defauts de config, CVars) sont celles trouvees dans la source a cette date ; verifier la source avant
+de s'appuyer sur une valeur precise. Le plugin-level `Plugins/QAI/CLAUDE.md` decrit l'intention du
+refactoring behavior/archetype mais est partiellement perime (il documente un `UQAI_PathFindingClient`
+octree A* qui a depuis ete remplace par le flow field decrit en section 9). En cas de divergence, la
+source fait foi.
