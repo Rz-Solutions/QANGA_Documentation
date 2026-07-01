@@ -2,7 +2,7 @@
 
 Bridge MCP headless qui expose l'éditeur Unreal de QANGA à des clients IA externes (Claude Code, Codex, Cursor). Plugin éditeur autonome, sans dépendance C++ du reste du projet : le code de QANGA ne le référence jamais — il est piloté entièrement de l'extérieur via un socket TCP loopback.
 
-> Statut : opérationnel. Un seul module éditeur, un seul `UEditorSubsystem`, un thread serveur TCP, 29 bibliothèques de fonctions réflexives totalisant ~777 outils natifs, et un adaptateur stdio Node.js qui présente ~604 outils côté client. La doc embarquée historique (`Plugins/RzDirectMCP/Docs/ARCHITECTURE.md`) décrit le système à grands traits mais comporte plusieurs imprécisions corrigées ici (voir §7).
+> Statut : opérationnel. Un seul module éditeur, un seul `UEditorSubsystem`, un thread serveur TCP, 40 bibliothèques de fonctions réflexives totalisant 872 outils natifs, et un adaptateur stdio Node.js qui présente 700 outils côté client. La doc embarquée historique (`Plugins/RzDirectMCP/Docs/ARCHITECTURE.md`) décrit le système à grands traits mais comporte plusieurs imprécisions corrigées ici (voir §7).
 
 ---
 
@@ -23,8 +23,8 @@ Le système comporte trois couches, du client vers l'éditeur :
         |  stdio JSON-RPC 2.0 (protocole MCP)
         v
   rzmcp-bridge.mjs   (serveur stdio Node.js, sans dépendance npm)
-        |            surface de ~604 outils "client", pilotée par manifest.json
-        |  une requête JSON UTF-8 par connexion TCP   127.0.0.1:8766  (loopback)
+        |            surface de 700 outils "client", pilotée par manifest.json
+        |  une requête JSON UTF-8 par connexion TCP   127.0.0.1:8767  (loopback)
         v
   Processus Unreal Editor
     URzMCPBridgeSubsystem  (UEditorSubsystem)
@@ -39,8 +39,8 @@ Le système comporte trois couches, du client vers l'éditeur :
     FRzMCPNativeToolRegistry  (singleton C++, non-UObject)
         |  table nom d'outil -> (UClass*, UFunction*)
         v
-    29 UBlueprintFunctionLibrary  taguées meta=(RzMCPToolLibrary)
-        ~777 UFUNCTION  appelées par réflexion via ProcessEvent
+    40 UBlueprintFunctionLibrary  taguées meta=(RzMCPToolLibrary)
+        872 UFUNCTION  appelées par réflexion via ProcessEvent
 ```
 
 Décisions clés et invariants réels du code :
@@ -68,13 +68,13 @@ Ce qui n'existe PAS (à ne pas inventer) : aucune réplication réseau (c'est un
 | `FRzMCPNativeToolDefinition` | `struct` | Métadonnée d'un outil : `Name`, `Library`, `Function`, `Description`, `InputSchemaJson` (JSON Schema), `Aliases`. |
 | `FRzMCPNativeToolRegistry::FToolHandle` | `struct` (privé) | Handle d'appel : `TWeakObjectPtr<UClass>`, `TWeakObjectPtr<UFunction>`, `PrimaryName`. |
 | `FBlueprintGraphVariableSpec` | `USTRUCT(BlueprintType)` | Descripteur de type de pin (catégorie, sous-catégorie, conteneur array/set/map) passé depuis MCP/Blueprint vers les outils de graphe. |
-| `RzMCP::BitmapAnnotation` (`FBitmapCanvas`, ...) | namespace / structs CPU | Moteur d'annotation bitmap RGBA pur-CPU (lignes, points, police 5×7, grille monde projetée, callouts par acteur) pour annoter les captures viewport en mode headless. Port de l'expérimental Epic 5.8. |
+| `RzMCP::BitmapAnnotation` (`FBitmapCanvas`, ...) | namespace / structs CPU | Moteur d'annotation bitmap RGBA pur-CPU (lignes, points, police 5×7, grille monde projetée, callouts par acteur) pour annoter les captures viewport en mode headless. Implémentation locale RzDirectMCP. |
 | `FNodeForgeOrchestrator` & al. (`Compiler/`) | classes C++ internes | « NodeForge » : génération/assemblage de graphes Blueprint à partir de specs de haut niveau (entrée/sortie de fonction, chaînes de nœuds, résolution de types, layout). Catégorie de log `LogNodeForge`. Support interne des outils `blueprint_graph.*`. |
-| Les **29** `UBlueprintFunctionLibrary` taguées `RzMCPToolLibrary` | `UCLASS(meta=(RzMCPToolLibrary))` | Surface réelle des outils. UFUNCTION `static`+`BlueprintCallable` → outils MCP. |
+| Les **40** `UBlueprintFunctionLibrary` taguées `RzMCPToolLibrary` | `UCLASS(meta=(RzMCPToolLibrary))` | Surface réelle des outils. UFUNCTION `static`+`BlueprintCallable` → outils MCP. |
 
-Les 29 bibliothèques d'outils (toutes `public : UBlueprintFunctionLibrary`) :
+Les 40 bibliothèques d'outils (toutes `public : UBlueprintFunctionLibrary`) :
 
-`UActorEditorLibrary`, `UAnimationEditorLibrary`, `UAnimBlueprintGraphLibrary`, `UAssetManagementLibrary`, `UBlueprintGraphLibrary`, `UComponentEditorLibrary`, `UDataTableEditorLibrary`, `UExtendedEditorLibrary`, `UFoliageEditorLibrary`, `UMaterialEditingHelperLibrary`, `UMCPEditorUtilityLibrary`, `UMeshEditorLibrary`, `UPhysicsEditorLibrary`, `USequencerEditorLibrary`, `UWorldPartitionEditorLibrary`, `ULocalizationEditorLibrary`, `UViewportCaptureLibrary`, `USlateInspectorLibrary`, `UPluginToolsetLibrary`, `UConfigSettingsLibrary`, `ULogsLibrary` (toujours compilées), plus les gardées par plugin optionnel : `UAbilitySystemRuntimeLibrary` (GAS), `UGameplayEditorLibrary` (GAS+EnhancedInput+ZoneGraph), `UNiagaraEditorLibrary` (Niagara), `UPCGEditorLibrary` (PCG), `UStateTreeEditorLibrary` (StateTree), `UGameFeaturesEditorLibrary` (GameFeatures), `UDataflowAgentLibrary` (Dataflow), `UWorldConditionLibrary` (WorldConditions).
+`UAbilitySystemRuntimeLibrary`, `UActorEditorLibrary`, `UAnimationEditorLibrary`, `UAnimBlueprintGraphLibrary`, `UAssetManagementLibrary`, `UAssetWorkflowLibrary`, `UAudioWorkflowLibrary`, `UBackupLibrary`, `UBlueprintGraphLibrary`, `UBlueprintToCppLibrary`, `UComponentEditorLibrary`, `UConfigSettingsLibrary`, `UDataflowAgentLibrary`, `UDataTableEditorLibrary`, `UEditorWorkflowLibrary`, `UExtendedEditorLibrary`, `UFoliageEditorLibrary`, `UFoliageWorkflowLibrary`, `UGameFeaturesEditorLibrary`, `UGameplayEditorLibrary`, `ULandscapeWorkflowLibrary`, `ULocalizationEditorLibrary`, `ULogsLibrary`, `UMaterialEditingHelperLibrary`, `UMCPEditorUtilityLibrary`, `UMeshEditorLibrary`, `UMeshWorkflowLibrary`, `UNiagaraEditorLibrary`, `UPCGEditorLibrary`, `UPhysicsEditorLibrary`, `UPluginToolsetLibrary`, `URenderingWorkflowLibrary`, `USequencerEditorLibrary`, `USequencerWorkflowLibrary`, `USlateInspectorLibrary`, `USmartObjectWorkflowLibrary`, `UStateTreeEditorLibrary`, `UViewportCaptureLibrary`, `UWorldConditionLibrary`, `UWorldPartitionEditorLibrary`.
 
 > `UMCPEditorHelpers` (header-only, `MCPEditorHelpers.h`) est une bibliothèque utilitaire de (dé)sérialisation JSON ; elle **n'est pas** taguée `RzMCPToolLibrary` et n'expose donc pas d'outils. Elle centralise les helpers `SerializeJson`/`SerializeVector`/etc. partagés par les autres libs.
 
@@ -111,7 +111,7 @@ Les 29 bibliothèques d'outils (toutes `public : UBlueprintFunctionLibrary`) :
 - `URzMCPBridgeSubsystem::Deinitialize` → `StopServer()` : `Worker->Stop()` (lève `bStopping`), ferme le `ListenerSocket`, `WaitForCompletion()` du thread, delete worker, détruit le socket via `ISocketSubsystem`.
 
 **Couche client (Node, hors processus éditeur)**
-- `rzmcp-bridge.mjs` (sans dépendance npm) lit `manifest.json` + `specials.mjs` au démarrage, parle MCP stdio JSON-RPC 2.0 au client IA. Sur `tools/call`, il consulte l'entrée `dispatch` de l'outil pour construire le payload natif, ouvre `net.createConnection({host, port: RZMCP_NATIVE_PORT ?? 8766})`, envoie `{type:"call_tool", tool, arguments}`, et retraduit la réponse en `CallToolResult`.
+- `rzmcp-bridge.mjs` (sans dépendance npm) lit `manifest.json` + `specials.mjs` au démarrage, parle MCP stdio JSON-RPC 2.0 au client IA. Sur `tools/call`, il consulte l'entrée `dispatch` de l'outil pour construire le payload natif, ouvre `net.createConnection({host, port: RZMCP_NATIVE_PORT ?? 8767})`, envoie `{type:"call_tool", tool, arguments}`, et retraduit la réponse en `CallToolResult`.
 
 ---
 
@@ -121,7 +121,7 @@ Les 29 bibliothèques d'outils (toutes `public : UBlueprintFunctionLibrary`) :
 
 Le seul aspect « réseau » est un **socket TCP loopback** :
 - Liaison stricte à `127.0.0.1` (`FIPv4Address(127,0,0,1)`) — jamais exposé hors machine.
-- Port par défaut `8766`, surchargé par `[/Script/RzDirectMCP.RzMCPBridgeSubsystem] NativeBridgePort` (`GEditorPerProjectIni`) puis par l'env `RZMCP_NATIVE_PORT`.
+- Port par défaut `8767`, surchargé par `[/Script/RzDirectMCP.RzMCPBridgeSubsystem] NativeBridgePort` (`GEditorPerProjectIni`) puis par l'env `RZMCP_NATIVE_PORT`.
 - Protocole applicatif minimal : un objet JSON UTF-8 par connexion, champ `type` discriminant (`ping`, `get_tool_count`, `list_tools`/`tools/list`/`get_tool_definitions`, `call_tool`/`tools/call`, ou un nom d'outil direct). Réponses en `{"success":bool, ...}`.
 - Modèle d'autorité : il n'y en a pas au sens jeu. L'éditeur est le seul exécutant ; le client TCP est un appelant de confiance (loopback) ; toute exécution d'outil est forcée sur le game thread.
 
@@ -146,14 +146,14 @@ C'est un canal de contrôle d'outillage, pas du gameplay réseau. Aucune section
 - Catégories de log : `LogRzMCPBridge`, `LogRzMCPNativeTools`, `LogNodeForge`.
 
 **Empaquetage**
-- `Config/FilterPlugin.ini` inclut `/Docs/...` et `/Source/ThirdParty/...` dans le plugin packagé (pour livrer `rzmcp-bridge.mjs`, `specials.mjs`, `manifest.json` et la doc).
+- `Config/FilterPlugin.ini` inclut `/Docs/...` et `/Source/RzMCP/...` dans le plugin packagé (pour livrer `rzmcp-bridge.mjs`, `specials.mjs`, `manifest.json` et la doc).
 
 ---
 
 ## 7. Gotchas, invariants et pièges
 
-- **Deux comptes d'outils, pas une coquille.** ~777 = outils natifs réflexifs (vérité éditeur, `get_tool_count`). ~604 = outils client définis par `manifest.json`. Ne pas « réconcilier » ces nombres : ce sont deux surfaces différentes. Le compte natif réel dépend des plugins présents (gating).
-- **La doc embarquée `Docs/ARCHITECTURE.md` est partiellement obsolète/inexacte.** Elle décrit un `FRzMCPTCPServer` et une file drainée dans `Tick` — le code réel utilise `FRzMCPBridgeWorker` (FRunnable) et un dispatch one-shot par `FTSTicker` bloquant. Elle mentionne aussi une méta `RzMCPName` de surcharge de nom : **elle n'existe pas** dans le code (seul `RzMCPToolLibrary` est lu). Et elle parle de « 29 bibliothèques » alors que le grep confirme 29 classes taguées — cohérent — mais le suffixe `_exact` qu'elle décrit n'est pas un mécanisme du registre.
+- **Deux comptes d'outils, pas une coquille.** 872 = outils natifs réflexifs (vérité éditeur, `get_tool_count`). 700 = outils client définis par `manifest.json`. Ne pas « réconcilier » ces nombres : ce sont deux surfaces différentes. Le compte natif réel dépend des plugins présents (gating).
+- **La doc embarquée `Docs/ARCHITECTURE.md` reste un résumé utilisateur.** Le code réel utilise `FRzMCPBridgeWorker` (FRunnable) et un dispatch one-shot par `FTSTicker` bloquant. La méta de découverte est `RzMCPToolLibrary`; le suffixe `_exact` est un détail de mapping client/manifest, pas un mécanisme du registre natif.
 - **Le thread serveur bloque pendant l'exécution.** `ExecuteOnGameThread` attend la fin sur le game thread (timeout 120 s). Un outil qui bloque le game thread bloque le bridge entier. Pas de parallélisme entre appels sur ce worker : connexions sérialisées.
 - **Une connexion = un appel.** Pas de keep-alive. Tout client doit ré-ouvrir un socket par requête. Le parseur attend un objet JSON top-level unique terminé par accolade équilibrée (plafond 10 Mo).
 - **Appel sur le CDO.** `ProcessEvent` est invoqué sur `LibraryClass->GetDefaultObject()`. Les fonctions doivent donc être de vraies static library functions sans état d'instance — ce que garantit le filtre `FUNC_Static | FUNC_BlueprintCallable`.
@@ -177,10 +177,10 @@ C'est un canal de contrôle d'outillage, pas du gameplay réseau. Aucune section
 | `Source/RzDirectMCP/Private/RzMCPNativeToolRegistry.h/.cpp` | Découverte réflexive, table d'outils, marshalling JSON↔FProperty, `ProcessEvent`. |
 | `Source/RzDirectMCP/Private/RzMCPBitmapAnnotation.h/.cpp` | Moteur d'annotation bitmap CPU pour captures viewport. |
 | `Source/RzDirectMCP/Private/Compiler/` | NodeForge : `NodeForgeOrchestrator`, `NodeChainAssembler`, `GraphTypeResolver`, `GraphLayoutEngine`, `SafeNodeHelpers` (génération de graphes Blueprint). |
-| `Source/RzDirectMCP/Public/*.h` | 29 headers de bibliothèques `RzMCPToolLibrary` + `MCPEditorHelpers.h` (utilitaire JSON, non-taguée). |
+| `Source/RzDirectMCP/Public/*.h` | 40 headers de bibliothèques `RzMCPToolLibrary` + `MCPEditorHelpers.h` (utilitaire JSON, non-taguée). |
 | `Source/RzDirectMCP/Private/*.cpp` | Implémentations des bibliothèques d'outils (incl. l'« umbrella » `ExtendedEditorLibrary`). |
-| `Source/ThirdParty/RzMCP/rzmcp-bridge.mjs` | Serveur MCP stdio Node.js (sans dépendance), client du socket TCP. |
-| `Source/ThirdParty/RzMCP/specials.mjs` | Handlers/textes d'aide spéciaux côté Node. |
-| `Source/ThirdParty/RzMCP/manifest.json` | Catalogue des ~604 outils client + table `dispatch` (mapping vers outils natifs). |
-| `Config/FilterPlugin.ini` | Inclut `Docs/` et `Source/ThirdParty/` dans le plugin packagé. |
+| `Source/RzMCP/rzmcp-bridge.mjs` | Serveur MCP stdio Node.js (sans dépendance), client du socket TCP. |
+| `Source/RzMCP/specials.mjs` | Handlers/textes d'aide spéciaux côté Node. |
+| `Source/RzMCP/manifest.json` | Catalogue des 700 outils client + table `dispatch` (mapping vers outils natifs). |
+| `Config/FilterPlugin.ini` | Inclut `Docs/` et `Source/RzMCP/` dans le plugin packagé. |
 | `Docs/ARCHITECTURE.md`, `README.md`, `QUICKSTART.md`, `TOOLS.md`, `ADVANCED.md`, `PRICING.md` | Doc embarquée (utile mais à recouper — voir §7). |
