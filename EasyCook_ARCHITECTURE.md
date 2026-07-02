@@ -1,6 +1,6 @@
 # EasyCook — Architecture
 
-Outillage éditeur de correction de cook (par Rz Software). EasyCook trouve les références d'assets que le cooker d'Unreal ne sait pas tracer (chemins en dur dans du C++, pins de Blueprint, defaults reflétés, strings de data-content), génère une *seed* de cook, et corrige en amont trois familles de bugs « marche en PIE, cassé en build packagé » (imports editor-only survivants, héritage d'émetteurs Niagara strippé, shadermaps GPU Niagara périmées). Plugin Win64 uniquement, ciblant UE 5.7.0.
+Outillage éditeur de correction de cook (par Rz Software). EasyCook trouve les références d'assets que le cooker d'Unreal ne sait pas tracer (chemins en dur dans du C++, pins de Blueprint, defaults reflétés, strings de data-content), génère une *seed* de cook, et corrige en amont trois familles de bugs « marche en PIE, cassé en build packagé » (imports editor-only survivants, héritage d'émetteurs Niagara strippé, shadermaps GPU Niagara périmées). Plugin Win64 uniquement, vérifié UE 5.0 à UE 5.8 avec archives Fab associées par version moteur.
 
 ---
 
@@ -15,7 +15,7 @@ Le cooker d'UE ne package que les assets qu'il atteint par fermeture de référe
 
 Sans correction, ces assets manquent du build packagé : VFX absents, sons muets, contenu data-driven vide. EasyCook résout ce problème en deux temps : un **scan éditeur** qui découvre statiquement ces références cachées et les persiste dans un data asset (`UEasyCookSeed`), puis un **hook de cook** (`FEasyCookModule::OnModifyCook`) qui, à chaque cook, lit la seed et ajoute force chaque package au set du cooker.
 
-En plus du problème de découverte, EasyCook embarque trois **passes de réparation** ciblant des bugs de cook propres à la migration 5.3→5.7 de QANGA :
+En plus du problème de découverte, EasyCook embarque trois **passes de réparation** ciblant des bugs de cook propres aux migrations UE 5.x de QANGA :
 
 1. **Package repair** — un import dont la cible est editor-only mais marqué `bUsedInGame=true` survit au strip du cook et fait échouer la vérification du graphe EDL (« Content is missing from cook »).
 2. **Niagara GPU shader refresh** — un `NiagaraSystem` à émetteur GPU jamais re-sauvé depuis la migration moteur cook sans shadermap de compute, ce qui rend `UNiagaraSystem::IsValid()` faux et **désactive silencieusement tout le système** au runtime (toutes les émetteurs, CPU comprises). Marche en PIE, noir en build, zéro log.
