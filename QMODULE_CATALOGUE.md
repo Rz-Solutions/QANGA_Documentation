@@ -1,9 +1,9 @@
 # QMODULE : Catalogue de modules (matière première design)
 
 > **Statut : BRAINSTORM STRUCTURÉ, à trier et valider. Rien n'est implémenté.**
-> Compagnon de `QMODULE_ARCHITECTURE.md`. Rédigé le 2026-07-04. Objectif : donner une base LARGE (136 entrées) pour que le joueur construise son propre build, façon arbre de talents illimité. Les noms sont des propositions ; les chiffres sont des ordres de grandeur à équilibrer.
+> Compagnon de `QMODULE_ARCHITECTURE.md`. Rédigé le 2026-07-04. Objectif : donner une base LARGE (142 entrées, dont les 7 modules de base déjà en jeu, marqués **EN JEU**) pour que le joueur construise son propre build, façon arbre de talents illimité. Les noms sont des propositions ; les chiffres sont des ordres de grandeur à équilibrer.
 >
-> **Légende** : T = type d'effet : **P** (passif chiffré, pur data), **A** (actif type stratagème, une classe BP), **C** (comportement, un composant attaché). Ancrage : **✔** s'appuie sur un système vérifié dans le moteur ; **?** probable mais à confirmer ; **➕** nouvelle mécanique à créer.
+> **Légende** : T = type d'effet : **P** (passif chiffré, pur data), **A** (actif type stratagème, une classe BP), **C** (comportement, un composant attaché). Ancrage : **✔** s'appuie sur un système vérifié dans le moteur ; **?** probable mais à confirmer ; **➕** nouvelle mécanique à créer. **EN JEU** = module v1 déjà implémenté : c'est la base acquise du catalogue, hors triage.
 
 ---
 
@@ -14,15 +14,19 @@
 - **Rareté** : Commun / Avancé / Prototype / Relique, mappée sur le champ `Rarity` déjà présent sur les instances d'items.
 - **Exclusivité** : une seule variante d'un même rôle active par cible (ExclusivityTag).
 - **Hermétique à la mort** : tout module/phase INSTALLÉ ; le sac reste lootable.
+- **Fragments de phase** : un module doublon se recycle en fragments (X fragments = 1 phase tier 1) : aucun loot mort.
+- **Schémas de constellation** : les motifs sont des ITEMS à looter (« Schéma : <nom> ») qui dessinent le motif sur le mur ; pas de liste dans un menu.
+- **Module de récompense pré-phasé** : quêtes et boss livrent le module avec une phase insérée ; modules sauvages et marchands vides.
 - **SynergyTags** : chaque module porte des tags de famille pour les effets d'adjacence sur le Mur (concept §13 du doc d'architecture, à valider).
 
 ---
 
 ## 1. Cyborg
 
-### A. Mobilité (12)
+### A. Mobilité (13)
 | Module | T | Effet | Ancrage |
 |---|---|---|---|
+| **Jetpack** | P | Vol stationnaire + vol rapide + 25 % fuel, puis +50 % fuel (Max 2) : migré tel quel en v2 | **EN JEU** |
 | Servomoteurs de jambes | P | Vitesse de sprint +8/16/25 % | ✔ mouvement |
 | Amortisseurs cinétiques | P | Dégâts de chute réduits 30/60/100 % | ? dégâts de chute |
 | Vérins de saut | P | Hauteur de saut +15/30/50 % | ✔ mouvement |
@@ -68,9 +72,10 @@
 | Réflexes câblés | P | Changement d'arme +25/50 % plus rapide | ✔ équipement |
 | Analyste balistique | C | Affiche les multiplicateurs de zone des cibles | ➕ |
 
-### D. Furtivité & Information (10)
+### D. Furtivité & Information (11)
 | Module | T | Effet | Ancrage |
 |---|---|---|---|
+| **Scanner** | P | Zone 3/6/10 km, détecte véhicules puis joueurs (Max 3) : socle de Spectromètre / Radar / Analyseur | **EN JEU** |
 | Brouilleur de signature | P | Rayon de détection des IA -15/30/45 % | ✔ QAI perception |
 | Pas feutrés | P | Bruit de déplacement -30/60/90 % | ✔ PawnNoiseEmitter |
 | Radar passif | C | Blips des hostiles proches sur la boussole | ✔ pattern Scanner |
@@ -98,9 +103,11 @@
 | Contrebandier | C | Vend les objets marqués/volés chez les pirates | ➕ |
 | Protocole de partage | P | Récompenses de groupe +10 % | ➕ coop |
 
-### F. Ingénierie & Déployables (14)
+### F. Ingénierie & Déployables (16)
 | Module | T | Effet | Ancrage |
 |---|---|---|---|
+| **Drone** | P | Réparation +25/50 %, résistance, flashbang 20 s (Max 2) : socle des futurs drones actifs | **EN JEU** |
+| **Repair** | P | +60/+80 réparation, cooldown 25/20 s (Max 2) : migré tel quel en v2 | **EN JEU** |
 | Tourelle sentinelle | A | Tourelle automatique temporaire | ➕ (socle QAI ✔) |
 | Drone médical | A | Drone qui soigne en zone | ✔ base drone existante |
 | Drone de combat | A | Drone offensif temporaire | ✔ IS_DroneBase + QAI |
@@ -119,7 +126,7 @@
 ### G. Système & Social (8)
 | Module | T | Effet | Ancrage |
 |---|---|---|---|
-| Cœur IC Lab (Système Général) | P | Capacité du Mur (module de base, non échangeable) | ✔ concept v2 |
+| **Système Général** | P | +200 Matter par niveau (Max 2) : en v2, devient le Cœur IC Lab qui pilote la capacité du Mur (non échangeable) | **EN JEU** |
 | Interface de contrats | P | +1/+2 contrats simultanés | ✔ ContractTargetComponent |
 | Réputation IC Lab | P | Accès et prix armurerie IC Lab améliorés | ✔ shops (réputation ➕) |
 | Accréditation Voss | P | Accès aux marchands Voss, prix améliorés | ✔ shops (réputation ➕) |
@@ -142,9 +149,11 @@
 
 ---
 
-## 2. Armes (22, par exemplaire, installés à l'établi)
+## 2. Armes (24, par exemplaire, installés à l'établi)
 | Module | T | Effet | Ancrage |
 |---|---|---|---|
+| **AT56** | P | +30/+20/+20 dégâts et cadence (Max 3) : bascule v2 du niveau par type vers le rack par exemplaire | **EN JEU** |
+| **All Nash Weapons** | P | Cadence +10/20/40 %, dégâts +5/10/15 % sur toute la famille Nash (Max 3) : précédent des modules de famille | **EN JEU** |
 | Amplificateur de dégâts | P | Dégâts +5/10/15 % | ✔ |
 | Accélérateur de culasse | P | Cadence +8/16/25 % | ✔ |
 | Chargeur étendu | P | Chargeur +20/40/60 % | ✔ |
