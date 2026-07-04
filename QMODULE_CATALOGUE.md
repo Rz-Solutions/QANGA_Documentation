@@ -233,3 +233,73 @@
 - Budget de puissance : la capacité du Mur (Système Général) est LE levier global ; courbe à modéliser.
 - Les entrées **?** exigent une vérification moteur ; les **➕** exigent une mécanique nouvelle (prioriser celles qui servent plusieurs modules : statuts élémentaires, énergie, adjacence).
 - Passe de nommage/lore (manufactures, cohérence univers IOLACORP) avec l'équipe.
+
+## 7. Vague 2 : calibrage gameplay (directives RzZz, 2026-07-04 soir)
+
+> Directive : la liste actuelle est une bonne base MAIS doit être agrémentée de modules PLUS COHÉRENTS avec le gameplay réellement en place. Le batch de production (M4.5) attend cette vague. Exemples concrets donnés :
+
+**Modules cyborg / inventaire (validés dans l'esprit : « tous les modules qui touchent l'inventaire, c'est bien »)**
+- **Slots hermétiques à la mort** : le module réserve 1 à 5 slots d'inventaire (selon le niveau de phases) dont le contenu SURVIT à la mort. Les items de quête occupent automatiquement ces slots en priorité. Contexte : des sacs à dos « digitiques » existent déjà en jeu : vérifier leur mécanique avant chiffrage (interaction module x sac à définir).
+
+**Modules d'ARME (par exemplaire, à l'établi)**
+- **Recycleur de douilles** : récupère de la matière sur les douilles éjectées au tir (+1 ou +2 Matter par tir recyclé, directement au personnage). Module d'arme, pas de cyborg.
+- **Chambre thermique** (« balles chauffées ») : chauffe les balles avant le tir : portée réduite, dégâts nettement supérieurs, et PERCE les surfaces (pénétration). Triple contrepartie/bonus : typé Voss ?
+
+**Axe SCAN (extensions à inventer, demande explicite : « trouver des extensions de module pour le scan »)**
+- Pistes à proposer : surlignage des ressources récoltables, détection des douilles/loot au sol, marquage des drones ennemis, empreinte thermique des véhicules moteur allumé, scan des slots hermétiques des cadavres, cartographie éphémère des QLevels proches.
+
+**Axe DRONE / VUE TROISIÈME PERSONNE (lore : la 3e personne EST un drone physique)**
+- Fait de gameplay CONFIRMÉ par RzZz : le drone de vue 3P est visible derrière le joueur ; si on TIRE sur le drone d'un joueur, celui-ci est FORCÉ en vue FPS jusqu'à l'auto-réparation du drone. C'est « quelque chose d'énergétique dans notre gameplay ».
+- Pistes modules : blindage du drone (PV du drone +), auto-réparation accélérée, drone furtif (silhouette réduite/discrétion), drone déporté (angle/hauteur de caméra alternatif), leurre (le drone encaisse UN tir gratuit), contre-mesure (révèle le tireur qui a touché le drone).
+
+**Axes à couvrir pour la cohérence (systèmes vivants du jeu)**
+- **Construction (QBuilder)** : ex. remise sur le coût en minéraux, portée de placement, vitesse de construction, recyclage de structures amélioré (lien avec l'économie builder-bank existante).
+- **Économie / revente** : ex. meilleurs prix de revente, taxes réduites, estimation de valeur au scan.
+- **Exploration** : ex. réduction du coût de fuel en vol atmosphérique, résistance aux climats extrêmes (l'API climat WorldScape par position existe), balises personnelles.
+
+**Prochain pas M4.5** : produire cette vague 2 en entrées de catalogue complètes (famille, fabricant, rareté, niveaux, contreparties), PUIS générer le batch d'assets (les ✔ + la vague 2 chiffrable).
+
+### 7.1 Les 25 entrées de la vague 2 (rédigées le 2026-07-04, à valider par RzZz)
+
+Format : Nom [Famille, Fabricant, Type, Ancrage ✔/?/➕] : effet par niveau.
+
+**Inventaire et survie**
+- **Caisson hermétique** [SUR, IC Lab, Passif, ➕] : 1 slot d'inventaire par niveau (Max 5) dont le contenu SURVIT à la mort ; les items de quête s'y rangent automatiquement en priorité. Interaction avec les sacs digitiques à cadrer.
+- **Sac digitique étendu** [ECO, IC Lab, Passif, ✔ SetInventoryBaseSize] : +4/8/12 slots d'inventaire.
+- **Compacteur de matière** [ECO, IC Lab, Passif, ?] : taille de pile des ressources +25/50/100 %.
+- **Membrane climatique** [SUR, IC Lab, Passif, ✔ API climat WorldScape par position] : résistance aux climats extrêmes par niveau.
+
+**Armes (par exemplaire, directive RzZz)**
+- **Recycleur de douilles** [ARM, IC Lab, Passif, ? tir + AddMatter] : récupère la matière des douilles éjectées : +1/+2 Matter par tir.
+- **Chambre thermique** [ARM, VOSS, Passif, ➕ perforation] : balles chauffées : dégâts +20/35/50 %, portée -15 %, PERCE les surfaces. Instable.
+
+**Extensions Scanner (6 propositions, demande RzZz « je n'ai pas trop d'idées »)**
+- **Spectromètre de gisements** [SYS, IC Lab, Conditionnel, ?] : le scan surligne les ressources récoltables.
+- **Traqueur de butin** [SYS, IC Lab, Conditionnel, ?] : le scan révèle items au sol et caisses.
+- **Oeil thermique** [SYS, IC Lab, Conditionnel, ✔ OnVehicleStateUpdate] : marque les véhicules moteur ALLUMÉ.
+- **Analyse nécrologique** [SYS, IC Lab, Conditionnel, ➕] : scanner un cadavre révèle son loot et ses slots hermétiques.
+- **Écho de constellation** [SYS, IC Lab, Actif, ?] : impulsion révélant les sites d'intérêt (QLevels) non découverts proches.
+- **Contre-scan** [SYS, VOSS, Conditionnel, ➕] : alerte quand TU es scanné + direction approximative. Instable.
+
+**Famille Drone / vue 3P (fait de gameplay confirmé : la 3e personne EST un drone physique abattable)**
+- **Blindage de drone** [SYS, IC Lab, Passif, ✔ PV du drone] : PV du drone +25/50/75 %.
+- **Nano-réparateur de drone** [SYS, IC Lab, Passif, ✔ auto-réparation existante] : temps de réparation -20/40/60 %.
+- **Drone spectre** [FUR, VOSS, Passif, ?] : silhouette du drone réduite, plus dur à repérer/toucher. Instable.
+- **Gyroscope déporté** [SYS, IC Lab, Conditionnel, ? caméra] : position de la caméra-drone ajustable (épaule, hauteur).
+- **Leurre holographique** [SYS, VOSS, Conditionnel, ➕] : le premier tir qui abattrait le drone est absorbé (long cooldown). Instable.
+- **Mouchard réflexe** [COM, VOSS, Conditionnel, ➕] : drone abattu = tireur marqué 5 s. Instable.
+
+**Construction (QBuilder, économie builder-bank existante)**
+- **Optimiseur de chantier** [ING, IC Lab, Passif, ?] : coût minéraux des constructions -5/10/15 %.
+- **Grue gravitique** [ING, IC Lab, Passif, ?] : portée de placement +25/50 %.
+- **Démolisseur certifié** [ING, IC Lab, Passif, ?] : recyclage de structures +10/20/30 % de matériaux rendus.
+
+**Économie / revente**
+- **Négociateur** [ECO, IC Lab, Passif, ? boutiques] : prix de VENTE aux marchands +3/6/9 %.
+- **Estimateur** [ECO, IC Lab, Conditionnel, ?] : valeur marchande des items visible au scan.
+
+**Exploration**
+- **Régulateur atmosphérique** [PIL, IC Lab, Passif, ?] : consommation de carburant en vol -10/20/30 %.
+- **Balise personnelle** [SYS, IC Lab, Actif, ➕] : pose 1/2/3 balises personnelles visibles au HUD.
+
+> Total vague 2 : **25 modules** (catalogue : 136 → 161). Les ✔ sont chiffrables dès le batch M4.5 ; les ? demandent une vérification moteur ciblée ; les ➕ attendent leur mécanique (slots de mort, perforation, marquage).
