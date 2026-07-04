@@ -147,11 +147,13 @@ ce qui remplace 3 `TickCompletionEvents.Wait` par 1.
 
 | CVar | Defaut | Role |
 |------|--------|------|
-| `QAI.Disable.State` / `QAI.Disable.Movement` / `QAI.Disable.Combat` | 0 | Saute le `ProcessBatch` d'un processeur (profilage par elimination). |
-| `QAI.Debug` | off | Overlay ecran (totaux, par archetype, par etat, spawners). Commande console. |
-| `QAI.DumpAgents` / `QAI.DumpSpawners` / `QAI.DumpFPM` | - | Dumps one-shot vers `LogQAI`. |
-| `QAI.Verbose [0\|1]` | off | Active les logs verbeux a runtime (override `bVerboseLogging`). |
-| `QAI.StressBench <count> <classpath>` | - | Benchmark crowd headless (spawn spirale + capture trace cpu,frame). |
+| `QAI.Debug.Disable.State` / `QAI.Debug.Disable.Movement` / `QAI.Debug.Disable.Combat` | 0 | Saute le `ProcessBatch` d'un processeur (profilage par elimination). |
+| `QAI.Debug` | off | Fenetre overlay ecran (netmode, totaux, par archetype, par etat, spawners, impostors dormants). Commande console. |
+| `QAI.Debug.Overhead [0\|1]` | 0 | Panneau flottant au-dessus de CHAQUE agent : nom, archetype, etat (+timer/COMBAT/WPN-UP/DEAD/IMPOSTOR), cible (+distance/derniere vue), vitesse + mode nav (DIRECT/FLOWFIELD/CLIENTNAV) + STUCK/FROZEN/PAUSE, route garde + squad. Builds dev uniquement (ENABLE_DRAW_DEBUG). |
+| `QAI.Debug.OverheadRangeCm` | 20000 | Distance max (cm) du joueur local pour dessiner les panneaux Overhead. <=0 = illimite. |
+| `QAI.Debug.DumpAgents` / `QAI.Debug.DumpSpawners` / `QAI.Debug.DumpFPM` / `QAI.Debug.DumpBlueprintAI` | - | Dumps one-shot vers `LogQAI`. |
+| `QAI.Debug.Verbose [0\|1]` | off | Active les logs verbeux a runtime (override `bVerboseLogging`). |
+| `QAI.Debug.StressBench <count> <classpath>` | - | Benchmark crowd headless (spawn spirale + capture trace cpu,frame). `QAI.Debug.StressBenchDamage 1` pour des IA damageables. |
 
 ---
 
@@ -668,7 +670,7 @@ fonctionnent) mais qui est cache + fige (pas d'anim, pas de tick FPM, capsule Qu
 | `QAI.ImpostorScreenPromoteCm` | 5000 | promotion si dans le viewport sous cette distance. |
 | `QAI.AerialTraffic.ProximityPromoteCm` | 15000 | promotion d'un vaisseau de trafic par proximite joueur. |
 | `QAI.ImpostorShadows` / `QAI.ImpostorProps` / `QAI.ImpostorPropsGPU` | 1 | toggles A/B (ombres, props, props GPU). |
-| `QAI.ImpostorFreezeUpload` / `QAI.ImpostorSkipMeshMatch` / `QAI.ImpostorDebugDraw` | 0 | diagnostics. |
+| `QAI.Debug.ImpostorFreezeUpload` / `QAI.Debug.ImpostorSkipMeshMatch` / `QAI.Debug.ImpostorDraw` / `QAI.Debug.ImpostorEquipmentLog` | 0/0/0/1 | diagnostics. |
 | `QAI.AerialTraffic.ImpostorMaxParts` | 12 | meshes statiques captures par vaisseau dormant. |
 
 > Un mesh sans bake (`ImpostorBakes`) "ne demote jamais" (logge une fois) et reste un pawn vivant — le
@@ -1030,8 +1032,9 @@ jamais `UE_LOG(LogQAI, ...)` brut).
 
 ### Index des CVars (par domaine)
 
-- **Pipeline / diag** : `QAI.Disable.{State,Movement,Combat}`, `QAI.Debug`, `QAI.Verbose`,
-  `QAI.DumpAgents/DumpSpawners/DumpFPM/DumpBlueprintAI`, `QAI.StressBench`, `QAI.StressBenchDamage`.
+- **Pipeline / diag** : `QAI.Debug.Disable.{State,Movement,Combat}`, `QAI.Debug` (fenetre overlay),
+  `QAI.Debug.Overhead` + `QAI.Debug.OverheadRangeCm` (panneaux au-dessus des IA), `QAI.Debug.Verbose`,
+  `QAI.Debug.DumpAgents/DumpSpawners/DumpFPM/DumpBlueprintAI`, `QAI.Debug.StressBench`, `QAI.Debug.StressBenchDamage`.
 - **Combat throttle** : `QAI.CombatFullRateCount` (8), `QAI.CombatThrottleBand` (2), `QAI.CrowdFirePauseScale` (6).
 - **Direct-fire cyborg** : `QAI.DirectFire` (1), `QAI.DirectFireSpreadDeg` (1.5),
   `QAI.DirectFireSoundMaxPerFrame` (1), `QAI.DirectFireSoundFrameInterval` (2),
