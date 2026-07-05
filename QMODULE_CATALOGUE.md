@@ -303,3 +303,13 @@ Format : Nom [Famille, Fabricant, Type, Ancrage ✔/?/➕] : effet par niveau.
 - **Balise personnelle** [SYS, IC Lab, Actif, ➕] : pose 1/2/3 balises personnelles visibles au HUD.
 
 > Total vague 2 : **25 modules** (catalogue : 136 → 161). Les ✔ sont chiffrables dès le batch M4.5 ; les ? demandent une vérification moteur ciblée ; les ➕ attendent leur mécanique (slots de mort, perforation, marquage).
+
+## 8. TRIAGE RzZz (2026-07-04, export du tableau de bord) : la référence du batch M4.5
+
+- **7 EN JEU** : hors triage, acquis d'office (QMD_* déjà créés).
+- **GARDER (82) = BATCH 1 DE PRODUCTION** : l'essentiel du cyborg (Mobilité 6, Survie 10, Combat 10, Furtivité 11, Économie 9, Ingénierie/Déployables 14, Système/Social 17, Pilotage 2) + 3 modules d'ARMES seulement (Amplificateur de dégâts, Recycleur de douilles, Chambre thermique). Quasi toute la vague 2 gameplay est GARDÉE (drone/scanner/inventaire).
+- **REPORTER (78)** : TOUT le détail armes (accessoires d'établi : chargeurs, canons, munitions spéciales... 22 entrées), TOUS les véhicules (18, y compris Noyau surcadencé : l'asset de test QMD_NoyauSurcadence reste comme harnais), TOUTE la Liaison & Synergie (8 : attendra le chiffrage de l'adjacence), la vague construction QBuilder (3), et le reste du fond de catalogue.
+- **COUPER : 0.** Rien n'est jeté : le catalogue entier reste la matière première.
+- **Arbitrages de dédoublonnage appliqués** : Compacteur de matière et Négociateur existaient en double (v1 + vague 2) : une seule définition chacun (l'instance GARDER) ; Spectromètre (v1, gardé) vs Spectromètre de gisements (vague 2, reporté) ; **deux Leurres distincts assumés** : Leurre holographique (déployable, Ingénierie) et **Leurre de drone** (renommé, protection de la vue 3P, tag Module.LeurreDrone) ; Membrane climatique : reportée.
+
+> Génération : script `qmodule_batch_m45.py` (82 défs dans /Game/Phases/QModuleV2, tags Module.* + 15 Stat.* nouveaux + Manufacturer.ICLab/Voss auto-enregistrés dans QModuleTags.ini, StatMods chiffrés pour les effets numériques sûrs, le reste = coquilles à équilibrer dans l'Éditeur de Modules).
