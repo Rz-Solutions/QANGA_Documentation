@@ -157,14 +157,14 @@ Section `[/Script/QMusicDirector.QMusicDirectorSettings]` dans `DefaultGame.ini`
 | Entrée/sortie de zone | `UTriggerZoneComponent` ² | hooks statiques natifs `GetOnAnyZoneEnteredNative/ExitedNative` (ajoutés) + champ `FQTriggerZoneData.MusicMood` ("Safe" / "Tension" / "Danger") | `SafeZone` / `Tension` |
 | Musique de quête active | `AQAmbientAudioManager` ³ | `OnAmbientStateChangedNative` (ajouté) + `GetActiveState()` ; yield si `Priority >= ManagerYieldPriorityThreshold` (défaut 1 : tout override sauf le lit défaut) | yield (se tait) |
 | Radio véhicule active | `UQRadioComponent` ⁴ | `OnListenModeChangedNative` + `IsLocal2D()` (ajoutés) ; rebind sur `APlayerController::OnPossessedPawnChanged` | yield (se tait) |
-| Notif / dialogue (Tona) | `UQNotificationManager` ⁵ | `GetOnNotificationDisplayedNative/DismissedNative` (existants, statiques) ; refcount par NotificationID | **ducking** (SoundMix push/pop) |
+| Dialogue à voix (Tona) | `UQNotificationManager` ⁵ | signal DÉDIÉ `GetOnCommunicationAudioDuckingStarted/EndedNative` (statiques, `(const UObject* WorldContextObject, FName SourceId)`) ; filtré par monde + refcount par SourceId | **ducking** (SoundMix push/pop) |
 
 **Notes de réalisation (2026-07-03, remplacent les notes de vérif du 2026-06-26) :**
 1. Les délégués du **service** `UQWantedSystemService` ne broadcastent que **côté serveur** ; le chemin client réel (celui du HUD) est `UQPoliceSubsystem::OnWantedLevelUpdated`, broadcasté sur le subsystem client par `SendWantedClientUpdate()`. C'est lui qui est bindé.
 2. Zones : pas de tag natif → champ additif **`MusicMood`** (`FName`, défaut None) sur `FQTriggerZoneData` + **hooks statiques natifs** sur le composant (les délégués par instance restent intacts ; filtrage monde + pawn local dans le Director). ⚠️ Une zone "musique" doit être de type **`Custom`** : une zone `Sound` pousse déjà le manager partagé et ferait céder le Director (seuil de yield par défaut = 1).
 3. `OnRep_AmbientState` reste protégé ; le hook ajouté est un délégué **natif** (`FQAmbientStateChangedNative`, pas dynamic : observateur C++ pur) broadcasté depuis l'OnRep (clients) **et** depuis `BroadcastStateChange` (listen server / standalone), jamais sur serveur dédié. Yield gated sur `Priority >= seuil` (le lit défaut est à `Priority=0`).
 4. Radio : ajouts additifs `IsLocal2D()` + `OnListenModeChangedNative` (broadcast depuis `ApplyMode` sur changement effectif) ; le Director rebinde à chaque `OnPossessedPawnChanged`. Une radio 3D distante (autre conducteur, poste portable) ne fait **pas** céder la musique.
-5. Les délégués QNotification sont broadcastés à l'affichage réel du widget, **tous types confondus** (toast, warning, progress, communication) → le ducking couvre Tona et les notifs sans distinction de type en v1 (refcount par `NotificationID`).
+5. **Corrigé 2026-07-05 (leçon de conception, voir ci-dessous)** : le ducking n'écoute PLUS le délégué générique `OnNotificationDisplayedNative` (qui se déclenchait pour tout toast). QNotification expose désormais un **signal sémantique dédié** `OnCommunicationAudioDuckingStarted/EndedNative` (+ helpers `NotifyCommunicationAudioDucking*`), broadcasté depuis `QNotificationWidgetBase::Start/EndDialogSequence` **uniquement quand un `DialogAudio` joue réellement**. Il porte un `WorldContextObject` (filtré côté Director pour ne ducker que SON monde, cf. PIE multi-mondes) et un `SourceId` (refcount des dialogues qui se chevauchent). La politique « quelles notifs déclenchent le ducking » vit chez le producteur (QNotification), pas chez le consommateur.
 
 Le mood "Exploration" est le **défaut** quand aucune autre condition n'est vraie. Sa teinte (biome, jour/nuit) est un raffinement (voir §10).
 
@@ -188,8 +188,8 @@ Aujourd'hui, `QAmbientAudio` ne force aucune SoundClass (le routage dépend de c
 
 ### 7.2 Ducking par SoundMix (v1)
 - Un `USoundMix` "DuckMusic" qui applique un override d'atténuation sur `QSClass_AmbientMusic` (et éventuellement `QSClass_Music`).
-- Sur `OnNotificationDisplayedNative` (Tona / notif) : `PushSoundMixModifier` + `SetSoundMixClassOverride` avec fade.
-- Sur `OnNotificationDismissedNative` : `PopSoundMixModifier` (avec compteur de références si plusieurs notifs se chevauchent).
+- Sur `OnCommunicationAudioDuckingStartedNative` (dialogue à voix, filtré par monde) : `PushSoundMixModifier` au 1er SourceId actif.
+- Sur `OnCommunicationAudioDuckingEndedNative` : `PopSoundMixModifier` quand le dernier SourceId se retire (refcount `DuckingSourceIds`).
 - **À inspecter** : `QPassiveMix_Base` existe déjà sous `_SoundClass/` ; possiblement réutilisable comme base, à vérifier avant d'en créer un nouveau.
 - 100% local. Aucun réseau.
 
@@ -216,7 +216,7 @@ Le plugin **AudioModulation est déjà activé mais inutilisé**. Migration futu
 
 ## 9. Renforts sur `QAmbientAudio` (chirurgical) — RÉALISÉS le 2026-07-03
 1. **`UQAmbientAudioSettings`** (nouveau `UDeveloperSettings`, section `[/Script/QAmbientAudio.QAmbientAudioSettings]`) : `AmbientMusicSoundClass` (soft ref). FAIT.
-2. **`SoundClassOverride`** appliqué dans `EnsureAudioComponents` (sur les 2 AudioComponents de lecture) quand `AmbientMusicSoundClass` est configurée. Non configurée = comportement legacy strictement inchangé (zéro régression sur le chemin quête tant que l'asset n'est pas créé). FAIT.
+2. **`SoundClassOverride`** appliqué dans `EnsureAudioComponents` (sur les 2 AudioComponents de lecture) quand `AmbientMusicSoundClass` est configurée. Non configurée = comportement legacy strictement inchangé (zéro régression sur le chemin quête tant que l'asset n'est pas créé). FAIT. **+ Corrigé 2026-07-05** : les AudioComponents de lecture posent aussi les flags de survie d'un lit musical : `bIsMusic`, `bAlwaysPlay`, `bShouldRemainActiveIfDropped`, `bOverridePriority`+`Priority=100` (sans quoi, sous forte concurrence audio en serveur 500 joueurs, la musique non-diégétique peut être virtualisée / volée par le voice-stealing).
 3. **Chemin de lecture local** : AUCUNE modif nécessaire. `ApplyReplicatedState` était déjà public et gated dedicated ; le "wrapper local" vit dans le Director (états `FQAmbientReplicatedState` construits côté client + **epoch par mood** pour reprendre en cours de piste après un yield, façon radio). FAIT.
 4. **Délégué d'observation** : `FQAmbientStateChangedNative OnAmbientStateChangedNative` (délégué **natif**, pas dynamic : l'observateur est du C++ pur) + getter `GetActiveState()` (état courant pour le late-bind), broadcastés depuis `OnRep_AmbientState` (clients) et `BroadcastStateChange` (listen server / standalone). FAIT.
 5. **`FQAmbientEntry.bRestartOnFinish`** (défaut **false** = comportement inchangé partout) + relance dans le composant de lecture (`OnAudioFinishedNative` -> re-`Play()` si l'état actif dit Playing). Raison : **un graphe MetaSound REFUSE les cycles** (`MetasoundGraphCycleError`), donc « On Finished -> piste suivante » ne peut PAS se câbler dans le graphe ; la source playlist est **one-shot** (une piste = une exécution, le Shuffle garde son sac via Enable Shared State) et c'est le composant qui relance. C'est ce mur qui explique la sortie `Repeat` orpheline du `MS_UniversMusic_BAK` (tentative abandonnée du même pattern). FAIT (2026-07-03, après l'erreur de cycle constatée en jeu).
