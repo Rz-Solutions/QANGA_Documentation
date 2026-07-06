@@ -301,6 +301,7 @@ Format : Nom [Famille, Fabricant, Type, Ancrage ✔/?/➕] : effet par niveau.
 **Exploration**
 - **Régulateur atmosphérique** [PIL, IC Lab, Passif, ?] : consommation de carburant en vol -10/20/30 %.
 - **Balise personnelle** [SYS, IC Lab, Actif, ➕] : pose 1/2/3 balises personnelles visibles au HUD.
+- **Rappel de flotte** [PIL, IC Lab, ACTIF SIGNATURE, ? garage / ✔ arrivée céleste via SpaceshipAI] (ajout RzZz 2026-07-05, GARDER d'office) : appelle n'importe où un véhicule POSSÉDÉ (système de garage existant) qui se LIVRE en autonomie : spawn hors de la vue du joueur, trajet visible sur la carte, arrivée à proximité. Les ships descendent du ciel (le pattern du trafic aérien SpaceshipAI, déjà vivant en jeu) ; les véhicules au sol conduisent jusqu'au joueur. **Progression = PORTÉE de livraison** : Niveau 1 = toute la planète où tu te trouves ; Niveau 2 = l'espace local (hors-planète, orbite) ; Niveau 3 = PARTOUT dans l'univers. À équilibrer : cooldown, éventuel coût d'appel, comportement si le véhicule est détruit en route. Référence d'expérience : le summon de Cyberpunk, poussé à l'échelle interplanétaire.
 
 > Total vague 2 : **25 modules** (catalogue : 136 → 161). Les ✔ sont chiffrables dès le batch M4.5 ; les ? demandent une vérification moteur ciblée ; les ➕ attendent leur mécanique (slots de mort, perforation, marquage).
 
