@@ -372,6 +372,19 @@ M1 livre : module runtime + module editor, Settings + ini, tags natifs, types, D
 
 **STATUT M1 (2026-07-04) : LIVRÉ.** Compilé vert sur QangaEditor Win64 Development (Result: Succeeded ; DLL `UnrealEditor-QModule.dll` + `UnrealEditor-QModuleEditor.dll` liées). Particularités de livraison : scan des définitions par `ScanPathsForPrimaryAssets` runtime (AUCUNE entrée AssetManager dans DefaultGame.ini : hermétisme total), plugin actif d'office comme plugin projet (pattern QRadio : ni .uproject ni EnabledByDefault), 3 verrous de dormance (Enabled=false, intégration QGM opt-in x2, façade neutre). Cibles Qanga/QangaServer : à compiler plus tard. Activation le jour J : `[/Script/QModule.QModule_Settings]` `Enabled=True`. Leçon d'atelier : UBT refuse de compiler tant que l'éditeur tourne avec Live Coding (et un NOUVEAU plugin ne passe jamais par Live Coding) : fermer l'éditeur pour les jalons C++.
 
+### CHECKLIST D'ACTIVATION CONSOLIDÉE (source de vérité, complétée par la revue scénarios du 2026-07-06)
+
+Modifications d'existant autorisées UNIQUEMENT ce jour-là, dans cet ordre :
+1. `[/Script/QModule.QModule_Settings]` `Enabled=True` dans DefaultGame.ini (+ `bAutoHostVehicleRacks` selon décision).
+2. **COOKING (bloquant build packagé, trouvé en revue scénarios)** : TOUS nos assets sont chargés par chemins soft depuis le C++ (QMD_* scannés runtime, W_QModuleV2_* via Settings/soft paths, items QModulePhase/QModuleWeapon/QModuleVehicle) : AUCUN référenceur dur → **ils ne seront PAS cuits** sans : entrée AssetManager `PrimaryAssetTypesToScan` pour QModuleAssets (couvre les QMD_*) + `DirectoriesToAlwaysCook` (ou graine EasyCook, le projet utilise DA_EasyCookSeed_QANGA) pour /Game/Widget/QModuleV2, /Game/Items/QModulePhase, /Game/Items/QModuleWeapon, /Game/Items/QModuleVehicle. À tester par un cook complet AVANT la release.
+3. **LOCALISATION (règle CLAUDE.md, trouvé en revue scénarios)** : tous les textes joueur de l'UI v2 sont EN DUR en ASCII (« MODULES ACTIFS », « NIV », légende des familles, établi, fiche) : passe String Tables/NSLOCTEXT obligatoire (en/fr/es) avant prod.
+4. Inscription des 6 clés `QModulePhase_T*` (+ items modules) dans `DA_AllRef.ItemKey:DAItem`.
+5. Bascule `LevelUp_Event` : 1 point → 1 item Phase T1 (pattern GenerateNewItemInstance + AddItemToInventory, déjà présent dans le BP).
+6. Façade `PhaseComponent` (lecture des stats agrégées par les consommateurs réels : jetpack, armes via WeaponScript, véhicules via VehicleBase).
+7. Entrée établi dans le catalogue QBuilder (`UQBuilder_Data_ActorDataBase.InputData`, ID stable réservé) + coûts `ResourceData` + mesh.
+8. Multi réel : valider les lectures de rack d'item côté client distant (données DataObject serveur : prévoir réplication du codec si l'UI client en a besoin) et re-dérouler l'E2E en listen + dédié.
+9. Limite connue : le flush de persistance au changement de monde est best-effort (fenêtre du debounce 2 s : une insertion faite < 2 s avant un travel peut se perdre ; l'auto-save par changement couvre le reste).
+
 ### 15.8 M5 Armes + M6 Véhicules : couche de données livrée (2026-07-04 nuit, compilée verte)
 
 **Décision de modèle v1 (à valider par l'utilisateur)** : le rack d'un EXEMPLAIRE d'arme vit dans **une clé write-through de son instance** (`SetStringArray("QMODRack", codec)` sur `Obj_ItemInstance`) : vérité serveur, et **persistance GRATUITE portée par l'item lui-même** (la clé voyage avec l'instance dans son DataObject). Les items modules sont **consommés à l'installation et remboursés au retrait** (le pattern éprouvé du Mur, rollbacks anti-perte identiques). L'Option A complète (modules = instances d'items VIVANTES attachées via `SetAttachmentToSlot`/`Slot:AttachmentId`, API vérifiée dans le binaire d'Obj_ItemInstance) reste la cible d'activation si on veut l'usure/la rareté par module : la clé codec v1 y migre trivialement.
