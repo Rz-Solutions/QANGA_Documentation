@@ -1,0 +1,286 @@
+# QAI Pathfinding Research - Consolidated Technical Decision
+
+Date: 2026-07-12
+Scope: `Plugins/QAI` ground-agent navigation on curved/LWC planetary surfaces
+Sources: four independent research audits, primary papers, current QAI source, engine container APIs, and repository history
+
+This report is the adjudicated result. The four original audits were consolidated; duplicated, conflicting, and unsupported material was removed.
+
+## Final verdict
+
+Do not replace QAI's reverse Dijkstra flow-field integration wholesale.
+
+QAI needs an exact many-starts-to-one-goal result over a small weighted directed graph. Reverse integration is a correct match because one field can serve every compatible agent pursuing the same goal. A*, Theta*, ANYA, JPS, D* Lite, contraction hierarchies, and MAPF primarily solve different workloads. Most would discard field sharing while leaving the likely expensive layer - runtime collision-derived walkability - untouched.
+
+The correct direction is:
+
+1. Fix field ownership, lookup, and concurrency before performance experiments.
+2. Instrument the real cost split instead of assuming Dijkstra is expensive.
+3. Separate immutable goal-independent traversability from per-goal integration.
+4. Reuse goal-independent data during retargeting, recentering, and regional revisits.
+5. Add legality-constrained continuous steering only after directed edges are explicit.
+6. Add a directed portal/sector hierarchy for long-range routing.
+7. Test bucketed Dijkstra and Eikonal/Fast Sweeping only when measurements justify them.
+
+The solver is not currently the proven root problem. Field lifecycle, geometry reuse, field publication, and long-range routing are the higher-value surfaces.
+
+## Verified current QAI design
+
+- Each default field contains `80 x 80 = 6,400` cells at `50 cm`, covering approximately `40 x 40 m`.
+- A fresh build submits 6,400 complex floor sphere sweeps and headroom sphere sweeps only for cells that found candidate floor. Approximately 12,800 sweeps is an upper bound, not a guaranteed per-field count.
+- Fresh builds are double-buffered: agents keep sampling the old live grid until the pending grid is complete.
+- Trace submission is globally round-robin staggered and only one heavy finalize is permitted per frame.
+- Periodic terrain rebuilds have already been removed. Static fields rebuild only after explicit invalidation, movement outside useful coverage, or related lifecycle events.
+- A goal-only retarget already skips collision sweeps by cloning live cells and jumping to finalize.
+- Finalize currently recomputes connected components, the directed component graph, obstacle-distance BFS, and reverse Dijkstra even on a goal-only retarget.
+- Actor-bound fields are already shared when the goal actor, coverage, walkability neighborhood, and requester profile are compatible. Same-goal agents do not inherently pay one fresh field each.
+- Most ground archetypes steer directly until the stuck tracker requests a field. Cyborg behavior can opt into persistent pathfinding.
+- Reverse integration uses weighted 8-neighbor edges, obstacle-proximity penalties, `40 cm` step-up, and `200 cm` step-down.
+- Reverse predecessor orientation is currently correct: for neighbor/source `NC` and goal-side destination `CurCell`, the code validates `CurHeight - SourceHeight`, then stores the direction from `NC` back toward `CurCell`.
+- `uint16` addition currently widens to `uint32` and rejects values reaching the reserved unreachable value. Overflow is guarded, although a diagnostic counter and explicit range contract would still improve observability.
+
+Relevant owner paths:
+
+- `Plugins/QAI/Source/QAI/Private/Pathfinding/QAI_FlowFieldManager.cpp`
+- `Plugins/QAI/Source/QAI/Public/Pathfinding/QAI_FlowFieldManager.h`
+- `Plugins/QAI/Source/QAI/Public/Pathfinding/QAI_FlowField.h`
+- `Plugins/QAI/Source/QAI/Private/Processor/QAI_StateProcessor.cpp`
+- `Plugins/QAI/Source/QAI/Public/Behavior/QAI_BehaviorHelpers.h`
+
+## Concrete current-code findings that outrank algorithm replacement
+
+### 1. Raw field pointers escape the global lock
+
+`GetField()` locks `GQAIFlowFieldCS`, linearly scans `TArray<FQAI_FlowField>`, returns an element pointer, and releases the lock on return. External `StateProcessor` callers then read that pointer outside the lock while another parallel worker can call `RequestField()` -> `AllocField()` -> `Fields.Add()`. A reallocation can invalidate the returned pointer.
+
+The lock correctly protects `SampleDirection*()` because those functions hold the outer recursive lock for their complete read. It does not make external raw pointers stable.
+
+Required architectural correction: stable slots plus generation handles, or immutable reference-counted field snapshots. Parallel readers must never hold a pointer into a relocatable container after synchronization ends.
+
+### 2. Sampling is not currently strictly O(1)
+
+Movement/state processors run in `ParallelFor`. Each field sample enters one global critical section and `GetField()` linearly scans the field array. Cell lookup is O(1), but handle resolution is O(number of fields), and all worker samples serialize through the same lock.
+
+The correct target is O(1) handle-to-slot lookup with immutable live data and no global reader serialization. Measure lock wait and hold time before claiming the current sample cost is negligible.
+
+### 3. Requester-specific dimensions are not wired through callers
+
+The dirty working tree added `RequestingActor` to `RequestField()` so a real capsule radius, half-height, and location offset can shape a field. All three current callers still use the four-argument form, leaving the new parameter null. The requester-specific path is therefore dormant.
+
+### 4. Diagonal transition legality is incomplete
+
+The integration pass validates that source/destination cells are walkable and that their height delta is legal. It does not explicitly require both adjacent cardinal transitions to be clear, nor does it store a directed swept-edge feasibility mask. Cell-center sphere sampling reduces many wall-boundary errors but does not prove that every diagonal edge is safe against convex corners or narrow gaps.
+
+This must be resolved before continuous blending. A smoother can otherwise blend legal discrete directions into an illegal continuous motion.
+
+### 5. Goal-independent finalize work is repeated
+
+Connected structure, directed edge feasibility, and obstacle distance are properties of the traversability snapshot, not the goal. A goal-only retarget should normally reuse them and recompute only goal relocation, integration cost, and direction extraction.
+
+This is the safest near-term algorithmic cleanup because it preserves exact behavior and already fits the current Dijkstra-only retarget path.
+
+### 6. Several public settings/comments are stale or unused
+
+`bAsyncFlowFieldTraces` has no active consumer in the manager, `FieldShareRadiusCm` no longer drives actor-keyed sharing, and `RebuildIntervalSec` remains exposed even though periodic rebuilds were removed. These should be confirmed and removed or redefined under normal dead-code discipline.
+
+## Corrections to the four audits
+
+### Claims accepted
+
+- Shared reverse integration is the correct default for popular/shared goals.
+- Collision-derived traversability is the likely expensive layer, but must be measured.
+- Persistent/tiled traversability plus a directed portal hierarchy is the strongest medium-term design.
+- Eikonal/Fast Sweeping is worth a bounded smoothness experiment, not an assumed upgrade.
+- JPS/JPS+, ANYA, Theta*, Block A*, and MAPF are not wholesale replacements.
+- ORCA/RVO is a local avoidance layer, not global routing.
+- Bucket/radix queues are the lowest-risk integration-level optimization if Dijkstra is measured hot.
+
+### Claims rejected or narrowed
+
+- "Sampling is O(1)": false for the current implementation because handle lookup is linear and globally locked.
+- "One cached field turns ten same-goal builds into one": misleading; actor-keyed sharing already does that when coverage/profile rules permit. Regional walkability caching helps different goals, recenter overlap, and later revisits.
+- "Walkability caching is low cost": only after stable spatial keys and invalidation exist. `TMap<FVector, ...>` is not acceptable for curved worlds. Keys must include quantized planetary patch coordinates/basis, agent profile, collision parameters, and geometry revision.
+- "Bilinear interpolation plus near-goal LOS is the safest first change": rejected. Naive blending can cut corners, cross unreachable discontinuities, undo clearance penalties, or reverse one-way semantics. A LOS line trace would also substitute a manual collision query for the existing pathfinding system, conflicting with QANGA's no-fallback rule.
+- "D* Lite is a low-risk retarget optimization": rejected. Moving the reverse field's root while requesting values for every cell is not D* Lite's favorable single-start persistent-graph workload. QAI already skips sweeps on retarget; reuse goal-independent finalize data first.
+- "HPA*/portal routing is incompatible because preprocessing is required": too strong. A custom directed portal graph can be built lazily from persistent QAI tiles and is the recommended world-scale layer.
+- "ANYA works only on discrete grid points": inaccurate. ANYA searches interval states and produces continuous any-angle paths, but its binary/uniform Euclidean model still does not match QAI's weighted directed terrain.
+- Fixed thresholds such as `<5 agents`, `>200 m`, `<0.5 ms`, `5-10x savings`, or a universal field break-even count are hypotheses, not research results. Derive them from QAI workload distributions.
+- "Fast Sweeping is low risk": too optimistic. Standard isotropic Eikonal solvers do not preserve one-way step/drop legality. An anisotropic Hamilton-Jacobi formulation is materially more complex.
+
+## Correct layer model
+
+| Layer | Current responsibility | Correct interventions |
+|---|---|---|
+| Field ownership | Handles, lifetime, sharing, publication | Stable slots, immutable snapshots, generation handles, lock-free reads |
+| Traversability | Floor, headroom, height, clearance, directed movement legality | Reusable revisioned tiles, overlap reuse, directed edge masks |
+| Integration | Goal cost and exact descending successor | Reverse Dijkstra, Dial/radix queue, conditional dynamic repair |
+| Direction extraction | Convert cost/successors into preferred movement | Legal-successor blending, constrained gradient, validated lookahead |
+| Long-range routing | Select regions/doors/portals beyond a 40 m field | Directed portal/sector graph, coarse A*/Dijkstra, corridor-local fields |
+| Local avoidance | Resolve agent-agent motion conflicts | Existing steering improvements or ORCA/RVO-derived policy |
+
+## Final ranked recommendation
+
+| Rank | Work | Expected value | Risk |
+|---:|---|---|---|
+| 0 | Correct raw-pointer lifetime and define stable field publication | Critical correctness; enables later optimization | Medium |
+| 1 | Add phase, lock, cache, and route-quality instrumentation | Makes every later decision evidence-based | Low |
+| 2 | Split traversability snapshot from per-goal integration snapshot | High reuse and cleaner ownership | Medium |
+| 3 | Reuse components, directed edges, and obstacle distance on retarget | Medium gain, behavior-preserving | Low |
+| 4 | Reuse exact overlapping cells, then add bounded revisioned tiles | Potentially very high if cold/recenter work dominates | Medium |
+| 5 | Store explicit directed edge masks and define diagonal policy | Correctness prerequisite for smoothing/hierarchy | Medium |
+| 6 | Add legality-constrained direction blending/lookahead | Path-quality gain without changing global routing | Medium |
+| 7 | Add directed portals/sectors and corridor-local fields | Major long-range improvement | High |
+| 8 | Replace binary heap with Dial/radix queue if integration is hot | Small-to-medium isolated CPU gain | Low |
+| 9 | Use A* on the coarse portal graph and selected unique queries | Workload-specific gain | Medium |
+| 10 | Prototype Eikonal/FSM after constrained smoothing is measured | Possible residual quality gain | High |
+| 11 | Consider dynamic SSSP repair after persistent tiles exist | Conditional on sparse invalidation data | High |
+| - | JPS/JPS+, ANYA, Polyanya, CBS/MAPF as fine-field replacements | Wrong output/assumptions | Reject |
+
+## Phased experiment plan
+
+### Phase 0 - Correctness and attribution
+
+Add adversarial tests and Insights scopes before algorithm changes.
+
+Tests:
+
+- Reverse one-way ledges at 39/41 cm step-up and 199/201 cm step-down.
+- Diagonal corner cutting and gaps near the requester diameter.
+- Low headroom, overhangs, slopes around thresholds, disconnected floors, curved terrain, and field seams.
+- Concurrent request/sample/release with forced field-array growth.
+- Exact comparison against a simple 32-bit directed reference solver.
+
+Metrics:
+
+- Request-to-published latency p50/p95/p99.
+- Floor/headroom submission, result processing, components, directed-edge build, DTO, integration, extraction, and publication separately.
+- Global lock wait/hold time and handle lookup length.
+- Active/pending fields, agents per field distribution, fresh/retarget/recenter counts.
+- Floor/headroom query counts, field overlap, cache hits, discarded pending fields.
+- Queue pushes/pops/stale pops, maximum cost, saturation attempts.
+- Stuck events, wall contacts, illegal transitions, turn count, heading jerk, route stretch.
+
+Decision gates:
+
+- Do not replace the integration algorithm unless integration is a material share of measured QAI CPU/latency.
+- Prioritize traversability reuse when collision submission/physics/result processing dominates.
+- Prioritize snapshots/lookup when lock contention or field lookup is measurable under shared-goal crowds.
+
+### Phase 1 - Stable field data
+
+- Replace relocatable raw-pointer publication with stable slots or immutable snapshots.
+- Make handle resolution direct and generation-checked.
+- Keep worker sampling read-only and avoid one global reader lock.
+
+Acceptance:
+
+- Zero pointer invalidation under concurrent stress.
+- Bit-identical sampled results against the reference behavior.
+- No regression in request/release lifecycle or retirement.
+
+### Phase 2 - Goal-independent reuse
+
+- Separate traversability from goal integration.
+- Persist walkability, ground height, directed edge masks, connected/reachability metadata, and obstacle distance for a snapshot.
+- On goal retarget, recompute only goal resolution, reverse integration, and direction extraction.
+
+Acceptance:
+
+- Exact integration equivalence to a full finalize.
+- No collision queries on goal-only retarget.
+- Measurable retarget CPU reduction without higher p99 publication cost.
+
+### Phase 3 - Spatial reuse
+
+- Reuse exact old/new overlap during recentering.
+- Generalize only after proof into bounded LRU tiles with explicit planetary/profile/revision keys.
+- Invalidate from authoritative streaming or nav-affecting geometry events.
+
+Acceptance:
+
+- Warm/overlap results match fresh builds.
+- Large reduction in fresh cell queries in representative travel/revisit workloads.
+- No stale geometry after scripted invalidation.
+- Cache memory stays inside an explicit budget.
+
+### Phase 4 - Safe smoothness
+
+- First make directed successors explicit.
+- Compare exact successor steering against legal-successor blending and short legal lookahead.
+- Do not use unconstrained bilinear gradients or LOS fallback.
+
+Acceptance:
+
+- Reduced turn count/heading jerk in open and curved routes.
+- Zero increase in illegal steps, diagonal corner cuts, or wall contacts.
+- Clearance penalties remain effective.
+- Per-agent sampling remains inside the measured budget.
+
+### Phase 5 - Long-range hierarchy
+
+- Build directed profile-aware portals between persistent tiles/patches.
+- Run coarse A*/Dijkstra to select the next portal corridor.
+- Generate/share local reverse fields only over relevant regions.
+
+Acceptance:
+
+- No repeated edge-clamp/recenter oscillation on U-shaped, spiral, multi-room, or multi-tile routes.
+- Correct one-way portal behavior.
+- Bounded route stretch against a world-scale reference.
+- Localized portal invalidation and stable tangent-frame seams.
+
+### Phase 6 - Solver experiments
+
+Only after the preceding layers are measured:
+
+- Binary heap versus Dial/radix queue on captured production grids.
+- Current exact field versus constrained smooth extraction.
+- Isotropic Eikonal/FMM/FSM on symmetric terrain only, guarded by the exact directed legality mask.
+- Full reintegration versus dynamic repair using measured dirty-region distributions.
+
+Adopt a solver change only when it produces a material end-to-end win, identical legality, and no p99 regression. A faster isolated microbenchmark is insufficient.
+
+## Research-family decision table
+
+| Family | Shared all-cells output | Weighted directed compatibility | QAI role |
+|---|---:|---:|---|
+| Reverse Dijkstra | Native | Native with correct transpose | Keep as exact baseline/default |
+| Dial/radix SSSP | Native | Native for bounded nonnegative integer costs | Low-risk integration optimization |
+| Delta stepping/GPU SSSP | Native | Native | Only for many simultaneous large persistent fields |
+| FMM/FSM/Eikonal | Native potential | Standard form does not preserve hard one-way edges | Smoothness prototype |
+| CWave | Single-source all destinations | Published blocked/free model does not match QAI weights/directionality | Research only |
+| HPA*/portal hierarchy | Hybrid | Yes when explicitly directed/profile-aware | Recommended long-range layer |
+| Subgoal graphs/CH | Point queries | Possible but static/preprocessing-heavy | Coarse stable graph at most |
+| A* | Point query | Native with admissible heuristic | Coarse portal graph/selected unique goals |
+| Theta*/Lazy Theta* | Point query | Segment validation is difficult under QAI semantics | Conditional experiment only |
+| ANYA/Polyanya | Point query | Standard models mismatch QAI | Reject as fine-field replacement |
+| LPA*/D* Lite/AD* | Point/incremental query | Directed graphs supported | Revisit after persistent sparse changes exist |
+| JPS/JPS+ | Point query | Core pruning assumes uniform symmetric costs | Reject |
+| ORCA/RVO | Preferred-velocity consumer | Not a graph solver | Optional local avoidance layer |
+| CBS/MAPF | Joint time-indexed paths | Possible but combinatorial | Small scripted/tactical cases only |
+
+## Curated primary bibliography
+
+- E. W. Dijkstra, "A Note on Two Problems in Connexion with Graphs," 1959. https://doi.org/10.1007/BF01386390
+- R. B. Dial, "Algorithm 360: Shortest-Path Forest with Topological Ordering," 1969. https://doi.org/10.1145/363269.363610
+- J. A. Sethian, "A Fast Marching Level Set Method for Monotonically Advancing Fronts," 1996. https://doi.org/10.1073/pnas.93.4.1591
+- H. Zhao, "A Fast Sweeping Method for Eikonal Equations," 2005. https://doi.org/10.1090/S0025-5718-04-01678-3
+- W.-K. Jeong and R. Whitaker, "A Fast Iterative Method for Eikonal Equations," 2008. https://doi.org/10.1137/060670298
+- J. A. Sethian and A. Vladimirsky, "Ordered Upwind Methods for Static Hamilton-Jacobi Equations," 2001. https://doi.org/10.1073/pnas.201222998
+- A. Treuille, S. Cooper, Z. Popovic, "Continuum Crowds," 2006. https://doi.org/10.1145/1141911.1142008
+- A. Botea, M. Muller, J. Schaeffer, "Near Optimal Hierarchical Path-Finding," 2004. https://webdocs.cs.ualberta.ca/~jonathan/publications/ai_publications/jogd.pdf
+- T. Uras, S. Koenig, C. Hernandez, "Subgoal Graphs for Optimal Pathfinding in Eight-Neighbor Grids," 2013. https://doi.org/10.1609/icaps.v23i1.13568
+- K. Daniel, A. Nash, S. Koenig, A. Felner, "Theta*: Any-Angle Path Planning on Grids," 2010. https://doi.org/10.1613/jair.2994
+- D. Harabor et al., "Optimal Any-Angle Pathfinding in Practice," 2016. https://doi.org/10.1613/jair.5007
+- D. Ferguson and A. Stentz, "Using Interpolation to Improve Path Planning: The Field D* Algorithm," 2006. https://doi.org/10.1002/rob.20109
+- S. Koenig, M. Likhachev, "D* Lite," 2002. https://aaai.org/Papers/AAAI/2002/AAAI02-072.pdf
+- D. Harabor, A. Grastien, "Online Graph Pruning for Pathfinding on Grid Maps," 2011. https://doi.org/10.1609/aaai.v25i1.7994
+- J. van den Berg et al., "Optimal Reciprocal Collision Avoidance for Multi-Agent Navigation." https://emotion.inrialpes.fr/fraichard/safety2010/10-vandenberg-etal-icraw.pdf
+- G. Sharon et al., "Conflict-Based Search for Optimal Multi-Agent Pathfinding," 2015. https://doi.org/10.1016/j.artint.2014.11.006
+- J. Yang, X. Chen, M. Dong, "Integration Field-Based Breadth-First Search for Flow Field Pathfinding," 2025. https://doi.org/10.1038/s41598-025-24412-x
+- D. Sinyukov, T. Padir, "CWave: Theory and Practice of a Fast Single-Source Any-Angle Path Planning Algorithm," 2020. https://doi.org/10.1017/S0263574719000560
+- E. Emerson, "Crowd Pathfinding and Steering Using Flow Field Tiles," Game AI Pro. https://www.gameaipro.com/GameAIPro/GameAIPro_Chapter23_Crowd_Pathfinding_and_Steering_Using_Flow_Field_Tiles.pdf
+
+## Provenance
+
+This report consolidates and adjudicates four independent agent audits against the current QAI implementation and primary literature. Conflicting or unsupported claims from the raw audits were intentionally removed.
