@@ -374,16 +374,49 @@ M1 livre : module runtime + module editor, Settings + ini, tags natifs, types, D
 
 ### CHECKLIST D'ACTIVATION CONSOLIDÉE (source de vérité, complétée par la revue scénarios du 2026-07-06)
 
+> **ACTIVATION LOCALE DEV FAITE le 2026-07-10** : `Enabled=True` posé dans `Saved/Config/WindowsEditor/Game.ini`
+> et `Saved/Config/Windows/Game.ini` de la machine de dev (fichiers locaux non versionnés, créés pour l'occasion ;
+> le `DefaultGame.ini` d'équipe reste dormant ; revert = supprimer ces 2 fichiers). Répétition boot-enabled
+> PASSÉE sans aucune commande de test : registre 93/93 scanné au boot, mur hébergé au login, persistance
+> restaurée à travers le redémarrage, façade active sur les 6 consommateurs (fallback -1 vérifié).
+> Les points ci-dessous restent OBLIGATOIRES avant l'activation ÉQUIPE/PROD.
+
 Modifications d'existant autorisées UNIQUEMENT ce jour-là, dans cet ordre :
-1. `[/Script/QModule.QModule_Settings]` `Enabled=True` dans DefaultGame.ini (+ `bAutoHostVehicleRacks` selon décision).
+1. `[/Script/QModule.QModule_Settings]` `Enabled=True` dans DefaultGame.ini (+ `bAutoHostVehicleRacks` selon décision). **DÉCISION RzZz 2026-07-11 : AUCUNE CONVERSION, tout le monde repart à zéro à l'activation (le script 8.4 est ANNULÉ, la question du mapping jetpack legacy L1 disparaît). L'ancien état SS_Phase/PlayerPhaseData reste en base, simplement ignoré.**
 2. **COOKING (bloquant build packagé, trouvé en revue scénarios)** : TOUS nos assets sont chargés par chemins soft depuis le C++ (QMD_* scannés runtime, W_QModuleV2_* via Settings/soft paths, items QModulePhase/QModuleWeapon/QModuleVehicle) : AUCUN référenceur dur → **ils ne seront PAS cuits** sans : entrée AssetManager `PrimaryAssetTypesToScan` pour QModuleAssets (couvre les QMD_*) + `DirectoriesToAlwaysCook` (ou graine EasyCook, le projet utilise DA_EasyCookSeed_QANGA) pour /Game/Widget/QModuleV2, /Game/Items/QModulePhase, /Game/Items/QModuleWeapon, /Game/Items/QModuleVehicle. À tester par un cook complet AVANT la release.
-3. **LOCALISATION (règle CLAUDE.md, trouvé en revue scénarios)** : tous les textes joueur de l'UI v2 sont EN DUR en ASCII (« MODULES ACTIFS », « NIV », légende des familles, établi, fiche) : passe String Tables/NSLOCTEXT obligatoire (en/fr/es) avant prod.
-4. Inscription des 6 clés `QModulePhase_T*` (+ items modules) dans `DA_AllRef.ItemKey:DAItem`.
-5. Bascule `LevelUp_Event` : 1 point → 1 item Phase T1 (pattern GenerateNewItemInstance + AddItemToInventory, déjà présent dans le BP).
-6. Façade `PhaseComponent` (lecture des stats agrégées par les consommateurs réels : jetpack, armes via WeaponScript, véhicules via VehicleBase).
+3. **LOCALISATION (règle CLAUDE.md, trouvé en revue scénarios)** : tous les textes joueur de l'UI v2 sont EN DUR en ASCII (« MODULES ACTIFS », « NIV », légende des familles, établi, fiche, panneau latéral) : passe String Tables/NSLOCTEXT obligatoire (en/fr/es) avant prod.
+3bis. **OBSOLETE (résolu en mieux le 2026-07-10 soir)** : les phases ne sont PLUS DU TOUT des items. Correction RzZz appliquée en C++ : les phases sont des POINTS DE COMPETENCE dans un `PhaseWallet` (TArray<int32> par tier) porté par le rack MUR du PlayerState (répliqué owner-only, persisté dans la même clé `Sockets` via une entrée `QMODWALLET;v1`, roundtrip SQLite prouvé). L'inventaire d'objets ne voit plus jamais une phase : aucun filtre UI nécessaire. Les IDA_QModulePhase_T* ne servent plus qu'à la conversion lazy des vieilles saves de dev (`Authority_ConvertLegacyPhaseItems`, appelée au restore et à chaque insertion) ; à supprimer du projet à terme. Les MODULES restent des items physiques (voulus).
+3ter. **JETPACK 3 NIVEAUX (décision RzZz 2026-07-10)** : data déjà appliquée (QMD_Jetpack MaxLevel=3) ; le REMAP des gates IS_JetPack (activation>=1, rapide>=2, stationnaire>=3) et l'offset de conversion (+1) sont sur l'étage 2 : détail dans QMODULE_ACTIVATION_ALIGNMENT.md §8.3bis.
+4. Inscription des items MODULES dans `DA_AllRef.ItemKey:DAItem` (les clés `QModulePhase_T*` sont OBSOLETES : les phases sont des points, plus des items).
+5. Bascule LevelUp : **FAITE côté C++ le 2026-07-11, zéro édit BP** : `Authority_BindLegacyLevelUp` (rack) se binde par réflexion au dispatcher `LevelUp` du SS_Level du joueur (résolu via la map `StatScriptClass:StatScriptSpawned` du StatsComponent, signature vérifiée), retenté par les timers post-login du WallManager ; chaque level-up crédite max(1, delta) point(s) T1 au portefeuille. Le legacy `AddPhasePointsByActor` continue en parallèle (inoffensif : plus rien ne consomme les points legacy). Test : `qmodule.Test.LevelUp` (pipeline réel IncrementLevel). Validation en jeu : RzZz.
+6. Façade `PhaseComponent` : **ÉTAGE 1 FAIT ET PROUVÉ EN PIE le 2026-07-10** (répétition générale, détail dans QMODULE_ACTIVATION_ALIGNMENT.md §8) : GetCurrentPhase et CallPhaseUpdate lisent le NIVEAU du mur v2 via `UQModule_LegacyFacade::QMOD_GetLegacyPhaseLevel` (SelectInt pur, -1 = retombe legacy octet-identique en dormant ; backup `PhaseComponent_BACKUP_PreFacade` en place ; sonde `qmodule.Test.Facade`). La re-notification est FAITE aussi (2026-07-10, prouvée en live) : push C++ côté producteur (`QMOD_NotifyLegacyPhaseComponents`, câblé dans MarkRackDirty/OnRep_Sockets + les 4 mutations d'item-rack), zéro edit BP supplémentaire. RESTE l'étage 2 : lecture des stats AGRÉGÉES par les consommateurs réels (jetpack, armes via WeaponScript, véhicules via VehicleBase).
 7. Entrée établi dans le catalogue QBuilder (`UQBuilder_Data_ActorDataBase.InputData`, ID stable réservé) + coûts `ResourceData` + mesh.
 8. Multi réel : valider les lectures de rack d'item côté client distant (données DataObject serveur : prévoir réplication du codec si l'UI client en a besoin) et re-dérouler l'E2E en listen + dédié.
 9. Limite connue : le flush de persistance au changement de monde est best-effort (fenêtre du debounce 2 s : une insertion faite < 2 s avant un travel peut se perdre ; l'auto-save par changement couvre le reste).
+
+### 15.10 CHANTIER « 82 MODULES CYBORG » : campagne de branchement étage 2 (démarrée 2026-07-11, priorité RzZz)
+
+Décision RzZz 2026-07-11 : priorité aux modules CYBORG du catalogue (armes/véhicules plus tard). Objectif : chaque module de la liste développable de manière fonctionnelle et fun. La table des leviers vérifiés est dans QMODULE_ACTIVATION_ALIGNMENT.md §5.1.
+
+**Le pattern de branchement validé (Servomoteurs, 2026-07-11)** : insertion de NŒUDS PURS dans le BP consommateur, au fil de la donnée, via `UQModule_StatLibrary::QMOD_GetStat(self, Stat.X, base)` (BlueprintPure, passthrough neutre si plugin OFF, résout le mur via le PlayerState). JAMAIS de flux exec touché. Backup systématique du BP avant édit. Exemple livré : ALS_Base_CharacterBP `UpdateDynamicMovementSettings` : MaxWalkSpeed final = (chaîne existante ×0.85) × SelectFloat(QMOD_GetStat(SprintSpeed, 1.0), 1.0, GetMappedSpeed() > 2.5) : le facteur ne s'applique qu'au sprint, identique serveur/client owner (data répliquée), compilé 0 erreur. Backup : `ALS_Base_CharacterBP_BACKUP_PreQMOD`.
+
+**Lot 1 : leviers OK (édits purs, un module = un edit = un test)** :
+- [x] Servomoteurs de Jambes (sprint) : FAIT 2026-07-11, test de course réelle par RzZz à faire.
+- [x] Amortisseurs Cinétiques : FAIT 2026-07-11 (SV_OnLanded : dégât × (1 - QMOD/100), nœuds purs, compilé 0 erreur).
+- [x] Nano-Régénérateur : FAIT 2026-07-11 via la nouvelle `QMOD_GetStatForObject` (les stat scripts ne sont pas des acteurs et `OwnerStatsComponent` est private : résolution par chaîne d'outer côté C++). Vigilance : vérifier en jeu que la résolution d'outer aboutit (sinon VLOG « no owning actor resolvable » et plan B).
+- [x] Sac Digitique Étendu : FAIT 2026-07-11 (UpdateInventorySize : terme Round(GetStat) ajouté entre la somme et le Max(0)).
+- [x] Négociateur : FAIT 2026-07-11 (le DynamicRate passe par GetStatForObject au point de consommation ; l'affichage PUW_Shop du prix de vente reste à harmoniser).
+- [x] Nano-Réparateur de Drone : FAIT 2026-07-11 (temps Select × (1+v), appliqué au Delay ET au feedback client).
+- [x] Blindage de Drone : FAIT 2026-07-11 (Selection du Switch d'impacts = clamp(phase + ImpactsAdd, 0, 3) : sémantique +N hits avec le plafond existant).
+- LEÇON backups : ne PAS dupliquer les composants BP self-référencés (copie incompilable + dialogue au Play) : export T3D + doc des édits à la place. Le backup InventoryComponent a été supprimé (T3D conservé), les 4 autres compilent proprement.
+**Lot 2 : PARTIEL (pré-requis à créer)** :
+- [x] Compacteur de Matière : FAIT 2026-07-11 (MaxStackPerSlot × (1+v) aux 2 sites de lecture, arrondi bas, min 1 ; les stacks existants sur-remplis à l'extraction du module restent valides, seuls les nouveaux ajouts respectent la limite réduite).
+- [x] Blindage Sous-Cutané : FAIT 2026-07-11 : étape d'ARMURE créée en tête de Lib_Life.ApplyStatDamageToActor : dégât effectif = max(0, dégât - Armor.Flat de la CIBLE) avant NoMatter/bouclier/vie. S'applique à tout acteur avec un mur (passthrough sinon). DÉCISION EN ATTENTE (RzZz) : câbler le DamageReductionPercent des 11 équipements (casques/torses, donnée jamais lue) dans la même étape ?
+- [ ] Caisson Hermétique : filtre DropAllItemsDeath (flux exec : à faire avec soin, fonction dupliquée PawnBP/CharacterBP).
+- [ ] Surcouche de Bouclier : nécessite l'infrastructure BehaviorGrant (accorder SS_Shield quand le module est actif) : premier consommateur du pipeline de grants.
+**Lot 3 : les coquilles restantes du catalogue** : chiffrer les StatMods dans l'Éditeur de Modules puis brancher famille par famille (les tags Stat.* existants sont réutilisables ; créer les manquants en natif).
+
+Règles de campagne : un backup par BP touché ; nœuds purs only ; toute nouvelle stat = tag natif QModule_Tags ; test PIE par module (install + phase + effet mesuré) ; jamais plus d'un BP existant modifié par lot de validation.
 
 ### 15.8 M5 Armes + M6 Véhicules : couche de données livrée (2026-07-04 nuit, compilée verte)
 

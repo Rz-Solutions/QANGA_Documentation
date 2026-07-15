@@ -262,6 +262,26 @@ garage complet) ; canal actifs (InputSystem + M7).
 
 ## 8. Plan de facade PhaseComponent (checklist point 6a, detail d'implementation)
 
+> **ETAGE 1 EXECUTE ET PROUVE EN PIE le 2026-07-10** (repetition generale). Les 2 corps de fonctions
+> (GetCurrentPhase, CallPhaseUpdate) sont edites en NOEUDS PURS uniquement (aucun flux exec touche) :
+> SelectInt(A=QMOD_GetLegacyPhaseLevel(self), B=chemin legacy, bPickA=(A>=0)). Compilation 0 erreur,
+> validation = grade et issues IDENTIQUES au backup PhaseComponent_BACKUP_PreFacade (zero issue nouvelle).
+> Preuve PIE (sonde `qmodule.Test.Facade`, L_Dev_Start) : dormant -> 4 composants BP=0|v2=-1 (legacy
+> octet-identique) ; active + 2 phases inserees au mur sur Jetpack -> BP=2|v2=2 (le consommateur legacy
+> lit le mur v2), persistance SQLite re-verifiee au passage. La branche broadcast(0) de CallPhaseUpdate
+> (K2Node_CallDelegate_0, contrat Nash) est INTOUCHEE.
+>
+> **RE-NOTIFICATION (8.2) FAITE ET PROUVEE EN LIVE le 2026-07-10**, avec une deviation assumee vs le plan
+> ci-dessous : pas de bind BP (SetPlayerId/BeginPlay) ni de nouveau delegate statique ; push COTE PRODUCTEUR
+> en C++ pur, zero edit BP supplementaire. `UQModule_LegacyFacade::QMOD_NotifyLegacyPhaseComponents(Pawn)`
+> parcourt le pawn + ses acteurs attaches et ProcessEvent `CallPhaseUpdate` sur chaque PhaseComponent
+> (garde ParmsSize==0, gate Enabled). Cable dans `UQModule_RackComponent::MarkRackDirty` + `OnRep_Sockets`
+> (via NotifyLegacyConsumers : owner PlayerState -> pawn ; vehicules no-op) et dans les 4 mutations
+> QModuleItemRack (InstigatorPawn). Preuve live : insertion d'une phase T5 au mur par RzZz ->
+> "6 component(s) refreshed" ; le push tire aussi a la restauration de persistance au login (voulu) ;
+> IS_Construction (tag sans module v2) -> facade -1 -> fallback legacy verifie en reel.
+> L'etage 2 (stats agregees) reste A FAIRE.
+
 ### 8.1 Contrat actuel verifie (ce que les 103 referencers consomment)
 - `GetCurrentPhase() -> Current Phase : int` : si `PlayerPhaseData` valide -> `PlayerPhaseData.GetPhaseLevel(Phase = PhaseTarget)` sinon 0. **`PhaseTarget` est un OBJET DA_Phase** (pas un tag ; le tag est `PhaseTarget.PhaseTag`). Defaults : SCS des characters = P_GeneralSystem ; items = `IDA.Phase` pose au BeginPlay (boucle d'attente de l'IDA).
 - `OnPhaseUpdate (dispatcher, param int)` : pousse par `CallPhaseUpdate()` : broadcast(GetPhaseLevel) si PlayerPhaseData ET PhaseTarget valides, **sinon broadcast(0)** : ce broadcast-0 initialise les stats des armes SANS phase (FA62, AK47, MZ56, Shotgun, Sniper) : NE PAS LE PERDRE.
@@ -299,6 +319,31 @@ Edits BP (jour J, sur /Game/Systems/Phase/PhaseComponent UNIQUEMENT, signatures 
 - Elle ne supprime RIEN du legacy (GlobalPhaseManager/PlayerPhaseData/SS_Phase continuent de tourner cote donnees tant que la bascule n'est pas consommee).
 - Elle ne change AUCUNE valeur de gameplay (etage 1).
 - Elle ne touche pas aux 102 autres referencers : un seul asset edite (PhaseComponent), plus l'eventuel signal C++ additif.
+
+### 8.3bis Jetpack 3 niveaux (decision RzZz 2026-07-10 : CABLE ET PROUVE EN PIE le soir meme)
+
+> ETAGE 2 JETPACK FAIT : (a) les 2 gates BP d'IS_JetPack remappes par pin-defaults surs
+> (backup IS_JetPack_BACKUP_PreV2Gates) : vol rapide passe de niveau>=1 a niveau>=2, stationnaire
+> de niveau>=1 a niveau>=3. DECOUVERTE : en legacy les DEUX modes arrivaient des le niveau 1
+> (les deux comparaisons etaient '> 0') ; la conversion 8.4 doit donc decider : legacy L1 -> v2 L3
+> (aucune perte de mode) ou accepter le reequilibrage (CHOIX UTILISATEUR a acter).
+> (b) ApplyJetpackHardware (LegacyFacade) pousse MaxFuel a chaque mutation de rack + 2 refreshs
+> differes post-login (WallManager, 4s/10s) : niveau 0 -> MaxFuel=0 (jetpack INACTIVABLE : la
+> 'phase 1 active le jetpack' est reelle), niveaux 1/2/3 -> 125/150/175 (CDO 100 x FuelMax v2).
+> PREUVE PIE : echelle insert/remove loggee 125 -> 150 -> 175 -> 150 -> 125 -> 0.
+
+(Texte du plan initial ci-dessous, conserve pour trace.)
+Le module Jetpack v2 passe a **3 niveaux** : N1 = jetpack de base ACTIVE (+ conso/recharge),
+N2 = vol rapide (sprint en l'air), N3 = mode stationnaire + tout le reste. `QMD_Jetpack` est
+deja a MaxLevel=3 avec les 3 descriptions et FuelMax Mult [0.25, 0.5, 0.75] (a equilibrer).
+CONSEQUENCES A LA BASCULE (etage 2, PAS encore fait) :
+- IS_JetPack gates actuels : FastFlight = `GetCurrentPhase > B1`, Stationary = `GetCurrentPhase > B2`
+  (litteraux a relever), et l'ACTIVATION DE BASE n'est PAS gatee par phase en legacy.
+- Remap au jour J : activation gatee par niveau >= 1 (NOUVEAU comportement voulu par RzZz),
+  fast flight >= 2, stationnaire >= 3 (les deux litteraux B decales de +1).
+- Conversion 8.4 : pour le jetpack, offset legacy->v2 = NIVEAU + 1 (un joueur legacy L1 fast
+  recoit v2 L2, L2 stationnaire recoit v2 L3 ; personne ne perd un mode, et le N1 "activation"
+  est couvert pour tout joueur possedant l'item).
 
 ### 8.4 Conversion des niveaux a la bascule (script d'activation, une fois)
 - MUR : pour chaque joueur, lire PlayerPhaseData.PhaseLevelMap et inserer l'equivalent en phases dans les modules de base du mur (`QMOD_Authority_InsertPhase`, tiers T1 x niveau). GS niveau 2 = 2 phases T1 dans le noyau, etc.
