@@ -151,7 +151,7 @@
 | As de l'esquive | C | Alerte de danger/verrouillage en vol | ➕ |
 | Longue-vue stellaire | C | Portée d'affichage StarMap augmentée | ? StarMap |
 | Docker aguerri | P | Entrée/sortie et amarrage +50 % plus rapides | ➕ |
-| Antenne longue portée | C | Capte les stations QRadio plus loin | ✔ QRadio |
+| Antenne longue portée | C | **IMPLÉMENTÉ 2026-07-17** (§9.21) : radio intégrée mains-libres niv 1 + portée de réception ×1.5/×2.0 (stations ET balises de mission), contrôle via la roue d'atouts | ✔ QRadio |
 | Pilote de chasse (Voss) | P | +20 % vitesse aérienne, surchauffe moteur (instable) | ➕ |
 
 ---
@@ -708,3 +708,139 @@ passe (le second réutilise le pipeline du premier), validées en PIE :
   fraction (sans lui, une réduction > 100 SOIGNERAIT en tombant). Compile clean.
   ⚠️ DÉCISION À VALIDER (RzZz) : cette réparation RÉACTIVE les dégâts de chute pour tous
   les joueurs (20..80 selon la vitesse) : c'était peut-être cassé depuis un moment.
+
+### 9.18 AUDIT COMPLET pré-continuation (2026-07-16, demande RzZz « tout est réellement bon ? »)
+
+Deux audits adversariaux (C++ multi/correctness/perf + anti-fausses-features data↔code)
+plus vérifications pin-à-pin. Résultats et actions :
+
+- **Verdict multi C++** : aucune faille critique sur serveur dédié. RPC conformes
+  (Server Reliable état / Multicast Unreliable cosmétique), validations serveur complètes
+  (autorité + possession + portée + cooldown), item-racks protégés contre les clients
+  malveillants (PawnOwnsInstance), bases archétype anti-cumul, réflexion défensive.
+- **4 défauts corrigés dans la foulée (compilés)** :
+  1. Les pushes de stats de la façade tournaient sur TOUS les clients à chaque OnRep
+     (simulated proxies = O(N²) à 500 joueurs) → gate `HasAuthority || IsLocallyControlled`
+     (les proxies gardent seulement le refresh cosmétique CallPhaseUpdate).
+  2. Le missile COSMÉTIQUE de la frappe aérienne gardait sa charge de dégâts → en serveur
+     d'ÉCOUTE le spawn a autorité = double-dégât possible → TotalDamage/DamageRadius
+     neutralisés comme les ordnances d'épaule (namespace helpers déplacé en amont).
+  3. Bind LevelUp → crédit de phase : re-bind si l'instance SS_Level liée est recréée
+     (sinon les level-ups cessaient de créditer en silence) + re-tentative sur MarkRackDirty.
+  4. Durcissements : plafond 16 sur la liste de locks envoyée par le client (anti mini-DoS),
+     buffer de splash hissé hors boucle (alloca par acteur), tags de régén en cache statique,
+     re-bind du HUD si le rack change (travel/reconnect).
+- **Anti-fausses-features : 24 stats ACTIFS vérifiés producteur→consommateur→sémantique.**
+  Sprint : le Select « garde-fou » est en réalité un GATE D'ALLURE (Mapped Speed > 2.5 =
+  sprint uniquement) : correct, fausse alerte levée (la note 9.17 était fausse sur ce point).
+  Drone.ImpactsAdd / Drone.RepairTimeMult / Inventory.StackMult : consommateurs RÉELS
+  trouvés dans IS_DroneBase et InventoryComponent (branchés lors de passes antérieures :
+  la note « reportés » de 9.17 était périmée) : câblage aval à confirmer à l'occasion.
+- **UN vrai fantôme : `Stat.Cyborg.Matter.Max`** (QMD_GeneralSystem +200/400/600) : son seul
+  lecteur est le CyborgAdapter jamais instancié (code mort M2). EN JEU la matière suit bien
+  le niveau du noyau MAIS par le chemin legacy (PhaseComponent → Select BP) avec les
+  VALEURS LEGACY (base 100 → 300 → 500), pas celles du QMD. ⚠️ DÉCISION RZZZ : recaler le
+  QMD sur les valeurs réelles (affichage honnête) ou câbler le stat v2 (stage 2) ; et le
+  Select legacy n'a que 3 options alors que le noyau v2 monte niveau 3 (comportement de
+  l'index 3 à vérifier).
+- **PIE des réglages multi** : testé en solo uniquement ; RzZz fait les tests multi réels
+  sur une dev branch Steam (les réglages PIE de l'éditeur ont été REMIS EN SOLO).
+
+### 9.19 Cap « compléter le cyborg » + vague A (2026-07-16, directives RzZz)
+
+- **Cap** : compléter TOUS les modules cyborg, puis les véhicules, puis les armes. Les
+  modules sont inaccessibles en version publique : itération libre, tests systématiques.
+  Ordre des vagues validé : A (branchements rapides), puis D (les DRONES), puis le reste.
+- **Matière : GRAND PRÉALABLE** : RzZz refuse toute décision tant que l'écosystème complet
+  (disques de matière, recyclage des loots, réparation, marchands...) n'est pas cartographié
+  et discuté : « il ne faut pas invalider des propositions de gameplay d'avant ». Une recon
+  approfondie est en cours ; le Recycleur optimisé (injecte de la matière) et le recalage
+  du noyau ATTENDENT cette discussion.
+### 9.20 Chantier matière : étage 2 + Recycleur blindé (2026-07-16, décisions déléguées par RzZz)
+
+- **Vision RzZz gravée** : la matière = jauge vitale universelle (faim/soif/énergie), lore
+  de dématérialisation numérique (tout sauf l'organique), disques = refill instantané,
+  de plus en plus de puits (soin, réparation drone, conso des modules...) ; les modules
+  de capacité de stockage sont désirés. La pression de survie (drain passif, ×2 dégâts à
+  sec) NE BOUGE PAS.
+- **Matière max : étage 2 avec fallback public, CÂBLÉ** (ALS_Base_CharacterBP, cluster
+  On Phase Update) : `SetMaxMatter( IsQModuleEnabled ? Round(QMOD_GetStat(self,
+  Stat.Cyborg.Matter.Max, 100)) : Select_legacy )` : nodes purs uniquement, le Select
+  legacy 100/300/500 reste le chemin du mode PUBLIC (plugin off), le stat v2 (base 100 +
+  Add 200/400/600 = 300/500/700) prend la main quand les modules sont actifs. Ferme le
+  bug d'index 3 du Select. Compile clean, sauvé, sanity PIE sans erreur. Valeurs
+  identiques aux niveaux 1-2 : zéro changement joueur ; le niveau 3 du noyau ouvre 700.
+- **Recycleur optimisé** : data posée (+25/50 %, 2 niveaux, tag Stat.Cyborg.Recycle.YieldMult)
+  et helper C++ `QMOD_GetRecycleYieldFactor(RecyclerContext, RecycledItem)` écrit :
+  résout le facteur sur le recycleur et retourne TOUJOURS 1.0 pour les disques de matière
+  (anti-blanchiment coins→matière), résolution réflexive du DA (ItemDataAsset/ItemData/
+  ItemDA, fallback nom). ⚠️ EN ATTENTE : le rebuild C++ est BLOQUÉ par du code non
+  compilable d'une AUTRE session (chantier quêtes : CLIScape/Tool_GetQuest.cpp +
+  QAutomatedTestSuite/QuestTestSubsystem.cpp, modifiés à 17h32-17h37) : les édits BP des
+  2 sites de recyclage (InventoryComponent SV_RecyleItem fan-out ×2 popup inclus +
+  ItemScriptBase ServerTryRecycleItem) se feront après compilation du helper.
+  Cartographie pin-à-pin des 2 sites archivée en 9.19/agent.
+- **Leçon outillage** : les retries aveugles sur le bridge créent des NODES DOUBLONS
+  quand la réponse flake (la requête passe souvent quand même) : 4 orphelins créés puis
+  purgés proprement (delete_nodes + recompile clean). Sonder avant de re-tenter un
+  add_node.
+- **RECYCLEUR OPTIMISÉ : BRANCHÉ ET COMPLET** (après déblocage du build quêtes) : le
+  helper `QMOD_GetRecycleYieldFactor` est compilé et câblé aux DEUX sites serveur :
+  `ItemScriptBase.ServerTryRecycleItem` (chaîne Conv→×facteur→Round entre RecyclableValue
+  et AddOrRemoveMatterToActor, item = self) et `InventoryComponent.SV_RecyleItem`
+  (même chaîne sur la somme de `CalcRecycleMatterOfItemAndAttachments`, avec les DEUX
+  consommateurs re-routés : le crédit ET le popup client `OC Item Recycled` : l'affiché
+  = le reçu). Compiles clean, sauvé, sanity PIE sans erreur. Les disques recyclent à
+  valeur faciale (exclusion C++). Test en jeu RzZz : recycler un item courant avec le
+  module actif : +25/50 % de matière ; recycler un Disk : valeur inchangée.
+- **Diagnostic « je ne prends pas de dégâts » (question RzZz)** : conforme au cumul max :
+  armure plate 30 annule les armes ≤30 ; le bouclier 150 encaisse ~300 post-armure (le
+  pipeline divise les dégâts bouclier par 2) avec régén ; vie 4 HP/s ; chutes nulles ;
+  jamais à sec. Leviers d'équilibrage prêts : `GlobalStatClampMaxByTagName` (comme le
+  FireRate 0.8). Vérifs : AUCUNE collision de tags entre modules cyborg (les partages
+  Weapon.Damage/FireRate sont le design) ; UNE collision d'écriture identifiée :
+  `GravityScale` (Coussin) vs l'alignement de gravité planétaire NinjaCharacter (24 refs
+  dans le pawn) : le coussin marche sur gravité simple, est écrasé sur planètes : à
+  re-brancher DANS le graphe de gravité (pattern sprint) lors d'une prochaine passe.
+
+- **Vague A livrée (hors matière)** :
+  - `CoussinGravitationnel` BRANCHÉ : GravityScale natif du CharacterMovement
+    (×0.8/0.65/0.5, base archétype, nouveau tag `Stat.Cyborg.Fall.GravityMult`,
+    MaxLevel 2→3). Validé PIE : `Gravity cushion: scale x0.65`.
+  - `RegulateurAtmospherique` BRANCHÉ : la façade pousse aussi `FuelConsume` du IS_JetPack
+    (CDO × facteur `Stat.Cyborg.Flight.FuelUseMult`, ×0.9/0.8/0.7). Validé PIE :
+    `Jetpack hardware: level=3 maxfuel=175 consume=0.70`.
+  - Confirmations pin-à-pin drone/stack : interrompues par la fermeture éditeur (l'agent
+    bridge est mort avec) : à refaire à l'occasion, non bloquant.
+
+### 9.21 Antenne longue portée : radio intégrée du cyborg (2026-07-17, design validé RzZz)
+
+- **Design (3 réponses AskUserQuestion)** : radio intégrée mains-libres dès le niveau 1
+  (capte comme une radio portable allumée, sans item) + sensibilité aux niveaux 2-3 ;
+  la portée d'accroche accrue vaut AUSSI pour les balises de mission (stations runtime,
+  type Ghost Signal) sans indication directionnelle (la recherche au gradient sonore de
+  Q027 reste intacte) ; contrôle 100 % roue d'atouts : valider la roue sur le module =
+  allumer/couper, touche de tir gadget = allumer puis station suivante à chaque appui.
+- **Côté QRadio (additif, neutre par défaut)** : `ReceptionRangeMult` (répliqué, défaut
+  1.0) étire `FullCm`/`CutCm` dans `ComputeSignalQuality` (un seul point de code couvre
+  catalogue ET balises runtime) ; `bPrivateReception` (répliqué, défaut false) : mode
+  implant (le porteur entend en 2D, les autres joueurs RIEN : jamais de World3D),
+  contrairement aux radios portables/véhicules qui restent des haut-parleurs ; API
+  publique `SetPowered`/`IsPowered`/`StepStation` (délègue à `Server_SetRadioOn` /
+  `CycleStation` : même chemin server-authoritative que les touches conducteur).
+- **Côté QModule** : `ApplyIntegratedRadio` (LegacyFacade, dans la liste des pushes) :
+  création SERVEUR uniquement (le composant `QModule_IntegratedRadio` se réplique),
+  recherche par NOM (jamais par classe : un hôte avec sa propre radio reste intact),
+  niveau <1 = DestroyComponent, sinon pousse `Stat.Cyborg.Radio.RangeMult` (Multiply,
+  base 1.0 : ×1.5/×2.0 attendus aux niveaux 2-3). Dépendance Build.cs QModule→QRadio
+  (sans cycle : QRadio ignore QModule). Roue : tag dans `GadgetTags[]`, toggle au commit
+  (`HandleWheelReleased`), branche radio en tête de `HandleFirePressed` (aucun tick :
+  `UpdateTickMode` inchangé).
+- **Tags** : `Module.AntenneLonguePortee` + `Stat.Cyborg.Radio.RangeMult` dans
+  `Config/Tags/QModuleTags.ini` (141 tags).
+- **Bonus constaté** : les touches radio natives (Next/Prev/Toggle des véhicules) se
+  bindent aussi sur la radio intégrée quand les presets sont dans le contexte à pied
+  (même mécanisme `BindRadioInputs`, `IsLocalDriver` vrai sur le pawn possédé).
+- **Reclassement** : l'entrée catalogue vivait en famille H (Pilotage) ; le module vise
+  le cyborg à pied → famille D Furtivité & Information (`Module.Family.Stealth`) au QMD.
+- ⚠️ Reste au moment de l'écriture : asset QMD à créer post-rebuild + test PIE.

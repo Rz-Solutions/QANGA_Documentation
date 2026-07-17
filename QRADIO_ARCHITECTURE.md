@@ -180,7 +180,7 @@ Le concept est **O(1) par client**, pas O(véhicules). Pour le garantir :
 
 ## 13. Différé / hors scope (v1)
 
-- **Module radio côté personnage** : reporté (l'arbre de talent des modules du personnage doit d'abord être refait). Le `UQRadioComponent` est conçu pour s'y poser plus tard (mode `Local`, non répliqué).
+- **Module radio côté personnage** : ~~reporté~~ **FAIT 2026-07-17** via le module QModule « Antenne longue portée » (cf. `QMODULE_CATALOGUE.md` §9.21). Écart assumé vs le plan d'origine (« mode Local, non répliqué ») : le composant est posé par le SERVEUR sur le pawn (nom `QModule_IntegratedRadio`) et reste répliqué, pour réutiliser tel quel le chemin de sélection server-authoritative (`Server_SetStation`/`Server_SetRadioOn`). La privauté est obtenue par la nouvelle prop `bPrivateReception` (le porteur entend en 2D, les autres clients : mode Off, jamais de World3D). Nouvelle prop `ReceptionRangeMult` (répliquée, défaut 1.0, neutre) : multiplie `FalloffStartKm`/`RadiusKm` de chaque émetteur dans `ComputeSignalQuality` : c'est le levier de sensibilité du module (et de futures antennes véhicule). API publique ajoutée : `SetPowered`/`IsPowered`/`StepStation`.
 - **Radio audible depuis l'extérieur du véhicule** (émetteur spatialisé) : possible évolution ; v1 = lecture locale 2D pour l'occupant.
 - **Synchro fine sample-accurate** : non nécessaire (cf. §6).
 
@@ -220,3 +220,15 @@ Le concept est **O(1) par client**, pas O(véhicules). Pour le garantir :
 **Phase 7 — UI tuner.** `WBP_` tuner : stations captées, sélection, now-playing (`TrackMeta` + `BroadcastTime`), jauge de signal ; Enhanced Input. *Validation : UX complète en jeu.*
 
 **Phase 8 — Contenu & réglages.** Vraies stations par genre (MetaSounds + assets), émetteurs posés en data (`PlanetRef + LocalOffset`), réglages `DefaultGame.ini`. *Validation : balade en jeu, captation cohérente selon la position.*
+
+---
+
+## 16. Stations runtime ephemeres (registre) : ajout 2026-07-17
+
+Nouvelle capacite ADDITIVE pour les balises de quete ("Ghost Signal" Q027 et suivantes) : une station peut etre enregistree/retiree EN COURS DE JEU sans toucher au catalogue permanent `DA_QRadio_Stations`.
+
+- **`UQRadioRuntimeStationSubsystem`** (`QRadioRuntimeStationSubsystem.h`, `UGameInstanceSubsystem`) : `RegisterRuntimeStation(FQRadioStation)` (upsert par StationId), `UnregisterRuntimeStation(FName)`, `GetRuntimeStations()`, sucre `RegisterRuntimeBeacon(...)` (station mono-emetteur Space a position monde absolue) et wrappers statiques `RegisterBeaconFromQuest`/`UnregisterBeaconFromQuest` (WorldContext) pour Blueprint.
+- **Resolution** : `UQRadioComponent::ResolveStation()` cherche le catalogue D'ABORD puis le registre. Points touches : `EnsureActiveStation`, `SetStation`, `GetStationIdByOffset` (anneau du tuner = catalogue puis runtime, dedup), `Server_SetStation_Implementation` (le serveur valide aussi les stations runtime). **Registre vide = comportement strictement identique a l'existant.**
+- **Reseau** : le registre n'est PAS replique. Le pattern d'usage est l'action de quete native **`UQuestActionRadioBeacon`** (module `DynamicQuestSystemObjectives`, DisplayName "Radio Beacon", operations Register/Unregister) dont le `NetworkMode` par defaut est `GlobalMulticast` : l'enregistrement s'execute sur le serveur (validation du tuning) ET sur chaque client (audio + cycle du tuner). ⚠️ Limite connue : un client qui rejoint APRES la diffusion ne recoit pas les balises actives (V2 : replication du registre ou re-fire au join).
+- **Retrait a chaud** : les recepteurs en cours d'ecoute gardent leur COPIE `ActiveStation` (pas de coupure) ; la station disparait du cycle au prochain zapping ; un `ReplicatedStationId` pointant une station retiree retombe sur la station par defaut du catalogue.
+- **MetaSound balise** : `MS_QRadio_Beacon` (`/Game/Systems/QRadio/`) = clone de `MS_QRadioStation` (meme contrat + friture) avec `Music = [Scifi_Scanner_Scanning_1_Wav]` (pulsations 6.358 s). `FalloffStartKm=0` + `RadiusKm=N` donnent un gradient de clarte continu : la localisation "a l'oreille".
