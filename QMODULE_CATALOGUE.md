@@ -844,3 +844,41 @@ plus vérifications pin-à-pin. Résultats et actions :
 - **Reclassement** : l'entrée catalogue vivait en famille H (Pilotage) ; le module vise
   le cyborg à pied → famille D Furtivité & Information (`Module.Family.Stealth`) au QMD.
 - ⚠️ Reste au moment de l'écriture : asset QMD à créer post-rebuild + test PIE.
+  (RÉSOLU : QMD créé, gate moteur fixé via bPrivateReception, module VALIDÉ EN JEU
+  par RzZz le 2026-07-17.)
+
+### 9.22 Drone médical : premier drone de la vague D (2026-07-17, design validé RzZz)
+
+- **Design (4 réponses AskUserQuestion)** : soigne les ALLIÉS EN ZONE (porteur en
+  priorité + pawns de même faction CombatComponent dans le rayon : couvre joueurs ET
+  compagnons PNJ recrutés) ; 2e DRONE DÉPLOYABLE dédié (pas de retouche du drone-caméra
+  3P critique) ; PULSES DE SOIN RÉELS (timer serveur 1 Hz via Lib_Life.ApplyHealToActor,
+  le primitive canonique de IS_RepairBase) ; coût DOUBLE : durée de déploiement limitée
+  (45 s puis cooldown 20 s) ET drain de matière (0.5 matière par PV réellement soigné,
+  ratio aligné sur l'item de réparation 25-50 pour 40-100 PV).
+- **Architecture retenue (recon Opus 9.22)** : acteur léger HORS QAI (le registre QAI
+  est plafonné ~1024 agents monde : un drone par joueur le saturerait). Pattern de coût
+  du drone-caméra IS_DroneBase (déjà payé à l'échelle joueurs) : `AQModule_MedicalDroneActor`
+  (nouveau, Plugins/QModule) : attach au pawn (épaule gauche, AttachmentReplication) +
+  hover sinusoïdal PUREMENT COSMÉTIQUE côté client (jamais répliqué, tick 30 Hz coupé
+  sur serveur dédié), mesh SM_Drone_M par défaut (Settings.MedicalDroneMesh, soft) +
+  point light verte médicale (flash au pulse via PulseCounter RepNotify, pas de RPC).
+- **Serveur** : pulse 1 Hz : cibles = porteur + alliés (byte Faction du CombatComponent
+  lu par réflexion, -1 = pas allié) ; lecture vie CurrentPhysicalState/MaxPhysicalState
+  (via QMOD_FindPawnStat) pour NE JAMAIS gaspiller de matière sur une cible pleine ;
+  budget matière lu par Lib_Matter.GetMatterOfActor (la jauge EST le disque équipé slot
+  Disk) ; heal via ApplyHealToActor réflexif (params posés par POSITION tolérante +
+  __WorldContext rempli : le piège documenté du splash) ; drain unique
+  AddOrRemoveMatterToActor(-ceil(total*0.5)). Jauge vide = le drone tourne à vide.
+- **Rack** : SV_TriggerMedicalDrone() TOGGLE (déployer/rappeler), validation serveur
+  niveau+cooldown, stats du mur : Drone.HealPerSec (Override [3,5,8] PV/s) et
+  Drone.HealRadiusM (Override [6,9,12] m) ; MedicalDroneReadyAtServerTime répliqué
+  COND_OwnerOnly (pattern ordnance), cooldown armé à la FIN du drone
+  (Authority_OnMedicalDroneEnded depuis l'EndPlay de l'acteur).
+- **Roue** : Module.DroneMedical dans GadgetTags[], tir = SV_TriggerMedicalDrone.
+- **Data** : QMD_DroneMedical était un STUB (identité seule) : à remplir post-rebuild
+  (StatMods ×2 + LevelDescriptions ×3). Tags ini ajoutés : Stat.Cyborg.Drone.HealPerSec
+  + Stat.Cyborg.Drone.HealRadiusM (143 tags).
+- **Settings** : MedicalDroneMesh / LifetimeSeconds 45 / CooldownSeconds 20 /
+  MatterCostPerHP 0.5 (section [/Script/QModule.QModule_Settings], overridable ini).
+- ⚠️ Au moment de l'écriture : rebuild + remplissage QMD + test PIE à faire.
