@@ -844,6 +844,56 @@ plus vérifications pin-à-pin. Résultats et actions :
 - **Reclassement** : l'entrée catalogue vivait en famille H (Pilotage) ; le module vise
   le cyborg à pied → famille D Furtivité & Information (`Module.Family.Stealth`) au QMD.
 - ⚠️ Reste au moment de l'écriture : asset QMD à créer post-rebuild + test PIE.
+- **FIX radio (même jour, post-test)** : la lecture ne démarrait pas : le pawn porte un
+  composant véhicule (`VehiclePlayerOwner`/système VehiclesOwned) exposant
+  `GetVehicleState`, le gate moteur de la radio s'y accrochait et attendait un moteur
+  à jamais éteint. Fix : `bPrivateReception` court-circuite `ResolveEngineSource`
+  (implant toujours alimenté) + ceinture dans `ComputeDesiredMode` ; et l'implant
+  démarre ÉTEINT à l'attache (`SetPowered(false)` dans la facade : socketer un module
+  ne balance pas de musique).
+
+### 9.22 Vague « actions de roue » : Rappel de flotte v1 + Largage + roue 14 slots (2026-07-17, choix RzZz)
+
+- **Décisions RzZz (AskUserQuestion)** : vague = Rappel de flotte v1 (périmètre minimal)
+  + Largage de ravitaillement ; saturation de la roue résolue par ÉLARGISSEMENT
+  (2e anneau) plutôt que par tri à 8.
+- **Roue élargie** (`QModule_GadgetHUD.cpp`) : `MaxWheelSlots` 8→14, les 8 slots
+  historiques inchangés (mémoire musculaire), anneau 2 équilibré autour du cluster.
+  La sélection passe de l'angle pur à la PROXIMITÉ d'un pointeur virtuel :
+  `FWheelEntry.LocalPosition` + `WheelMaxRadius` (reset à chaque rebuild), l'amplitude
+  du geste choisit l'anneau, la direction la cellule (dégénère à l'ancien comportement
+  à un seul anneau).
+- **Rappel de flotte v1** (`SV_TriggerFleetRecall`, sans visée) : moule drone médical
+  (niveau + cooldown répliqué owner-only `FleetRecallReadyAtServerTime`). Lit
+  `CurrentOwnedVehicle` (sinon `OwnedVehicles[0]`) sur le `PlayerVehiclesComponent`
+  du PlayerState (même hôte que le mur), résout le PlayerId via
+  `WorldVehiclesManager.GetPlayerIdByPlayerState` (ProcessEvent, helper
+  `CallNameLookup`), pose un point sol DERRIÈRE le joueur (Up planétaire + trace) et
+  spawn en deferred le BP du pipeline garage `SpawnPlayerOwnedVehicle_C`
+  (`PlayerId`/`CurrentVehicleId`/`UseSavedTransform=false` par réflexion) : l'ancien
+  véhicule despawn (manager anti-doublon), possession + tracker HUD automatiques.
+  Cooldown Override par niveau : 240/180/120 s. La portée planète/orbite/univers et
+  le trajet visible sur carte = v2 (design catalogue §7.1 inchangé).
+- **Largage de ravitaillement** (`SV_TriggerSupplyDrop(FVector)`, visée 200 m) : moule
+  airstrike (niveau + portée + cooldown `SupplyDropReadyAtServerTime`). Autoritaire :
+  un host transient porte le `SpawnLootComponent_C` du jeu (NewObject+Register),
+  `SetLootDataAsset(Supply_LootDA)` + `Spawn(false)` ×Rolls (3/6 par niveau,
+  `Stat.Cyborg.SupplyDrop.Rolls`), dispersion 120-260 cm dans le plan sol.
+  Cosmétique : `MC_SupplyDropVisual` pose la coque `SM_Conteneur_Airdrop` (NoCollision,
+  LifeSpan 120 s) sur chaque client. Chute/parachute = v2.
+- **Data** : `/Game/LootDA/Supply_LootDA` (DA_Loot, table pondérée IDA_BaseAmmo 60 /
+  IDA_MedBandage 30 / IDA_SmallHealBox 10, rien en drop garanti, 900 s au sol :
+  contenu modifiable en éditeur sans code). QMD recalés : RappelDeFlotte (cooldown
+  Override + 3 descriptions), LargageDeRavitaillement (Rolls + Cooldown Override +
+  2 descriptions). Tags : `Stat.Cyborg.FleetRecall.CooldownSec`,
+  `Stat.Cyborg.SupplyDrop.CooldownSec`, `Stat.Cyborg.SupplyDrop.Rolls` (146 tags).
+- **Settings** : bloc FleetRecall (SpawnerClass, SpawnDistanceCm 2500, Cooldown 180)
+  + bloc SupplyDrop (LootAsset, LootComponentClass, CrateMesh, RangeCm 20000,
+  Cooldown 90, Lifetime 120), défauts pointés sur les assets du jeu.
+- **Roue à 8 locataires** : frappe, guêpes, frelons, meneur, antenne, drone médical,
+  rappel de flotte, largage. Le 2e anneau se peuplera au 9e.
+- ⚠️ Test en jeu : le Rappel exige un véhicule POSSÉDÉ (save neuve = flotte vide :
+  acheter/posséder d'abord, sinon no-op silencieux loggé en verbose).
   (RÉSOLU : QMD créé, gate moteur fixé via bPrivateReception, module VALIDÉ EN JEU
   par RzZz le 2026-07-17.)
 
@@ -881,4 +931,30 @@ plus vérifications pin-à-pin. Résultats et actions :
   + Stat.Cyborg.Drone.HealRadiusM (143 tags).
 - **Settings** : MedicalDroneMesh / LifetimeSeconds 45 / CooldownSeconds 20 /
   MatterCostPerHP 0.5 (section [/Script/QModule.QModule_Settings], overridable ini).
-- ⚠️ Au moment de l'écriture : rebuild + remplissage QMD + test PIE à faire.
+- **Tests PIE automatisés (nuit du 17)** : VALIDÉ : déploiement par le rack (stats mur
+  résolus : 8 PV/s, rayon 1200 cm, 45 s), soin réel 70→100 en 4 pulses (le helper
+  réflexif a résolu les params réels : TargetActor/Heal/__WorldContext), anti-gaspillage
+  (vie pleine = zéro pulse), attache au pawn confirmée, recall immédiat par re-tir,
+  cooldown armé à la fin. Leçons de test : les RPC Server ne sont PAS des attributs
+  python (call_method("SV_...") obligatoire) ; percer les défenses GodWall = 3×150
+  (le bouclier absorbe à ×0.4) puis coups <100 sinon mort ; l'auto-dégât même-faction
+  est refusé par IsCombatAllowedToTarget (blesser avec un causer hostile).
+- **RÉSOLU la même nuit (2 rebuilds instrumentés)** : les 2 anomalies venaient du MÊME
+  piège : **les stats BP de QANGA sont des INT** (CurrentPhysicalState, Heal,
+  MatterToAddOrRemove...) et mes helpers réflexifs ne posaient/lisaient que
+  double/float : lecture vie -1 → cibles « illisibles » → zéro soin silencieux, et le
+  pin Heal restait 0 dans le buffer ProcessEvent. Fix : ReadNumberOnObject et
+  SetFirstNumberParm couvrent Int/Int64/Byte/Double/Float. Le « refus de
+  redéploiement » était en fait le cooldown, désormais loggé au dixième de seconde.
+  L'expiration one-shot défaillante est remplacée par un failsafe sur le timer de
+  pulse (fiable).
+- **VALIDATION FINALE PIE (nuit du 17-18)** : pulses +8 PV/s exacts (70→78→86→94→100),
+  clamp au manquant (dernier pulse 6 quand il manque 6), silence à vie pleine,
+  **repli automatique à 45 s pile** (« lifetime elapsed, folding back »), cooldown armé
+  et refus propre pendant 20 s, recall toggle, attache épaule. MODULE COMPLET.
+  Reste à valider par RzZz en conditions réelles : le drain de matière avec un disque
+  équipé (mécanisme int-compatible par construction, coût 0.5/PV) et le soin d'alliés
+  en multi (même faction via CombatComponent).
+- **LEÇON MAJEURE pour tous les futurs modules** : tout appel réflexif vers le
+  framework de stats BP doit traiter les pins comme des INT d'abord (le pattern
+  ReadStatValue/WriteStatValue de la façade existait déjà pour cette raison exacte).
