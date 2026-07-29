@@ -80,6 +80,7 @@ Documentation d'architecture des plugins first-party de QANGA (UE5.7, plugins C+
 | RzDirectMCP | [RzDirectMCP_ARCHITECTURE](RzDirectMCP_ARCHITECTURE.md) | Bridge MCP headless (tools client/natifs) |
 | RzBlueprintTools | [RzBlueprintTools_ARCHITECTURE](RzBlueprintTools_ARCHITECTURE.md) | Organisation de graphes BP + vérification projet |
 | EasyCook | [EasyCook_ARCHITECTURE](EasyCook_ARCHITECTURE.md) | Correctifs de cook (refs cachées, shaders GPU Niagara) |
+| QAutomatedTestSuite | [QAutomatedTestSuite_ARCHITECTURE](QAutomatedTestSuite_ARCHITECTURE.md) | QATS : contrats Automation, tests runtime isolés et quêtes end-to-end |
 | QReport | [QReport_ARCHITECTURE](QReport_ARCHITECTURE.md) | Signalement en jeu (IGBR) — bundles offline-first |
 
 ## Guides transverses
