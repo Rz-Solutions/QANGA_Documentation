@@ -438,3 +438,408 @@ Règles de campagne : un backup par BP touché ; nœuds purs only ; toute nouvel
 **Livré (compilé)** : `AQModule_WorkbenchActor` (acteur répliqué neuf : mesh + zone d'interaction + `QMOD_OpenWorkbench(PC)` : l'interaction maison s'y branchera en un nœud, le harnais l'ouvre directement) ; **`UQModule_WorkbenchWidgetBase`** (UI 100 % native, RebuildWidget crée sa racine : AUCUN asset requis, un BP enfant pourra la réhabiller via `Settings.WorkbenchWidgetClass`) : 3 colonnes : ÉQUIPEMENT (lecture générique de la map Slot:ItemInstance via `GetEquippedInstances`, promue dans le pont d'inventaire) / RACK DE L'OBJET (sockets + NIV x/max + boutons ± PHASE et RETIRER) / MODULES EN INVENTAIRE (croisement Settings x inventaire, bouton INSTALLER) ; statut + rafraîchissement différé après chaque action. **Canal serveur** : 4 nouveaux RPC sur le rack du PlayerState (`SV_Item_InstallModule/RemoveModule/InsertPhase/RemovePhase`) qui délèguent à `QModuleItemRack` (validé E2E) : le widget client n'appelle jamais les fonctions server-only en direct. Commandes : `qmodule.Test.Workbench.Spawn` (pose un établi devant le pawn, bypass QBuilder) et `Workbench.Open` (ouvre l'UI du plus proche à portée). RESTE : assets au retour du pont (ActorData établi + coûts, mesh, entrée QBuilder en activation), branchement interaction maison, et le domaine Véhicule à l'établi (v1 = armes).
 
 **E2E AUTONOME COMPLET VALIDÉ (2026-07-04 ~21h35, L_Dev_Start / Survival_GM, éditeur reconstruit à froid)** : mur (item Phase généré → consommé → Drone niveau 1), arme (item module consommé → phase insérée → `Stat.Weapon.Damage` 100→110 sur instance réelle), véhicule (racks auto-posés sur les véhicules du trafic aérien de la map → Noyau surcadencé → `Stat.Vehicle.Speed.Max` 100→110), persistance (DataObject `QMODWall♥0` résolu, auto-save SQLite « 6 entrie(s) », **mur RESTAURÉ après redémarrage de session**). Correctifs décisifs découverts par le test : (1) les fonctions de LIBRAIRIE BP portent un paramètre caché `__WorldContext` à remplir PAR NOM sinon `GenerateNewItemInstance` rend null ; (2) **les entrées tableau/struct BP passent par référence et portent `CPF_OutParm|CPF_ReferenceParm`** : le remplissage réflexif doit les traiter comme des ENTRÉES (c'était LE verrou de `FindDataObjectById` et de l'écriture de la clé de rack) ; (3) `Obj_ItemInstance` n'expose PAS Get/SetStringArray : l'API clé vit sur sa propriété `DataObject` ; (4) les pawns dev spawnnent avec `InventoryMaxSize=0` et `AddItemToInventory` jette en silence (filet de test `SetInventoryBaseSize`) ; (5) après `AddNewGameplayTagToINI`, VÉRIFIER le fichier sur disque (un crash éditeur peut avaler l'écriture non flushée : 2 tags perdus puis recréés) ; (6) discipline Live Coding : 2-3 rounds max par session d'éditeur, ensuite rebuild à froid (au-delà : UClass pourris → crash `ForEachSubsystem` au teardown PIE ; stack confirmée par l'utilisateur). Commandes de test ajoutées : `qmodule.Test.GivePhase <Tier> [N]` et `GiveModuleItem <Tag>` (les dons remplacent le menu admin pour les tests).
+
+### 15.11 Standard de designation + vaisseau de renfort (2026-07-29, livre et valide en jeu)
+
+**Regle de design (RzZz)** : le jeu ne peint JAMAIS un marqueur d'interface au sol pour dire
+"ca tombe ici". Tout module actif qui appelle quelque chose se designe en LANCANT une balise
+physique (`AQModule_StrikeBeaconActor`) : la ou elle se plante, la charge arrive. Elle est
+visible de tous, elle justifie le delai, et elle remplace toute UI au sol. Modules a balise :
+`Module.BaliseDeFrappe`, `Module.LargageDeRavitaillement`, `Module.ProtocoleDeMeneur`
+(`UQModule_RackComponent::QMOD_IsBeaconModule`). **L'armement dorsal en est exclu par
+decision** : missiles et grenades d'epaule sont des armes, elles tirent droit.
+
+**Le geste, identique pour tous les modules** : maintenir la touche module (X, preset
+`Char_GadgetFire`, rebindable) pour viser, CLIC GAUCHE pour lancer, CLIC DROIT ou relachement
+pour annuler. Un arc holographique et un anneau d'impact montrent le point de chute REEL
+(l'apercu balaie la parabole en cherchant les collisions), donc un declenchement par accident
+est impossible. Etats du reticule : RECHARGE, HORS PORTEE, PAS DE CIEL.
+
+**Suppression du tir pendant le geste** : le mode vide temporairement
+`UCurrentInputData::CurrentInputCombos` de `Combat_1stTrigger`, `Combat_2ndTrigger` et
+`Camera_AimMode` sur le client local, et les restaure a la sortie et a l'EndPlay
+(`Settings->TargetingSuspendedPresets`). Ne PAS utiliser `BlockWhenOthersPressed` pour ca :
+son test depend de l'ordre d'iteration d'une TMap dans la frame, donc il ne bloque que parfois.
+
+**Briques partagees** : `AQModule_ThrownDeviceActor` (une parabole en forme fermee, evaluee a
+l'identique partout depuis {depart, vitesse, up, gravite, horodatage serveur} repliques une
+fois ; resolue dans le repere local du lanceur, jamais en Z monde) ; enfants =
+`AQModule_StrikeBeaconActor` et `AQModule_StickyGrenadeActor` (salve dorsale collante qui
+detonne en ligne, fusee = index x ChainDelay pour que le rythme ne depende pas du terrain) ;
+`QModule_TrackerBridge` (acces reflexif partage au framework Lib_Tracker/TK_* du jeu).
+
+**Vaisseau de renfort** (`AQModule_DropshipActor`) : decor cosmetique qui fait venir l'escouade
+par les airs sur la balise. Il spawne le VRAI `IronDee_Lavrik` (la variante `_Police_Nodrive`
+herite d'Actor : un sac de meshes sans moteur ni porte). Pieges rencontres et corriges :
+allumer l'etat vehicule reveille aussi la logique de vol (le vaisseau est parti a 1,7 km en
+emportant la passerelle) donc on rendort ses composants de mouvement et son tick d'acteur
+A CHAQUE IMAGE, et on recolle l'acteur enfant a la transform pilotee ; ses propulseurs animes
+poussent la coque a chaque image, ce qui logue 1500+ warnings quand la collision est coupee,
+donc la coque garde un corps CINEMATIQUE qui ignore tous les canaux ; son enfant
+`ShippingLandingArea` part en Accessed None sur un decor, on le detruit ; une interpolation
+droite traverse les montagnes, donc `MeasureCruiseHeight` echantillonne le sol sous toute la
+course et le vaisseau croise au-dessus, ne descendant que sur la derniere fraction
+(`DropshipDescentFraction`) ; le point de largage est lu sur le composant `SM_IcliShip_SM_Path`
+du vaisseau, jamais estime.
+
+**Unique modification cote QAI** : `UQAI_CyborgRecruitmentComponent::QAI_SetSummonSpawnOverride`
+(point de spawn du prochain rappel d'escouade, a expiration automatique), appele par reflexion
+depuis `Authority_ReleaseSquadFromDropship`. Le recrutement normal sur la carte est intact.
+
+**Un piege moteur, general** : `FTimerManager::SetTimer` avec un delai <= 0 EFFACE le timer
+au lieu de l'armer (une grenade sur quatre disparaissait silencieusement de chaque salve).
+
+> **CORRECTION 2026-07-29 (audit reseau).** Ce paragraphe affirmait un second piege :
+> `FVector_NetQuantize*` deborderait a l'echelle de QANGA (plafonds 2^20 a 2^24) et
+> mutilerait les positions chez les clients distants, avec cinq signatures a corriger.
+> **C'est faux sur UE 5.7.** Depuis la version reseau `PackedVectorLWCSupport` (5.1+),
+> `FVector_NetQuantize::NetSerialize` passe par `UE::Net::WriteQuantizedVector`
+> (`Net/Core/Private/Net/Core/Serialization/QuantizedVectorSerialization.cpp`) : le
+> nombre de bits par composante est **dynamique**, les plafonds pour un `FVector` double
+> sont 2^52 et 2^62, et au-dela le code bascule explicitement en pleine precision au lieu
+> de clamper. Le `20` de `SerializePackedVector<1,20>` ne sert plus qu'au chemin de
+> lecture herite (`LegacyReadPackedVector`), face a un moteur anterieur a 5.1. A 5,2e7
+> unites, un `FVector_NetQuantize` arrive donc **arrondi au centimetre**, sur ~88 bits au
+> lieu de 192 : il est correct ET moins cher qu'un `FVector` plein. Les signatures
+> concernees sont conservees telles quelles (decision RzZz 2026-07-29). Le vrai probleme
+> de portee planetaire est ailleurs : voir 15.12.
+
+### 15.12 Passe multijoueur (2026-07-29)
+
+Rien de 15.11 n'avait jamais tourne ailleurs qu'en PIE solo, ou la pertinence reseau
+n'est jamais evaluee et ou rien n'est serialise. Audit puis correctifs.
+
+**Portee reseau (le bug principal).** Aucun acteur QModule ne declarait sa portee, donc
+tous heritaient du defaut moteur : `NetCullDistanceSquared = 225000000`, soit **150 m**.
+Or tout ce plugin voyage plus loin : la balise se designe jusqu'a 250 m (frappe) et le
+vaisseau vient de 1,5 km. Consequence mesurable : au-dela de 150 m **le lanceur ne
+recevait meme pas sa propre balise**, et toute l'approche du vaisseau (18 s de scene)
+etait invisible sauf les 150 derniers metres. Chaque acteur declare desormais sa portee
+dans `PostInitializeComponents`, depuis `UQModule_Settings` (categorie `QModule|Network`,
+en metres) : device lance 600, caisse 900, vaisseau 3000, drone medical 400, etabli 5000
+(aligne sur QBuilder). Meme famille de reglage que `QBuilder_BuilderActor` (5 km) et
+`QAI_AgentSpawner`. La frequence de mise a jour reseau descend a 10 Hz (2 Hz pour
+l'etabli) : ces acteurs changent deux fois dans leur vie, pas cent fois par seconde.
+
+**Vaisseau de renfort : plus de `UChildActorComponent`.** `IronDee_Lavrik` herite de
+`SpaceshipBase` -> `VehicleBase` -> `APawn`, et le constructeur d'`APawn` met
+`bReplicates = true`. Or `UChildActorComponent::CreateChildActor` **sort en debut de
+fonction sur toute machine non autoritaire** quand la classe enfant replique (elle attend
+la copie du serveur). Chez le client, `GetChildActor()` etait donc nul : pas de
+neutralisation, pas de porte, pas de recollage de transform, et c'est le vrai vehicule
+replique du serveur qui arrivait, avec sa collision et sa logique de vol intactes (elles
+n'avaient ete endormies que cote serveur). Le vaisseau est maintenant spawne **localement
+sur chaque machine** (`SpawnShip`), `SetReplicates(false)` avant `FinishSpawning`, detruit
+dans `EndPlay`. C'est ce qu'un decor cosmetique doit etre : purement local, pilote par les
+parametres de vol repliques de l'acteur porteur.
+
+**Multicasts cosmetiques filtres a l'arrivee.** Le rack vit sur le `PlayerState`, qui est
+`bAlwaysRelevant` : un `MC_*` parti de la atteint **toutes** les connexions. Sans filtre,
+une salve d'epaule faisait charger la classe projectile et spawner des acteurs chez 500
+clients autour d'un combat qu'aucun ne peut voir. `QModuleOrdnance::IsWorthRendering`
+compare le point au point de vue local (`OrdnanceVisualRangeM`, 800 m par defaut).
+
+**Caisse de ravitaillement : modele deterministe.** C'etait le seul acteur du lot en
+`SetReplicatingMovement(true)`, pour une chute en ligne droite a vitesse constante, et
+ses parametres de chute n'etaient pas repliques (donc `UpVector`, qui oriente la poussiere
+d'impact et le panache au sol chez le client, valait le defaut : faux sur une planete).
+Elle suit maintenant le meme modele que les objets lances : {depart, point au sol,
+vitesse, horodatage serveur} repliques une fois, chute evaluee a l'identique partout,
+seul `bLanded` decide par le serveur.
+
+**Horodatages en `double`.** `ThrowStartServerTime` et `SceneStartServerTime` etaient des
+`float`. `GetServerWorldTimeSeconds` est un double qui croit avec l'uptime : a 1e6 s
+(11 jours, banal sur un serveur persistant) un float ne resout plus que 1/16 de seconde,
+donc les arcs deterministes, echantillonnes chaque image, se mettent a saccader. Les six
+`*ReadyAtServerTime` du rack **restent en float expres** (un cooldown de 10 a 300 s s'en
+moque, et c'est de l'etat replique sur chaque rack d'un serveur a 500 joueurs).
+
+**Divers.** `SV_TriggerAirstrike` comparait son cooldown a `World->GetTimeSeconds()` alors
+que le champ est documente et relu par le HUD en temps monde serveur : aligne sur les cinq
+autres gadgets.
+
+**Ce qui a ete MESURE (PIE serveur d'ecoute, 2 instances, 2026-07-29)** : instruments neufs
+`qmodule.Test.NetCensus` (recensement de tous les acteurs QModule dans TOUS les mondes du
+process, avec role reseau et distance), `qmodule.Test.NetSpawnProbe <beacon|crate|grenade|
+dropship> [DistanceM]` (spawn cote serveur, sans pawn) et `qmodule.Test.GodWallAll`.
+Resultats, tous relus dans `Saved/Logs` :
+- **Portee** : vaisseau present dans le monde CLIENT a **1686 m**, puis 1272, 592 et 91 m,
+  suivi sans interruption. Au defaut moteur de 150 m, le client n'aurait rien recu.
+- **Vaisseau local** : la ligne `Dropship: ship 'IronDee_Lavrik_C_0' neutralised
+  (80 primitive(s)), engine started` apparait **DEUX fois**, une par monde. Avec l'ancien
+  `UChildActorComponent` elle n'apparaissait que cote serveur.
+- **Determinisme** : balise plantee a la position **identique au millimetre** entre serveur
+  (role Authority) et client (role SimulatedProxy), a 5,19e7 unites de l'origine. Caisse :
+  environ 1,2 m d'ecart pendant la chute (le client lit une horloge serveur en retard de sa
+  latence, c'est le modele), **convergence exacte a l'atterrissage**.
+- **Chaine complete en reseau** : 4 grenades collantes repliquees dans les deux mondes,
+  degats appliques (`Ordnance impact ... 1 actor(s)`), caisse `6/6 supplies unpacked`,
+  escouade larguee (`Leader Protocol: squad released from the ramp`). Zero erreur QModule.
+
+**PAS ENCORE TESTE** : le serveur DEDIE. Et un obstacle a connaitre pour toute session
+automatisee future : `BaseGameMode` demarre les joueurs en SPECTATEURS et les fait posseder
+par un flux Blueprint de chargement, donc une session PIE non pilotee par un humain a des
+PlayerController mais **aucun pawn**. C'est la raison d'etre de `NetSpawnProbe`, qui part du
+point de vue au lieu du pawn. Autre piege outillage : `ULevelEditorPlaySettings::PlayNetMode`
+est un `TEnumAsByte` que le Python de l'editeur ne sait ni lire ni ecrire ; le mode
+multijoueur de PIE se regle dans
+`Saved/Config/WindowsEditor/EditorPerProjectUserSettings.ini`, **editeur ferme**.
+
+**Verifie sain, a ne pas re-auditer** : la suspension d'entrees du geste (le
+`UCurrentInputData` est resolu par l'`InputsComponent` du PlayerController, donc aucune
+fuite entre joueurs ; restauration a `EndPlay` et a chaque tick des que le pawn n'est plus
+valide, ce qui couvre la mort et le changement de pawn) ; l'accroche de la grenade
+collante (`AttachmentReplication` reste actif malgre `SetReplicatingMovement(false)` :
+seul un RootComponent replique la desactive) ; l'attache serveur du drone medical ;
+l'apercu de visee (`bReplicates = false`, purement local) ; le HUD pose sur le seul
+controleur local.
+
+**Couches maison, verdict** : `QNet` est un registre de clients, pas un substitut de
+replication ; `ClientAuthority` + `SmoothTSync` delegueraient l'autorite d'un acteur lourd
+au client le plus proche, contre-indique ici (artillerie deterministe et courte, degats
+serveur) ; `QNetState`/OptimizedState est un bus d'etat cle/valeur indexe par cle de
+localisation, pertinent pour de l'etat spatialise persistant, pas pour des RPC de tir ;
+`CyReplicatedObject` sert aux UObject repliques hors acteur. La replication UE brute est
+le bon choix pour ce plugin ; ce qui manquait etait le reglage de portee.
+
+**Reste ouvert apres ce lot** : sons (une seule ligne de son dans tout le plugin), lanceur
+dorsal visible et mesh de micro-missile (assets a fournir), mesh d'etabli, HUD permanent
+des gadgets, animations du mur (exigent de passer la grille en mise a jour incrementale),
+cooking des nouvelles soft refs, String Tables pour les textes du reticule.
+
+### 15.13 Transpondeur de transit : porte QModule sur le reseau QAssistance (2026-07-31)
+
+Chantier "retirer l'Assistance des menus de base et la recycler en module". Design valide RzZz
+le 2026-07-29, arbitrages tranches le 2026-07-31. **Le detail du design, l'audit chiffre du systeme
+QAssistance et les trois corrections au cadrage sont dans QMODULE_CATALOGUE.md par.9.23.** Cette
+section ne porte que le contrat technique.
+
+**Sens de la dependance : QAssistance (BP) interroge QModule (C++), jamais l'inverse.** C'est le
+pattern de branchement etage 2 valide en par.15.10 : insertion de NOEUDS PURS dans le BP
+consommateur, au fil de la donnee, via `UQModule_StatLibrary`. Aucun code C++ n'est ajoute a
+QModule pour ce chantier, donc **aucun rebuild, aucun risque de Live Coding sur QModule**.
+
+**Livre et verifie au 2026-07-31 :**
+- `QMD_TranspondeurDeTransit` (`/Game/Phases/QModuleV2/`), tag `Module.TranspondeurDeTransit`
+  enregistre dans `Config/Tags/QModuleTags.ini` (162 tags). Domaine Cyborg, famille
+  `Module.Family.System`, rarete 2, MaxLevel 3, icone `025-signal`, **zero StatMod** (porte pure :
+  `QMOD_GetModuleLevelForActor` renvoie deja 0 si absent ou non alimente en phase).
+  Verdict QATS `20260731_131624_1672` : contract_status **Passed**.
+- Les 6 stations orbitales portent `Transit.Orbital` dans leur `Data_Tags` (champ vide sur les
+  200 stations avant ce jour). Lecture du palier d'une station :
+  palier 1 = `Type == RELAY_TOWER` / palier 2 = `Type == WARP` ET `Data_Tags` contient
+  `Transit.Orbital` / palier 3 = `Type == WARP` sans ce marqueur.
+
+**Reste a brancher. Specification exacte des 4 edits BP.** Chacun est une insertion de noeuds
+PURS, flux exec intouche, backup du BP avant edit (les 4 assets sont sauvegardes dans le
+scratchpad de session du 2026-07-31).
+
+1. **Masquer l'onglet** (`/Game/Widget/W_GameplayMenus`). Poser sur `W_Button_Assistance` une
+   visibilite `Visible` / `Collapsed` selon
+   `QMOD_HasModule(GetOwningPlayerPawn(), Module.TranspondeurDeTransit, 1)`.
+   Le bouton est le SEUL point d'entree du systeme (mesure), donc `Collapsed` suffit a le rendre
+   injoignable : son handler `On Released` ne peut plus tirer.
+   **Piege** : ce widget fait `SetWidgetAsSingleInstance` au Construct, donc un gate pose
+   uniquement sur `Event Construct` ne se re-evalue pas si le joueur sockete le module en cours de
+   session. La forme robuste est un **binding de visibilite UMG** (fonction pure evaluee par Slate)
+   plutot qu'un set ponctuel.
+2. **Filtrer les paliers** (`/Game/Systems/QAssistance/Widget/ListView/QAssistance_ListView`,
+   fonction `Compute_Data`). Le noeud `Set ValidStation [Valid Station <- 'Get Valid_Station']`
+   devient `Valid_Station AND (palier de la station <= QMOD_GetModuleLevelForActor(pawn, tag))`.
+   C'est le gate FONCTIONNEL, et il est re-evalue a chaque ouverture de la liste : sans module,
+   zero destination valide. Il tient meme si le gate cosmetique du point 1 est en retard d'une
+   session.
+3. **Plancher de prix par type** (`/Game/Systems/QAssistance/QAssistance_Client`). Aujourd'hui
+   `BasePrice` est un unique entier a 200 pour toutes les destinations. Le remplacer par une
+   lecture par type (relais bon marche, orbital cher, warp tres cher) au point ou `Compute_Price`
+   et `Compute_Data` additionnent `Get BasePrice`. Quitter le sol doit etre un evenement.
+4. **Refus lisible**. `Compute_Price` renvoie deja `Valid=false` quand le solde est insuffisant, et
+   le seul retour joueur est un `Cy_PrintString "Price fail"` en `Print to Screen = false`. Le canal
+   propre existe deja a cote dans le meme graphe : `Make_PopUp [Target <- 'Get
+   StarMap_UI_PopUp_System']`, avec un type rouge deja utilise par `ReturnCreateAssistance`.
+   Y brancher le refus (solde insuffisant) et le refus de palier (module trop bas).
+
+**Non livre, et pourquoi.** Les 4 edits ci-dessus n'ont pas ete graves depuis le pont :
+`insert_code` exige un noeud SELECTIONNE dans un editeur ouvert (donc un humain), et
+`generate_blueprint_logic` ne sait qu'ajouter en bout de chaine via un Sequence, ce qui ne produit
+pas un gate en tete de chaine. De plus `get_api_context` est **casse sur cette installation**
+("Could not load API reference file (ue5_api_reference.json)"), donc les noms de fonctions
+generes ne sont pas validables avant ecriture. Graver a l'aveugle dans le hub de menus du jeu
+n'etait pas un risque acceptable.
+
+**Notification de decouverte** (arbitrage RzZz : l'onglet disparait, donc la feature doit se faire
+connaitre). A poser sur l'approche d'une station relais, une seule fois par profil. Aucune quete ne
+peut servir de relais pedagogique : **Q008 enseigne l'aerotram**, un systeme different
+(`TK_AeroTram`, levels `L_Capital_AeroTram`, plugin QTrain), pas le menu Assistance.
+
+**Localisation.** Les 3 descriptions de niveau du QMD sont en `INVTEXT`, aligne sur les 104 autres
+QMD du catalogue. C'est la dette deja consignee au point 3 de la checklist d'activation
+(passe String Tables / NSLOCTEXT avant prod), pas une regression introduite ici.
+
+### 15.14 Lock d'ordonnance dorsale : de la scrutation au verrou tenu (2026-08-02, compile vert)
+
+**Le constat RzZz** : "le petit HUD au niveau de l'IA visee ne reste pas longtemps, il faudrait qu'il
+reste tout le temps affiche, et qu'on puisse avoir plusieurs cibles". Le multi-cible existait DEJA
+(le serveur repartit la salve en round-robin sur la liste recue, jusqu'a 16 cibles), mais le CLIENT
+le bridait au nombre de missiles et lachait ses marqueurs sur cinq conditions independantes.
+
+**Ce qui faisait disparaitre le marqueur** (tout etait dans `QModule_GadgetHUD.cpp`) :
+1. sortie d'un cone de 35 degres autour de l'axe camera, sans hysteresis : tourner la tete cassait
+   tout ;
+2. un `LineTraceTestByChannel` vers l'origine de l'acteur, sans delai de grace : un tronc ou un
+   chambranle pendant une frame, et le lock sautait ;
+3. l'eviction par le plafond : les candidats etaient tries par alignement puis tronques au nombre de
+   missiles, donc un ennemi plus proche du reticule EJECTAIT un lock parfaitement valide ;
+4. `ClearAllLocks()` juste apres le tir : le HUD se vidait alors que les missiles etaient encore en
+   vol vers ces cibles ;
+5. la duree de vie du marqueur. C'est le piege non evident : le marqueur est un `TempTracker` cree
+   avec 1,2 s de vie, rafraichi par reflexion a chaque passe. **`TempTracker` n'expose que
+   `ResetDestroyDelay`** ; ni `ResetLifetime` ni `SetLifetimeSeconds` n'existent dessus, donc ces
+   deux appels, y compris le failsafe de `QModule_TrackerBridge.cpp`, sont des no-op silencieux.
+   Verifie par recherche binaire dans `Content/Systems/Tracker/TempTracker.uasset`.
+
+**Le modele retenu** : un lock est TENU, pas scrute. Il s'ACQUIERT dans un cone reglable et se GARDE
+ensuite. Conditions de liberation, et elles seules : la cible meurt, elle sort de la portee du
+module, ou elle reste hors de vue au-dela de la fenetre de grace. Le cone ne participe plus a la
+retention. Le tir ne libere plus rien.
+
+**Reglages** (`QModule|GadgetHUD`, retunables sans recompiler) : `GadgetLockConeDegrees` (35),
+`GadgetLockMaxTargets` (6, DECOUPLE du nombre de missiles), `GadgetLockLostSightGraceSeconds` (3),
+`GadgetLockMarkerLifetimeSeconds` (600, long EXPRES : le HUD est proprietaire de la suppression du
+marqueur, le timer du tracker n'est plus qu'un filet, et la boucle repose un marqueur que le
+framework aurait detruit sous elle).
+
+**Eviction par vol de slot, avec marge** : plateau plein, une nouvelle cible ne peut prendre que la
+place du lock dont le joueur s'est le plus clairement DETOURNE, et seulement si elle le bat d'une
+marge (`LockStealMarginCos`, environ 2 degres). Deux fausses bonnes idees ecartees en chemin :
+evicter le moins bien aligne SANS marge (deux ennemis a angle presque egal se volent le meme slot a
+chaque passe), et evicter le PLUS ANCIEN, qui parait equitable mais fait tourner tout le plateau a
+chaque passe des qu'on se tient au milieu d'une foule. Les deux reproduisent le clignotement que
+cette refonte existe pour supprimer.
+
+**Les grenades collantes entrent dans le systeme.** Elles n'avaient aucun lock. Elles en prennent un
+maintenant, mais restent balistiques et collantes : seul le CENTRE de la ligne d'impacts se pose sur
+la cible tenue au lieu du trace brut du reticule. La portee de lob (5000 cm) quitte la constante en
+dur de `SV_TriggerShoulderGrenades` pour `Settings->ShoulderGrenadeRangeCm`, **lue des deux cotes** :
+un lock que le serveur refuserait ne doit jamais recevoir de marqueur, sinon le joueur peint une
+cible et la salve entiere est refusee sans un mot.
+
+**Ce qui n'a PAS ete fait, et pourquoi.** Pas de purge au clic droit, alors qu'elle etait au plan
+initial : le clic droit est deja bind globalement et non consommant (`HandleCancelClick`), donc il
+sert aussi l'ADS de l'arme. Purger les locks a chaque visee aurait rendu le verrou tenu inutile. Les
+regles de liberation plus le vol de slot couvrent le besoin sans toucher a l'ergonomie de tir.
+
+**Consequence assumee** : un ennemi qui passe derriere un mur garde son marqueur pendant la grace
+(le tracker se dessine en surcouche HUD). `GadgetLockLostSightGraceSeconds` est le bouton, 0 rend le
+comportement d'avant.
+
+**Reseau** : aucun changement de contrat. Tout est client ; le serveur revalidait deja la liste
+(cible vivante, a portee, 16 maximum) et continue de le faire.
+
+### 15.15 Le joueur sait toujours ou il en est : refus lisibles + lecture permanente (2026-08-02, compile vert)
+
+**Le constat, mesure et pas suppose.** Le serveur refusait une action de module dans **20 cas**
+distincts, et les 20 partaient dans `QMOD_VLOG`, c'est a dire dans un log de developpeur. Cote
+joueur : appui sur la touche, rien du tout. Deux choses trainaient dans le code, ecrites et
+inutilisees :
+- `ShowTransientReticleMessage` (`QModule_GadgetHUD.cpp`), un canal de message au reticule complet,
+  avec creation du widget et auto-masquage a 1,6 s : **zero site d'appel dans tout le projet** ;
+- les six temps de recharge, **deja repliques au proprietaire** (`COND_OwnerOnly`) et deja lisibles
+  par `QMOD_GetGadgetReadyTime`, affiches nulle part hors de la roue.
+
+La partie chere, le reseau, etait faite depuis le debut. Il manquait le branchement.
+
+**Ce qui est livre.**
+1. **Garde-fou client devant chaque module a APPUI DIRECT** (ordonnance dorsale, drone, rappel de
+   flotte, radio) : `CanPressSelectedGadget` verifie module actif puis recharge et affiche
+   `MODULE INACTIF` ou `RECHARGE Ns` au reticule, au lieu d'envoyer un RPC voue au refus. Les modules
+   a balise n'y passent pas : leur geste de visee portait deja ses refus (`RECHARGE`, `HORS PORTEE`,
+   `PAS DE CIEL`).
+2. **Refus specifiques** la ou le code se contentait d'un `return` : `AUCUNE CIBLE` (salve de
+   missiles sans verrou ni visee), `HORS PORTEE` (grenades au-dela du lob), `PAS D'ANTENNE` (module
+   radio actif mais aucun composant radio sur le pawn), `AUCUN MODULE ARME` (roue jamais ouverte).
+3. **Lecture permanente du module arme** : la roue ne quitte plus l'ecran, elle passe en mode COMPACT
+   (`EDockMode`), la cellule armee seule, **a sa propre place dans la grappe** pour que l'ouverture de
+   la roue fasse pousser le cluster autour d'elle au lieu de la deplacer, opacite 0,70, avec son
+   decompte de recharge. Elle s'efface quand rien n'est arme ou quand le joueur n'est pas a pied.
+4. **Signal de retour a disposition** : la lecture comptait a rebours sans jamais dire "c'est bon".
+   Une breve enflure de la cellule (0,35 s, +18 % en pointe, par-dessus l'echelle du surlignage, pas
+   a la place) marque le passage a zero. Volontairement petite : ce bloc est a cote du reticule, il
+   s'annonce et il s'efface.
+
+**Le piege du drone medical, et pourquoi il y a une variable repliquee de plus.** La touche du drone
+est un TOGGLE, et cote serveur le RAPPEL s'execute **avant** la verification de recharge
+(`SV_TriggerMedicalDrone` : un drone vivant se replie immediatement). Un garde-fou client sur la
+recharge aurait donc refuse le rappel et laisse le drone en l'air jusqu'a expiration. Le client ne
+pouvait pas trancher seul : `ActiveMedicalDrone` est un `TWeakObjectPtr` serveur. D'ou
+`bMedicalDroneDeployed`, miroir replique `COND_OwnerOnly`, ecrit dans les deux seuls endroits qui
+touchent l'original. **C'est le detail qui transforme une amelioration en regression** : ajouter une
+verification cliente devant un RPC oblige a relire le serveur ligne par ligne, jamais a supposer sa
+forme d'apres son nom.
+
+**Ce qui reste muet, volontairement.** Les revalidations serveur que le client ne peut pas predire :
+cible sortie de portee pendant le vol du RPC, liste de verrous surdimensionnee (client trafique),
+stat `HealPerSec` a 0 sur un QMD mal cable. Elles ne se declenchent que sur une latence limite ou sur
+une donnee mal autorisee, jamais sur un geste normal.
+
+**Localisation** : tous les textes passent par `NSLOCTEXT("QModule", ...)`, comme les etats de
+reticule existants. La dette String Tables du plugin reste identique, elle n'augmente pas.
+
+**Cadence** : le composant HUD tique desormais a 0,12 s des qu'un module est arme (avant : seulement
+quand l'ordonnance dorsale etait selectionnee), parce que la lecture permanente doit suivre le
+changement de pawn et le decompte. Le widget, lui, ne tique que quand il est visible, et en mode
+compact il ne parcourt que la cellule affichee. `HandleRackChanged` reconstruit maintenant la roue
+meme fermee, sinon la cellule compacte resterait perimee apres un changement de niveau de module.
+
+### 15.16 Le Mur repond aux clics : canal de resultat rebranche (2026-08-02, compile vert)
+
+**Le constat, et il est pire que celui du 15.15.** Le Mur avait DEJA tout : neuf phrases de refus
+ecrites et localisees (`QMOD_DescribeActionResult`), un RPC client dedie (`CL_ActionResult`), un
+delegue de diffusion (`OnActionResult`), et meme un commentaire affirmant "le joueur recoit toujours
+une reponse, succes ou refus". **C'etait faux.** Recherche binaire dans tout `Content/` plus
+recherche C++ : `OnActionResult` n'avait **aucun abonne**, ni Blueprint ni natif. Le tuyau etait
+construit jusqu'a un metre de la sortie, et les phrases n'ont jamais atteint un ecran.
+
+**Ce qui manquait vraiment.** Le geste le plus repete de l'ecran, l'insertion de phase, n'atteignait
+meme pas ce canal : `SV_InsertPhaseFromWallet`, `SV_RemovePhaseToWallet`, `SV_InsertPhase` et
+`SV_RemoveLastPhase` refusaient dans un `UE_LOG` / `QMOD_VLOG` avec un `FString Error` riche qui ne
+quittait jamais le serveur.
+
+**Ce qui est livre.**
+1. `UQModule_WallWidgetBase` s'abonne a `OnActionResult` (dans `QMOD_BindWall`, desabonnement dans
+   `QMOD_UnbindWall`) et affiche la phrase dans une ligne native construite en fin de
+   `QMOD_BuildChrome` : ajoutee EN DERNIER pour passer au-dessus des autres couches, en bas au
+   centre et **decalee a gauche de la largeur du panneau lateral**, donc centree sur la GRILLE, la
+   ou le regard est deja. Ambre pour un succes, rouge sourd pour un refus, effacement a 4 s.
+2. Quatre valeurs ajoutees a `EQModule_ActionResult`, **apres `Rejected`** pour qu'aucune valeur
+   existante ne change de numero : `PhaseMaxLevel`, `PhaseNone`, `PhaseReserveEmpty`,
+   `NoModulePicked`. `TryInsertPhase` et `TryRemoveLastPhase` prennent le meme parametre
+   `EQModule_ActionResult* OutResult` optionnel que `TryInstall`/`TryRemove` avaient deja.
+3. **Refus de phase seulement, jamais les succes** : une insertion reussie se voit deja sur les
+   pastilles de niveau de la cellule, et c'est le geste le plus repete de l'ecran. Un bandeau par
+   phase serait du harcelement. Les modules, eux, gardent leur message de succes : l'action est plus
+   rare et plus lourde de consequences.
+4. **Clic sur une case libre sans module choisi** : c'est litteralement le premier geste d'un joueur
+   qui decouvre le Mur, et il ne produisait rien. Refus client, dit sur place sans aller-retour
+   serveur, en reutilisant la meme phrase localisee.
+
+**Regle qui se degage des deux passes.** Un canal de retour joueur n'est pas livre quand il est
+ecrit : il est livre quand quelque chose l'AFFICHE. Chercher `OnXxx.Broadcast` sans abonne, et les
+`FText` de refus sans site d'appel, est un audit rapide qui trouve cette classe de trous d'un coup.
+
+**Deux etats muets fermes dans la foulee.**
+1. **Un module installe mais INACTIF n'expliquait rien.** La fiche affichait "NIVEAU 0 / 3" meme
+   quand le joueur y avait mis deux phases, ce qui nie son investissement au lieu de l'expliquer.
+   La fiche montre desormais le niveau REELLEMENT insere, plus une ligne rouge qui donne la raison.
+   Le jeu de raisons n'est pas devine : `RecomputeDerivedState` pose
+   `bActive = (Level > 0) && bAllowed && Definition`, et sur un mur `bAllowed` vaut
+   `Ring <= CoreLevel * WallRingsPerCoreLevel`. Il ne reste donc que deux causes reparables par le
+   joueur, aucune phase inseree ou anneau verrouille, et c'est exactement ce que la ligne dit.
+2. **La roue de gadgets vide** affichait un bandeau sombre sans un mot quand aucun module
+   declenchable n'etait installe. Elle annonce maintenant l'etat et dit quoi faire.
+
+**Fausse piste ecartee, a ne pas re-"corriger".** `CachedCoreLevel` dans `QModule_WallWidgetBase`
+ne contient PAS le niveau du noyau malgre son nom : ligne 345, il vaut deja
+`CoreLevel * RingsPerLevel`. La comparaison `QMOD_HexDistance(...) > CachedCoreLevel` qui decide de
+l'affichage verrouille est donc correcte et alignee sur l'autorite. La renommer serait utile, la
+"reparer" serait une regression.

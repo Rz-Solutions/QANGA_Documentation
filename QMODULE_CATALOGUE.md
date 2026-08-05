@@ -128,9 +128,10 @@
 | Kit de sabotage | A | Désactive portes/tourelles (interaction longue) | ➕ |
 | Réparateur automatique | C | Répare lentement le véhicule piloté | ✔ pattern Repair |
 
-### G. Système & Social (10)
+### G. Système & Social (11)
 | Module | T | Effet | Ancrage |
 |---|---|---|---|
+| **Transpondeur de transit** (2026-07-31, QMD créé, branchement en cours) | P | Porte d'accès au réseau de voyage QAssistance : niv 1 = les 184 relais au sol, niv 2 = les 6 stations orbitales, niv 3 = les 10 points de warp. Sans le module, l'onglet Assistance n'existe pas dans les menus (§9.23) | ✔ QAssistance |
 | **Protocole de meneur** (2026-07-11, QMD créé + BRANCHÉ) | P | Débloque le recrutement de civils : escouade max 1/2/3 followers (sans module : verrouillé) | ✔ QAI_CyborgRecruitmentComponent (cap MaxRecruitedFollowers ajouté) |
 | **Réseau de recruteur** (2026-07-11, QMD créé + BRANCHÉ) | P | Recruter coûte -20/35/50 % et le maintien passe à 2.5/2/1.5 s | ✔ push façade vers RecruitCost / HoldDurationSeconds |
 | **Système Général** | P | +200 Matter par niveau (Max 2) : en v2, devient le Cœur IC Lab qui pilote la capacité du Mur (non échangeable) | **EN JEU** |
@@ -958,3 +959,89 @@ plus vérifications pin-à-pin. Résultats et actions :
 - **LEÇON MAJEURE pour tous les futurs modules** : tout appel réflexif vers le
   framework de stats BP doit traiter les pins comme des INT d'abord (le pattern
   ReadStatValue/WriteStatValue de la façade existait déjà pour cette raison exacte).
+
+### 9.23 Transpondeur de transit : le réseau de voyage devient un module (2026-07-31, design validé RzZz)
+
+**Le constat de départ.** L'« Assistance », rangée parmi les onglets de base du menu, n'est pas un
+panneau d'aide : c'est le **réseau de voyage rapide planétaire** du jeu. RzZz veut le sortir des menus
+de base et en faire une capacité qu'on gagne, avec un coût récurrent en argent pour que la décision
+de voyager reste vivante.
+
+**Audit préalable (mesuré, 2026-07-31).** Le système vit entièrement dans
+`Content/Systems/QAssistance/`, **100 % Blueprint** (zéro ligne de C++ dans `Source/` comme dans les
+90 plugins), et il est **actif** (`Enabled=True` sur les CDO de `QAssistance_Client` et
+`QAssistance_Manager`, aucun override `.ini`). Architecture : `QAssistance_Client` est un composant
+du `QangaPlayerController`, `QAssistance_Manager` un composant du `QangaGameState` qui spawne un
+vrai `QAssistance_ShipBase` par SteamID. Le voyage est donc **physique et serveur-autoritaire** :
+un vaisseau vient chercher le joueur et l'emmène, ce n'est pas une téléportation.
+
+**Point d'entrée unique et propre** : `W_GameplayMenus`, handler `On Released (W_Button_Assistance)`
+(et non `On Pressed` comme les 7 autres boutons) qui appelle `QAssistance_Get_Local_Client` puis
+`Open_ClientMenu`. `Open_ClientMenu` n'est appelé de nulle part ailleurs dans tout `Content/`.
+**Aucun input dédié** (les 11 inputs UI ne le citent pas), **aucune quête** ne le référence, et
+l'onglet n'est même pas une page du `WidgetSwitcher_MenuTabs` : c'est un bouton qui ouvre un popup
+séparé. Le conditionner est donc chirurgical.
+
+**Trois corrections au cadrage initial, toutes mesurées :**
+1. **Le coût en argent EXISTE DÉJÀ et il est vivant.** `QAssistance_Client` porte `BasePrice = 200`
+   et `PriceFactor1000km = 400.0`, et calcule
+   `Prix = BasePrice + int64((Distance / 1e8) * PriceFactor1000km * Station.PriceFactor)`
+   (1e8 uu = 1000 km). Le canal Coins est déjà le bon : `GetInventoryCoins`,
+   `RemoveCoinsToInventory`, `SendToPlayerMoneyRewardFeedback`. La liste affiche le prix, il est
+   triable, et chaque ligne calcule `ValidPrice` (solde suffisant) et `ValidStation` ; une ligne
+   n'est sélectionnable que si les deux sont vrais, et un filtre `ViewOnlyValid` existe.
+   Reste donc à faire, et seulement ça : un plancher **par type** (aujourd'hui un unique
+   `BasePrice=200` pour un saut de village comme pour un warp vers Jupiter), le remplissage des
+   `PriceFactor` (le champ est lu mais vaut **1.0 sur les 200 stations**), et un refus **visible**
+   (aujourd'hui `Cy_PrintString "Price fail"` avec `Print to Screen = false` : log seul).
+2. **Le champ `Price` n'existe pas** sur `QDB_QAssistance_Station`. Seul `PriceFactor` existe. Le
+   plancher par type devra vivre là où vit déjà `BasePrice` : sur le composant client.
+3. **Les trois paliers n'étaient pas dans la donnée.** Scan des **200** stations (et non 199) :
+   184 typées `RELAY_TOWER`, 16 typées `WARP`, et la troisième valeur de l'enum
+   (`QAssistance_StationType`, index 2) n'est utilisée par **aucune** station. Surtout, **les 6
+   stations orbitales portent le MÊME type que les 10 points de warp** : seul le préfixe du nom
+   d'asset les distinguait.
+
+**Décision RzZz (2026-07-31) : marquer les orbitales dans `Data_Tags`.** Le champ `Data_Tags` existe
+sur les 200 stations (hérité de `QDB_Data`) et était **vide partout** (0 usage sur 200). Les 6
+stations orbitales portent désormais `Transit.Orbital`. Zéro classe modifiée, zéro enum touché,
+6 assets édités. La lecture du palier devient :
+`RELAY_TOWER` = palier 1 · `WARP` + `Transit.Orbital` = palier 2 · `WARP` seul = palier 3.
+
+**Autre chiffre à connaître** : `Valid_Station` vaut **False sur 67 des 200 stations**. Le réseau
+réellement offert au joueur fait **133 destinations** (118 relais, 6 orbitales, 9 warps), pas 199.
+
+**Le module.** `QMD_TranspondeurDeTransit`, tag `Module.TranspondeurDeTransit`, domaine Cyborg,
+famille `Module.Family.System`, rareté 2, **MaxLevel 3**, icône `025-signal`, **zéro StatMod** :
+c'est une porte pure, la façade `QMOD_GetModuleLevelForActor` renvoie déjà 0 quand le module est
+absent OU socketé sans phase, ce qui est exactement la sémantique voulue. La fiction : ce n'est pas
+« tu ne sais pas ouvrir un menu », c'est « le réseau ne te reconnaît pas ».
+Ne pas confondre avec le **Faux transpondeur** (`Module.FauxTranspondeur`, famille Furtivité) qui
+fait apparaître le joueur comme neutre aux scanners : rôle sans rapport, noms voisins.
+
+**Deux arbitrages tranchés par RzZz :**
+- Sans le module, l'onglet **disparaît** de la barre (il ne reste pas verrouillé). Contrepartie
+  acceptée : une **notification de découverte** la première fois que le joueur croise une station
+  relais dans le monde, sinon la feature devient invisible (aucune quête ne l'enseigne : Q008
+  enseigne l'**aérotram**, qui est un autre système, levels `L_Capital_AeroTram` / `TK_AeroTram`).
+- Le niveau du module **ne réduit pas** le prix. Un module, un métier : celui-ci ouvre des paliers,
+  le **Négociateur** existe déjà pour les taux marchands.
+
+**Vérification.** `qats.qmodule.start All Contract` (run `20260731_131624_1672`) :
+`QMD_TranspondeurDeTransit` → **contract_status = Passed** (« asset, install, 3 level(s),
+0 stat tag(s), codec, phase removal, and uninstall passed »). Les 65 autres échecs du run sont une
+**dette pré-existante** du catalogue (`LevelDescriptions has 0 entries for MaxLevel 3`) et ne sont
+pas causés par ce chantier : le Transpondeur passe précisément parce que ses 3 descriptions sont
+remplies.
+
+**Registres de cook** : `DA_AllRef` ne contient **aucune** référence QAssistance (les 2
+occurrences « Assistance » sont `Spaceship_GravityAssistance`, un input). `DA_EasyCookSeed_QANGA`
+référence **tout** le dossier QAssistance : rien de ce dossier ne doit être supprimé sans mettre à
+jour la graine. Aucune suppression n'est prévue par ce chantier.
+
+**Ne pas casser** : `TK_RelayTower`, `TK_RelayTowerEnabled`, `TK_RelayTowerDisabled`,
+`TK_RelayTower_Sky` appartiennent à `QLevel_Relay_Actor`, `LSA_RelayTower`, `StarMap_PointView_UI`,
+`WO_Tower` et aux umap de l'univers, **pas** à QAssistance. Seul `TK_QAssistance` (le fumigène de
+zone de dépose) appartient au système. On retire un onglet de menu, pas le réseau.
+
+**Reste à brancher (spécifié, non livré au 2026-07-31)** : voir QMODULE_ARCHITECTURE.md §15.13.
