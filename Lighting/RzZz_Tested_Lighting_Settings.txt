@@ -1,0 +1,50 @@
+r.Lumen.TraceMeshSDFs=0
+r.Lumen.ScreenProbeGather.Temporal.FastUpdateModeUseNeighborhoodClamp=1
+r.Lumen.ScreenProbeGather.Temporal.MaxFramesAccumulated=16
+r.Lumen.ScreenProbeGather.Temporal.RejectBasedOnNormal=1
+r.Lumen.ScreenProbeGather.DownsampleFactor=8
+r.Lumen.ScreenProbeGather.MaxRayIntensity=4
+r.Lumen.ScreenProbeGather.ScreenTraces.HZBTraversal=0
+r.Lumen.ScreenProbeGather.ScreenTraces.HZBTraversal.SkipHairHits=1
+r.Lumen.ScreenProbeGather.ScreenTraces.HZBTraversal.RelativeDepthThickness=0.001
+r.TSR.ShadingRejection.Flickering.Period=3
+
+# VSM moving-light baseline
+r.Shadow.Virtual.ResolutionLodBiasLocalMoving=0
+r.Shadow.Virtual.SMRT.RayCountLocal=32
+r.Shadow.Virtual.SMRT.SamplesPerRayLocal=8
+r.Shadow.Virtual.SMRT.AdaptiveRayCount=1
+r.Shadow.Virtual.SMRT.MaxRayAngleFromLight=0.0075
+
+# Production renderer owners
+sg.AntiAliasingQuality=3
+sg.GlobalIlluminationQuality=2
+sg.ReflectionQuality=3
+sg.PostProcessQuality=3
+r.RayTracing=0
+r.Lumen.HardwareRayTracing=0
+r.ReflectionMethod=2
+r.ReflectionEnvironment=0
+r.DynamicGlobalIlluminationMethod=1
+r.AntiAliasingMethod=4
+
+# Software SSR Q2 path. Reflection scalability tiers own r.SSR.Quality=2,
+# r.SSR.HalfResSceneColor=0, and r.Lumen.Reflections.Allow=0.
+# SG_Lighting_Reflection_Lvl delegates to those tiers and must not replay duplicate SSR/Lumen CVars after PIE initialization.
+r.SSR.Quality=2
+r.SSR.ExperimentalDenoiser=0
+r.SSR.Temporal=-1
+r.SSR.HalfResSceneColor=0
+r.SSR.Stencil=0
+r.SSR.Compute=0
+r.SSR.TiledComposite=0
+r.SSR.Q2.HiResVisibility=1
+r.SSR.Q2.HiResVisibilityScale=1
+r.FidelityFX.FSR.CreateReactiveMask=0
+
+# Engine shader state
+# Q2 scale 1 reuses native scene depth, closest/furthest HZBs, and Substrate/GBuffer data. It does not build the supersampled conventional-geometry depth/material passes used by optional scales 2-4.
+# It rejects back-facing HZB crossings and resolves genuine off-screen misses from the current SkyAtmosphere LUT; full Lumen reflections, captures, and hardware RT remain outside this path.
+# When Lumen GI is active, Q2 is deferred until after diffuse-indirect composition so it samples the fully lit scene color and is composed exactly once.
+# Scale 1 samples source radiance directly and applies one deterministic 3x3 spatial resolve. The scale-3 polygon integration and private full-resolution scene-color mip pyramid are skipped.
+# Fixed-camera trace: ScreenSpaceReflections(Quality=2) fell from about 1.00 ms to 0.076 ms; total Q2-on frame time is within measurement noise of Q2-off.
