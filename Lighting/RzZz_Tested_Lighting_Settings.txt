@@ -1,4 +1,4 @@
-r.Lumen.TraceMeshSDFs=0
+r.Lumen.TraceMeshSDFs=1
 r.Lumen.ScreenProbeGather.Temporal.FastUpdateModeUseNeighborhoodClamp=1
 r.Lumen.ScreenProbeGather.Temporal.MaxFramesAccumulated=16
 r.Lumen.ScreenProbeGather.Temporal.RejectBasedOnNormal=1
@@ -23,28 +23,17 @@ sg.ReflectionQuality=3
 sg.PostProcessQuality=3
 r.RayTracing=0
 r.Lumen.HardwareRayTracing=0
-r.ReflectionMethod=2
 r.ReflectionEnvironment=0
-r.DynamicGlobalIlluminationMethod=1
 r.AntiAliasingMethod=4
 
-# Software SSR Q2 path. Reflection scalability tiers own r.SSR.Quality=2,
-# r.SSR.HalfResSceneColor=0, and r.Lumen.Reflections.Allow=0.
-# SG_Lighting_Reflection_Lvl delegates to those tiers and must not replay duplicate SSR/Lumen CVars after PIE initialization.
-r.SSR.Quality=2
-r.SSR.ExperimentalDenoiser=0
-r.SSR.Temporal=-1
-r.SSR.HalfResSceneColor=0
-r.SSR.Stencil=0
-r.SSR.Compute=0
-r.SSR.TiledComposite=0
-r.SSR.Q2.HiResVisibility=1
-r.SSR.Q2.HiResVisibilityScale=1
-r.FidelityFX.FSR.CreateReactiveMask=0
+# GI type is the single runtime owner of the GI and reflection methods.
+# Off:   r.DynamicGlobalIlluminationMethod=0, r.Lumen.DiffuseIndirect.Allow=0, r.ReflectionMethod=2
+# SSGI:  r.DynamicGlobalIlluminationMethod=2, r.Lumen.DiffuseIndirect.Allow=0, r.ReflectionMethod=2
+# Lumen: r.DynamicGlobalIlluminationMethod=1, r.Lumen.DiffuseIndirect.Allow=1, r.ReflectionMethod=1
+# Do not persist one of those three mode states here: the selected graphics option applies it atomically.
+# Weather post-process volumes must not override either method.
 
-# Engine shader state
-# Q2 scale 1 reuses native scene depth, closest/furthest HZBs, and Substrate/GBuffer data. It does not build the supersampled conventional-geometry depth/material passes used by optional scales 2-4.
-# It rejects back-facing HZB crossings and resolves genuine off-screen misses from the current SkyAtmosphere LUT; full Lumen reflections, captures, and hardware RT remain outside this path.
-# When Lumen GI is active, Q2 is deferred until after diffuse-indirect composition so it samples the fully lit scene color and is composed exactly once.
-# Scale 1 samples source radiance directly and applies one deterministic 3x3 spatial resolve. The scale-3 polygon integration and private full-resolution scene-color mip pyramid are skipped.
-# Fixed-camera trace: ScreenSpaceReflections(Quality=2) fell from about 1.00 ms to 0.076 ms; total Q2-on frame time is within measurement noise of Q2-off.
+# Stock SSR is used by Off and SSGI. Lumen GI uses stock software Lumen reflections,
+# including Mesh/Global Distance Field fallback for supported off-screen static geometry.
+r.SSR.Quality=2
+r.SSR.HalfResSceneColor=0
