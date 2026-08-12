@@ -449,17 +449,41 @@ visible de tous, elle justifie le delai, et elle remplace toute UI au sol. Modul
 (`UQModule_RackComponent::QMOD_IsBeaconModule`). **L'armement dorsal en est exclu par
 decision** : missiles et grenades d'epaule sont des armes, elles tirent droit.
 
-**Le geste, identique pour tous les modules** : maintenir la touche module (X, preset
-`Char_GadgetFire`, rebindable) pour viser, CLIC GAUCHE pour lancer, CLIC DROIT ou relachement
-pour annuler. Un arc holographique et un anneau d'impact montrent le point de chute REEL
-(l'apercu balaie la parabole en cherchant les collisions), donc un declenchement par accident
-est impossible. Etats du reticule : RECHARGE, HORS PORTEE, PAS DE CIEL.
+**Le geste, identique pour tous les modules (revise 2026-08-12, lot 1 de la refonte
+designation)** : maintenir la touche module (X, preset `Char_GadgetFire`, rebindable) pour
+viser, CLIC GAUCHE pour lancer, RELACHEMENT DE X pour annuler (seule voie d'annulation :
+le bind brut clic droit -> annuler a ete retire, le clic droit garde son sens arme/pointage
+et ne participe plus au geste). Un arc holographique et un anneau d'impact montrent le point
+de chute REEL (l'apercu balaie la parabole en cherchant les collisions), donc un
+declenchement par accident est impossible. Etats du reticule : RECHARGE, HORS PORTEE,
+PAS DE CIEL.
+
+**Presence corporelle du geste (2026-08-12)** : pendant tout le maintien, le composant
+pilote le canal de pointage du doigt EXISTANT du personnage (heartbeat par frame local +
+relais serveur a 0,05 s, extinction garantie par le watchdog 0,25 s du character BP), dirige
+vers le point de chute reel de l'arc ; et il RANGE l'arme tenue le temps du geste (variante
+B validee RzZz, facon Helldivers) via la primitive repliquee du systeme d'items, puis la
+ressort au desarmement. Le geste expose aussi `OnTargetingStateChanged` (BlueprintAssignable)
+et tente le hook optionnel `QMOD_TargetingStateChanged(bool)` sur le pawn (no-op tant que
+le BP ne le definit pas).
+
+**CONTRATS REFLEXIFS DU GESTE (ne pas renommer ces membres BP sans mettre a jour
+`QModule_GadgetHUD.cpp`, namespace `QModulePointingBridge`)** : sur `ALS_Base_CharacterBP` :
+`UpdatePointingFinger`, `SV_PointingFinger`, la variable `InventoryComponent` ; sur
+`InventoryComponent` (BP) : `GetActiveItem` ; sur `ItemScriptBase` : `GetItemIsHidden`,
+`LocalSetItemIsHidden` (choisie parce qu'elle est AUTO-REPLIQUEE : elle route vers
+`SV_SetItemHidden` et `IsHidden` a un OnRep ; ne PAS remplacer par `SetActiveItem`, qui
+change l'item actif ET declenche une sauvegarde d'inventaire). Les parametres sont ecrits
+PAR TYPE (premier vector, premier bool), donc un renommage de PARAMETRE est tolere ; un
+renommage de FONCTION casse en silence (log une fois via QMOD_VLOG).
 
 **Suppression du tir pendant le geste** : le mode vide temporairement
-`UCurrentInputData::CurrentInputCombos` de `Combat_1stTrigger`, `Combat_2ndTrigger` et
-`Camera_AimMode` sur le client local, et les restaure a la sortie et a l'EndPlay
-(`Settings->TargetingSuspendedPresets`). Ne PAS utiliser `BlockWhenOthersPressed` pour ca :
-son test depend de l'ordre d'iteration d'une TMap dans la frame, donc il ne bloque que parfois.
+`UCurrentInputData::CurrentInputCombos` de `Combat_1stTrigger`, `Combat_2ndTrigger`,
+`Camera_AimMode` et `UI3D_RightClick` (4e bind du clic droit a pied, rate par l'audit du
+2026-07-29, ajoute le 2026-08-12) sur le client local, et les restaure a la sortie et a
+l'EndPlay (`Settings->TargetingSuspendedPresets`). Ne PAS utiliser `BlockWhenOthersPressed`
+pour ca : son test depend de l'ordre d'iteration d'une TMap dans la frame, donc il ne
+bloque que parfois.
 
 **Briques partagees** : `AQModule_ThrownDeviceActor` (une parabole en forme fermee, evaluee a
 l'identique partout depuis {depart, vitesse, up, gravite, horodatage serveur} repliques une
