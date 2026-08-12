@@ -458,6 +458,14 @@ de chute REEL (l'apercu balaie la parabole en cherchant les collisions), donc un
 declenchement par accident est impossible. Etats du reticule : RECHARGE, HORS PORTEE,
 PAS DE CIEL.
 
+**La MEME grammaire vaut pour l'ordonnance dorsale depuis le 2026-08-12 (RzZz : "X seul
+ne doit jamais tirer")** : missiles d'epaule et grenades collantes n'ont plus d'appui
+direct : X MAINTENU les ARME (reticule nom + icone, triggers d'arme suspendus), le CLIC
+GAUCHE lache la salve, relacher X remet au repos. `HandleFirePressed` est scinde : le
+dispatch de tir historique vit dans `FireSelectedDirectGadget()`, appele au clic via
+`BeginOrdnanceArm`/`CancelOrdnanceArm`. Les toggles utilitaires (drone medical, radio,
+rappel de flotte) gardent l'appui direct : ils ne tirent rien.
+
 **Presence corporelle du geste (2026-08-12)** : pendant tout le maintien, le composant
 pilote le canal de pointage du doigt EXISTANT du personnage (heartbeat par frame local +
 relais serveur a 0,05 s, extinction garantie par le watchdog 0,25 s du character BP), dirige
@@ -491,6 +499,53 @@ fois ; resolue dans le repere local du lanceur, jamais en Z monde) ; enfants =
 `AQModule_StrikeBeaconActor` et `AQModule_StickyGrenadeActor` (salve dorsale collante qui
 detonne en ligne, fusee = index x ChainDelay pour que le rythme ne depende pas du terrain) ;
 `QModule_TrackerBridge` (acces reflexif partage au framework Lib_Tracker/TK_* du jeu).
+
+**LA VISEE ET LA COLONNE D'ORDONNANCE (lots 2-3 de la refonte, 2026-08-12).**
+L'apercu de visee est passe des spheres moteur aux TIRETS LASER orientes (mesh
+/Engine/BasicShapes/Plane + materiau `M_QModule_HoloDash`, cree par script dans
+/Game/Widget/QModuleV2) : 34 tirets qui DEFILENT vers le point de chute (billboard
+cylindrique vers la camera), anneau de 20 tirets tangentiels tournant lentement + 4 ticks
+cardinaux fixes, couleurs alignees sur le HUD terrain (valide #EB8D0C, invalide #FF4046,
+defauts dans `UQModule_Settings::TargetingValid/InvalidColor`). Le reticule affiche en plus
+l'icone du module arme (20 px) et la DISTANCE au point de chute reel en metres.
+
+La balise plantee dresse la **colonne d'ordonnance** : coeur + gaine (2 cylindres moteur,
+materiau `M_QModule_Beam` : parametres Color/Intensity/PulseSpeed/PulseTiling/PulseStrength/
+BaseGlow/TopFadePower), impulsions montantes qui ACCELERENT sur le compte a rebours ; pour
+la frappe uniquement, a l'heure du tir, un CONE descend du ciel et se comprime sur la zone
+pendant `AirstrikeArrivalDelaySeconds`, tient serre pendant le barrage, puis tout fond sur
+les 2 dernieres secondes du linger. Anneau de zone au sol (12 tirets plats) au rayon EXACT :
+`ZoneRadiusCm` est replique sur la balise (un float, une fois), calcule au lancer. TOUTE la
+timeline client derive de `FireAtServerTime` + les deux delais partages en Settings
+(`AirstrikeArrivalDelaySeconds` / `BarrageSpreadSeconds`, qui pilotent AUSSI le serveur :
+ce que la colonne annonce est ce qui arrive). Couleur par module : frappe `StrikeBeamColor`
+#FF931E, ravitaillement `SupplyBeamColor` (la couleur de chute existante de la caisse),
+meneur `LeaderBeamColor` #D9942F ; le no-op historique User.Color du NS_TaserBeam emprunte
+est mort avec lui. La balise porte enfin un traceur HUD pour son APPELANT seul
+(`BeaconTracker`, TK_Drop par defaut, duree calculee d'avance : les TempTracker ne se
+prolongent pas apres coup) et chaque impact de missile pousse un
+`UQModule_StrikeCameraShake` via PlayWorldCameraShake (epicentre = impact, attenuation
+`StrikeShakeInner/OuterRadiusCm`). Dependance module ajoutee : `EngineCameras` (les shake
+patterns Perlin vivent la sur UE 5.7, PAS dans GameplayCameras). Le MC
+`MC_AirstrikeMissileVisual` porte desormais le point d'impact (3e parametre).
+
+**AUDIO DE LA DESIGNATION (lot 4, 2026-08-12).** Sept soft refs optionnelles dans
+`UQModule_Settings` (null = silence, jamais une erreur), servies par le pack maison
+/Game/Sounds/_Ressource/IndieGameModel/SF_Meca. **Verdict RzZz du meme jour** : une
+passe de remplacement par des MetaSounds synthetiques purs (`QMS_QModule_*`, toujours
+sur disque dans /Game/Widget/QModuleV2/Audio avec leur script de construction) a ete
+JUGEE PIRE ("trop sobre, ca fait genere a l'IA") et revertee : les waves organiques
+du pack restent la reference, les QMS_* servent de base a une future passe manuelle.
+Le clonk de plantee est joue a pitch 0.85 (adouci). Roles : `TargetingArmSound` /
+`TargetingCancelSound` (2D, sortir/ranger le dispositif ; le blip d'annulation se TAIT
+sur un lancer, flag `bCommitInProgress`), `BeaconThrowSound` (depart de main, saute au
+late-join car bPlanted est deja replique), `BeaconPlantSound` (clonk), `BeaconBeepSound`
+(LE bip de liaison : meme cadence accelerante que la lumiere et les pulses, 1,5 a 9 Hz,
+pitch montant avec l'urgence), `StrikeFireSound` (confirmation au tir, tous payloads),
+`StrikeIncomingSound` (boucle de grondement, frappe seulement : enfle en volume et en
+pitch sur la descente du cone, FadeOut apres le barrage, coupee a l'EndPlay). Les waves
+du pack ne sont pas routees en SoundClass (l'etat de ~89 % du projet) : la passe de mix
+globale reste un chantier separe.
 
 **Vaisseau de renfort** (`AQModule_DropshipActor`) : decor cosmetique qui fait venir l'escouade
 par les airs sur la balise. Il spawne le VRAI `IronDee_Lavrik` (la variante `_Police_Nodrive`
