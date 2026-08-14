@@ -112,9 +112,17 @@ redémarrages.** Il ne reste qu'à choisir la valeur du délai pour les modules.
 
 Deux constats :
 
-1. **Le tirage ignore les poids.** `GetSeededItemByLocation` prend
-   `Keys(Item:DropWeight)` puis fait un `RandomIntegerInRange` **uniforme** sur
-   l'index. La colonne de poids de toutes les tables du projet n'a aucun effet sur ce
+1. **Le tirage ignore les poids, SUR CE CANAL UNIQUEMENT.** `GetSeededItemByLocation`
+   prend `Keys(Item:DropWeight)` puis fait un `RandomIntegerInRange` **uniforme** sur
+   l'index. Précision (investigation du 2026-08-14) : le canal de mort des IA, lui,
+   lit bien la colonne, mais avec une **autre sémantique** :
+   `CombatComponent.GetRandomDrop` mélange les clés puis fait un jet de Bernoulli
+   `RandomBoolWithWeight(poids)` par clé et retourne la première qui passe. La valeur
+   est donc une **probabilité par item** (0..1), pas un poids relatif, un seul item
+   au maximum tombe, et il est possible que rien ne tombe. `ItemAlwaysDropped` est
+   garanti, `RespawnTimeSeconds` n'est pas consommé par ce chemin (seul
+   `DurationOnGround` l'est), et le spawn passe par `ItemDroppedReplicator`.
+   La colonne de poids n'a en revanche aucun effet sur ce
    chemin. Le C++ de QModule, lui, la lit correctement :
    `AQModule_SupplyCrateActor::Authority_RollSupplyItem` (patron réflectif
    `FMapProperty` / `FScriptMapHelper`, gère les clés dures et souples, les valeurs
@@ -489,5 +497,125 @@ deux endroits différents selon la machine, est une régression, pas une fonctio
 
 ---
 
-*Document rédigé le 2026-08-07. Mesures faites dans l'éditeur, éditeur ouvert, sans
-aucune modification du projet.*
+## 11. Implémentation (2026-08-14)
+
+Feu vert RzZz du 2026-08-14 : lots L0, L1, L2 livrés, plus le canal police (nouvelle
+demande du même jour : « certains IA police droppent des modules passifs assez
+rarement, actifs très très rarement »). Compile vert : `QangaEditor` (97 actions,
+premier coup) ; cible `QangaServer` vérifiée aussi. **Tout est dormant** :
+`Enabled=False` dans `DefaultGame.ini`, activation de session par `qmoduleloot.Enable`.
+
+### 11.1 Code (plugin QModule, plus un hook QAI)
+
+| Fichier | Rôle |
+|---|---|
+| `QModuleLoot_Library.h/.cpp` | rouleur pondéré `RollWeightedItem` (factorisé DEPUIS `AQModule_SupplyCrateActor::Authority_RollSupplyItem`, qui y délègue désormais : plus de doublon), `ResolvePickupClass` (« ItemScript » d'abord), `SpawnPickupActor` (spawn différé, propriétés `RespawnTimeSeconds`/`DropSpawned` posées AVANT `FinishSpawning`), `HashWorldLocation` (64 bits, quantifié 10 cm), `ResolveGameWorld` (partagé avec les TestCommands historiques) |
+| `QModuleLoot_Profile.h` | `UQModuleLoot_Profile_DataAsset` : préfixes de chemin, poids par catégorie d'ancre (clés FName pour garder la dépendance DQS privée), table, chance par ancre, plafond par niveau, respawn |
+| `QModuleLoot_Settings.h/.cpp` | `[/Script/QModule.QModuleLoot_Settings]`, `Enabled=false` par défaut, exclusion `Q_IronCity_Test` par défaut, bloc police (taux, tables, mots-clés d'éligibilité) |
+| `QModuleLoot_World_SubSystem.h/.cpp` | le cœur : bind unique sur `QLevel_LevelLoad`/`LevelUnloaded`, seed déterministe par position monde de l'instance, un `FRand` par ancre éligible dans l'ordre stable du catalogue, spawn NON répliqué identique sur chaque machine, destruction des spawns à l'unload (pas de doublon au re-stream) ; canal police |
+| `QModuleLoot_TestCommands.cpp` | `qmoduleloot.Enable/Disable/Status/SimulateLevel/PoliceDrop`, strippé en Shipping |
+| `QAI_AgentComponent.h/.cpp` | **hook producteur** : `static FQAI_OnAnyAgentDiedNative OnAnyAgentDiedNative`, broadcast dans `HandleDeath` APRÈS la coupure d'autorité (serveur seul, une fois par mort via `bDeathHandled`, cadavre encore valide et encore enregistré, jamais déclenché par un despawn/cull). Patron identique à `UQRadioComponent::OnAnyRadioRegisteredNative` |
+
+Dépendances ajoutées : `QLevel`, `DynamicQuestSystem`, `QAI` (privées, `Build.cs` +
+`.uplugin`). Pas de cycle (vérifié : DQS ne dépend pas de QModule).
+
+### 11.2 Canal police : pourquoi ce câblage
+
+L'investigation du 2026-08-14 (lecture de code + graphes BP, éditeur) a établi :
+la mort d'une unité police est actée par le BP `CombatComponent` (dispatcher
+`OnDeath`), que `UQAI_AgentComponent` écoute déjà par réflexion ; tout converge dans
+`HandleDeath()`. S'accrocher à `OnDestroyed` côté QPolice aurait droppé du loot sur
+les unités simplement **cullées** ; renseigner `ItemDropLoot` sur les BP police
+aurait exigé des éditions BP et n'aurait pas permis le double palier passif/actif.
+Le roster police n'a **aucune** table `ItemDropLoot` (mesuré) : aucun conflit avec
+le loot existant.
+
+Mécanique : à chaque mort d'agent QAI, le subsystem filtre par monde (délégué
+statique, plusieurs mondes en PIE), vérifie l'éligibilité par mot-clé de nom de
+classe (`AI_DronePolice` couvre standard/Captain/Heavy ; `AI_AutonomusPolice`), puis
+un seul jet : bande active d'abord (0,15 %), sinon bande passive (2 %), sinon rien.
+Le drop est rollé côté serveur dans la table pondérée et spawné **répliqué** (un
+événement dynamique n'est pas déterministe côté client), en mode `DropSpawned`,
+sans respawn. Pools : passifs = les 10 modules cyborg passifs à item ; actifs =
+`AntenneLonguePortee` et `NidDeFrelons`, les 2 seuls actifs (liste des 8 gadgets en
+dur dans `QModule_GadgetHUD.cpp:46`) qui ont un item. Les vaisseaux police sont
+**exclus des mots-clés v1** : leur mort passe peut-être par `VehicleCombatComponent`,
+non vérifié.
+
+### 11.3 Données (toutes sous `/Game/Phases/QModuleV2/Loot/`, dossier déjà cuit)
+
+5 tables `DA_Loot` (dupliquées de `Supply_LootDA`) : `LDA_QMLoot_Common` (10
+passifs, poids 100/r1 et 35/r2), `LDA_QMLoot_Relay` (12, actifs à 20 et 3),
+`LDA_QMLoot_Market` (8, raretés hautes favorisées), `LDA_QMLoot_PolicePassive` (10),
+`LDA_QMLoot_PoliceActive` (Antenne 100, Frelons 10). NOTE : ces tables sont
+consommées par le rouleur C++ (poids relatifs). Si un jour elles sont branchées sur
+`CombatComponent.GetRandomDrop`, la sémantique change (probabilités par item, cf. §2.4).
+
+5 profils `QMLP_*` : Bunker (Container 1.0/Furniture 0.3, 1 %, max 2, 72 h),
+Relay (+Terminal 0.6/Machinery 0.3, 0,6 %, max 2, 72 h), Ruins (Container 1.0,
+0,8 %, max 3, 48 h), Warp (0,4 %, max 1, 96 h), Industrial (0,8 %, max 2, 72 h).
+
+Passe L0 appliquée : les 8 QMD à prix 2500 et Rarity 0 sont passés à **Rarity 1**.
+Les anomalies fabricant (`ContreMesuresVoss` sans tag, `CoqueIntegrale` Voss sans
+lieu Voss) restent ouvertes (questions §10).
+
+### 11.4 Vérifié / pas vérifié
+
+**Vérifié (PIE, 2026-08-14, marqueurs dans le log)** : subsystem lié (`bound=1`,
+5/5 profils), `SimulateLevel` sur `Q_L_Camp_Bunker_Sangline_A1` a spawné 2 pickups
+(plafond du profil atteint : 229 conteneurs à 1 %), `PoliceDrop` passif et actif ont
+spawné, et les 4 acteurs mesurés en jeu sont bien les classes de ramassage réelles
+(`IS_QModuleCy_CoqueIntegrale_C`, `RecuperateurCinetique_C`,
+`SacocheDimensionnelle_C`, `AntenneLonguePortee_C`).
+
+**Pas encore vérifié** : une mort réelle d'unité police en jeu atteignant le hook
+(le chemin est établi par lecture, pas observé) ; le chemin streaming réel
+(`QLevel_LevelLoad` dans l'univers, vs la commande de simulation) ; l'identité des
+positions serveur/client en multijoueur (garantie par construction, à mesurer comme
+la passe 15.12 de QModule) ; le comportement du ramassage/respawn long en boucle
+complète ; les vaisseaux police (exclus v1).
+
+### 11.5 Revue adversariale du 2026-08-14 : 5 défauts confirmés, 5 corrigés
+
+Passe de 19 agents (3 relecteurs par dimension, chaque trouvaille contre-vérifiée
+par un réfutateur indépendant) : 16 trouvailles brutes, 5 confirmées sur pièces,
+toutes corrigées le jour même, les deux cibles recompilées vertes.
+
+1. **CRITIQUE, préexistant (plugin QLevel)** :
+   `UQLevel_Streaming_Instance::QLevel_GetAdditionalData` avait un test de nullité
+   inversé et retournait **toujours false**. Conséquence : le chemin streamé du
+   placement ne posait JAMAIS rien, pendant que `qmoduleloot.SimulateLevel`
+   (lecture directe de l'asset) affichait des succès : la fausse feature type.
+   Corrigé des deux côtés : l'accesseur est réparé (zéro appelant C++ ou BP
+   n'avait jamais vu `true`, vérifié projet entier, donc aucun changement de
+   comportement pour l'existant), ET le subsystem lit désormais l'asset en direct,
+   même source pour le chemin streamé et la simulation.
+2. **MAJEUR, préexistant (caisse de ravitaillement)** : le contenu était spawné
+   côté autorité seulement, non répliqué ; or `ItemScriptBase` ne réplique pas par
+   défaut : **personne ne voyait les supplies en serveur dédié** (seul l'hôte d'un
+   listen server les voyait). La caisse passe par `SpawnPickupActor` répliqué,
+   comme le drop police.
+3. **MINEUR (code neuf)** : `RespawnSeconds=0` n'était jamais écrit (garde `> 0`)
+   alors que le défaut de classe d'`ItemScriptBase` est **1000** (mesuré au parsing
+   binaire du CDO) : un drop de mort serait devenu une source de module se
+   régénérant sur place. Sémantique corrigée : `>= 0` écrit, négatif = ne pas toucher.
+4. **MAJEUR (code neuf)** : le drop répliqué partait éveillé, sans dormance, sans
+   cull dédié, sans durée de vie ni suivi : population croissante d'acteurs
+   répliqués reconsidérés pour 500 connexions. Corrigé : `DORM_Initial`, fréquence
+   réseau 2 Hz, et expiration `WorldDropLifetimeSeconds` (défaut 1800 s, config)
+   sur tous les drops répliqués (police + caisse).
+5. (= le n°2 vu par la dimension réseau, même correctif.)
+
+Au passage, le build serveur a réveillé un bug IWYU latent du plugin marketplace
+`UltimateLevelArtTool` (`GWorld` sans include de `Engine/World.h`, module
+AutoSpline) : corrigé dans les 2 fichiers fautifs, commenté.
+
+### 11.6 Dette signalée au passage (hors périmètre, non corrigée)
+
+Dans `QPoliceSubsystem.cpp` : un `static int32 HeavyDroneToggle` local de fonction
+(:4888, viole la règle multi-monde du CLAUDE.md §6) et deux chemins de classe morts
+(:4850 `/Game/Characters/AI/AI_DronePolice`, :5493 `LavrikPolice`, jamais existants).
+Proposé en tâche séparée.
+
+*Document rédigé le 2026-08-07, mesures en éditeur. Implémentation, revue et
+section 11 le 2026-08-14.*

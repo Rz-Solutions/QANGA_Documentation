@@ -529,6 +529,17 @@ prolongent pas apres coup) et chaque impact de missile pousse un
 patterns Perlin vivent la sur UE 5.7, PAS dans GameplayCameras). Le MC
 `MC_AirstrikeMissileVisual` porte desormais le point d'impact (3e parametre).
 
+**COULEURS DU DOCK GADGET (2026-08-13, demande RzZz).** Le dock et la roue ne portent
+plus les couleurs de familles : chaque logo de module ET chaque contour de cellule
+prennent l'orange des icones du HUD general (`GadgetHudCellColor`, defaut #FF931E
+mesure), et la cellule SELECTIONNEE (surlignee dans la roue, armee en mode compact)
+passe logo + contour au vert (`GadgetHudSelectedColor`, defaut #17B98F, le vert
+matiere du HUD terrain). Les deux sont des reglages Config (QModule|GadgetHUD).
+Mecanique : `UQModule_HexCellWidgetBase` expose `SelectionColor` (defaut ambre
+historique) et `bTintIcon` (defaut false) : LE MUR NE CHANGE PAS (familles + ambre),
+seul le dock active le mode teinte. `ResolveFamilyColor` du dock a ete supprimee
+(plus d'appelant).
+
 **AUDIO DE LA DESIGNATION (lot 4, 2026-08-12).** Sept soft refs optionnelles dans
 `UQModule_Settings` (null = silence, jamais une erreur), servies par le pack maison
 /Game/Sounds/_Ressource/IndieGameModel/SF_Meca. **Verdict RzZz du meme jour** : une
@@ -922,3 +933,116 @@ ne contient PAS le niveau du noyau malgre son nom : ligne 345, il vaut deja
 `CoreLevel * RingsPerLevel`. La comparaison `QMOD_HexDistance(...) > CachedCoreLevel` qui decide de
 l'affichage verrouille est donc correcte et alignee sur l'autorite. La renommer serait utile, la
 "reparer" serait une regression.
+
+### 15.17 Le Mur a une voix et les phases un visage (2026-08-13, compile vert, chemins mesures en PIE)
+
+**Audio du mur.** Huit soft refs optionnelles dans `UQModule_Settings` categorie `QModule|Wall`
+(null = silence, jamais une erreur, le contrat de la designation) : `WallOpenSound`,
+`WallCloseSound`, `WallSelectSound`, `WallInstallSound`, `WallModuleRemoveSound`,
+`WallPhaseInsertSound`, `WallPhaseRemoveSound`, `WallDenySound`, plus `WallSoundVolume` (0.45)
+et `WallSoundPitch` (0.8), memes valeurs que la designation puisque c'est la meme banque
+SF_Meca (verdict 2026-08-12 : les waves organiques battent les MetaSounds synthetiques).
+Lecture par `PlayWallSound` (2D, client pur, `LoadSynchronous`). Les waves `UI/` du pack sont
+routees `QSClass_UI` ; `Clonk_Small` (install) et la paire `Elevator_Small` (phases) ne sont
+routees nulle part, comme le clonk de la designation : dette de mix connue, pas ce chantier.
+
+**Le succes de phase voyage enfin.** `SV_InsertPhaseFromWallet` / `SV_RemovePhaseToWallet`
+n'emettaient `CL_ActionResult` que sur refus (regle anti-harcelement : pas de toast sur le geste
+le plus repete de l'ecran). Deux codes APPENDUS en fin d'enum (`PhaseInserted`, `PhaseRemoved`,
+la regle du commentaire de `EQModule_ActionResult` : rien ne se decale sur le fil) sont maintenant
+emis sur le chemin de succes. Cote client `HandleActionResult` les traite SON SEULEMENT et sort
+avant le bandeau : la regle anti-harcelement a change de camp, elle est devenue une decision de
+presentation par code, pas une absence d'information.
+
+**Le refus sonne la ou il s'affiche.** `WallDenySound` est joue en tete de `ShowActionMessage`
+quand `bRefusal`, AVANT la garde de chrome : il couvre d'un seul point les refus serveur
+(HandleActionResult) et le refus purement client "aucun module choisi" de `HandleCellClicked`.
+Ne pas le deplacer dans `HandleActionResult` : le refus client ne repasserait plus par lui.
+
+**Ouverture / fermeture : c'est l'onglet qui parle.** Le hub ne pilote que la visibilite du TAB
+(`UQModule_LegacyPhaseSwap`), jamais celle du mur imbrique. `HandleTabVisibilityChanged` filtre
+desormais les vraies transitions visible/cache (`bLastTabVisible`, seme sur l'etat reel au
+construct) et relaie vers `QMOD_NotifyTabShown` (refresh du stock + son d'ouverture, remplace
+l'appel direct a `QMOD_RefreshStock`) / `QMOD_NotifyTabHidden` (son de fermeture, verrouille par
+`bTabShownOnce` : un hub qui collapse ses onglets inactifs au boot n'est pas une fermeture).
+LIMITE CONNUE : un mur ouvert HORS hub (`qmodule.Test.OpenWall`, action de quete
+`A_OpenModuleWall` du tutoriel) ne recoit aucun signal d'onglet, donc pas de son d'ouverture ;
+si on le veut la, l'appelant appelle `QMOD_NotifyTabShown` apres l'AddToViewport.
+
+**Les phases ont un visage.** La tuile du stock EST l'item de phase (design RzZz 2026-08-13 :
+"T1..T6 ne parle pas aux joueurs, montre l'objet") : son logo en identite (30 px, teinte
+`GTierColors`), le compte possede comme seul texte. Le label "T&lt;n&gt;" ne revient qu'en SECOURS
+si aucune icone ne se resout, pour ne jamais laisser une tuile anonyme. Icone lue par
+`ResolvePhaseTierIcon` : `PhaseItemAssetByTier[Tier]` -> `IconAsTexture` de l'IDA par reflexion.
+DOUBLE CONTRAT PAR CHAINE, nom ET TYPE : la propriete est un `TSoftObjectPtr<UTexture2D>`
+(mesure via get_data_asset_details), donc une **FSoftObjectProperty** ; un
+`FindFProperty<FObjectProperty>` (type dur) rend null SANS ERREUR et l'icone ne s'affiche
+jamais, c'est exactement le bug de la premiere passe. La resolution attrape desormais soft
+puis dur. Une seule source de verite : re-skinner l'item re-skinne le panneau. Il n'existe que
+4 textures (`T_PhaseTier0..3`), T4/T5/T6 pointent l'art de T3 : c'est la TEINTE `GTierColors`
+qui distingue les hauts tiers (compte a zero = icone eteinte alpha 0.45). **L'inventaire ne
+montre que T1..T3** (design RzZz 2026-08-13) : mesure sur les 104 QMD du disque, MaxLevel vaut
+2 (x13) ou 3 (x91), JAMAIS plus, et les tiers 4..6 n'ont aucune source en jeu (audit 07/2026).
+Une tuile T4..T6 ne s'affiche que si le wallet en contient reellement (console de test, legacy) :
+l'ecran de tous les jours lit trois tuiles, un stock reel n'est jamais cache. Le hint sous
+"PHASES EN STOCK" est reformule et passe en `NSLOCTEXT` ("Les phases s'inserent dans un module
+installe et augmentent son niveau"), seul texte localisable du chrome avec les deux etats
+INACTIF ; le reste passe par `FText::AsCultureInvariant` (dette de loc connue, par.15.13).
+
+### 15.18 Les sons marchaient en editeur et etaient MUETS en build : deux bugs (2026-08-14)
+
+Rapporte par RzZz apres un packaging : mur, designation ET feedback du HUD gadget, tous muets en
+build alors qu'ils jouent en editeur. L'audit (11 agents, mesures sur la build Steam installee) a
+trouve **deux causes independantes**, pas une.
+
+**BUG 1 : les assets ne sont jamais cuits.** Un `TSoftObjectPtr` dont le chemin n'existe que
+comme litteral dans un constructeur C++ n'a **aucun referenceur dur** : ni l'AssetRegistry ni
+l'UHT ne le voient, le cooker ne l'atteint pas. En editeur `LoadSynchronous()` resout contre le
+`/Content` en vrac sur disque et tout marche ; en build il n'y a plus que des paks, donc
+`LoadPackage` emet `SkipPackage` et le pointeur revient NUL. Preuve dans le log du jeu livre
+(`Steam/steamapps/common/Qanga/Qanga/Saved/Logs/QANGA.log:2546,2549,2552,2556`) :
+`SkipPackage: /Game/Sounds/_Ressource/.../Scifi_Interface_DeviceA_Open_Wav - The package to load
+does not exist on disk or in the loader`. Mesure independante sur le manifeste livre :
+**34 des 106 waves SF_Meca cuites, et 0 des 10 sons concernes** (`Manifest_UFSFiles_Win64.txt`).
+Les 5 sons du mur qui marchaient le faisaient PAR HASARD, via un referenceur sans rapport
+(`Env_Call_03`, `Env_DoorAuto_Open_3`, `Generator_PowerON`, `S_TUTO_MISSION_1_FALL_CYBORG`) :
+si un de ces assets change, ils cassent sans avertissement.
+FIX APPLIQUE : une ligne dans `Config/DefaultGame.ini` (bloc `DirectoriesToAlwaysCook`, apres les
+6 lignes QModule existantes) qui force-cuit `/Game/Sounds/_Ressource/IndieGameModel/SF_Meca`.
+L'entree est RECURSIVE (`CookOnTheFlyServer.cpp` utilise `FindFilesRecursive`), ce qui est
+indispensable ici : 7 des 10 sons vivent dans le sous-dossier `SF_Meca/UI/`. Controle positif que
+le mecanisme est honore dans ce projet : `/Game/Sounds/Dialogue` est cuit 73/73.
+
+**BUG 2 : le code n'etait pas dans le binaire.** Independant du cook. Scan d'octets du `Qanga.exe`
+livre : **zero occurrence** des 8 chemins du mur ni de `WallOpenSound`/`PlayWallSound`, alors que
+les 7 chemins de la designation y sont (2 occurrences UTF-16 chacun) et que la classe
+`QModule_WallWidgetBase` est bien presente. L'exe a ete lie sur une capture de sources anterieure
+a la passe audio du mur. **Aucun reglage de cook ne peut y changer quoi que ce soit** : il faut
+recompiler la cible jeu. A savoir : le build Steam **ne sort pas de cet arbre**
+(`Binaries/Win64` n'a aucun `Qanga.exe`/`Qanga.target`, pas de `Saved/StagedBuilds`, et les
+fichiers de reponse UAT pointent vers `A:\QANGA\` non monte).
+
+**LE SILENCE ETAIT LE VRAI COUPABLE.** Les 11 sites de lecture audio du plugin faisaient
+`if (Load()) { Play(); }` sans `else` ni log : un asset absent du cook rendait exactement le meme
+resultat qu'un reglage volontairement vide. `PlayWallSound` distingue desormais les deux et
+journalise UNE fois par chemin (`WarnedMissingSounds`, membre `mutable`) : "is set but failed to
+load: almost certainly missing from the cook". **Les 10 autres sites (StrikeBeaconActor.cpp
+138/244/337/352/359, GadgetHUD.cpp 616/1323/1346/1968/1990) gardent le patron muet** : les durcir
+est une tache dediee, hors perimetre de cette passe.
+
+**RESTE OUVERT.** (a) La graine `DA_EasyCookSeed_QANGA` du plugin EasyCook (le mecanisme prevu
+pour cet idiome : son scanner C++ matche `FSoftObjectPath(TEXT("/..."))` et force-cuit les entrees
+`Source=CppLiteral`) **n'a pas ete re-scannee depuis le 2026-08-12 12:07** ; la regenerer corrige
+la CLASSE du bug, mais `EasyCook.SaveSeed` **REMPLACE** la graine et detruirait les entrees
+`Source=Manual` (a filtrer d'abord), et le bouton "Run" de l'EUW reecrit des `.uasset` avant de
+scanner (mutation de masse, validation requise). (b) Verifier apres rebuild : le mur doit revenir
+**a moitie audible** avant tout correctif de cook (4 sons sur 8 deja cuits) ; un mur totalement
+muet dans un binaire qui contient le code signalerait une TROISIEME cause. (c) Le son de la roue
+gadget est compile ET cuit : s'il est muet lui aussi, cet audit ne l'explique pas.
+
+**Mesure en PIE (2026-08-13)** : build froid `Succeeded` 10.9 s ; `qmodule.Test.InsertPhaseInv`
+-> `Action result on client: 14`, `RemovePhaseInv` -> `15`, insertion sur case vide -> `9`
+(refus) ; ouverture du mur par `OpenWall` sans erreur ; `get_recent_engine_errors` vierge de
+QModule. Verdict d'oreille RzZz le jour meme, en direct dans la session PIE : "les sons sont
+bien". Reste au gout de RzZz : le rendu visuel des logos teintes ; tout (waves, volume, pitch)
+se re-regle dans les DevSettings sans rebuild.
