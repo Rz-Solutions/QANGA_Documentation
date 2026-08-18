@@ -1046,3 +1046,93 @@ gadget est compile ET cuit : s'il est muet lui aussi, cet audit ne l'explique pa
 QModule. Verdict d'oreille RzZz le jour meme, en direct dans la session PIE : "les sons sont
 bien". Reste au gout de RzZz : le rendu visuel des logos teintes ; tout (waves, volume, pitch)
 se re-regle dans les DevSettings sans rebuild.
+
+### 15.19 Les ordnances ne blessaient AUCUNE IA : la porte d'entree des degats (2026-08-18, compile vert)
+
+**Symptome RzZz** : "les modules cyborg qui font des degats, passif ou actif, ne font aucun
+degat aux IA ni aux joueurs".
+
+**Cause, mesuree dans le code, pas supposee.** Le projet a UNE porte d'entree pour les degats :
+`UGameplayStatics::ApplyDamage / ApplyPointDamage / ApplyRadialDamage`, donc `AActor::TakeDamage`,
+donc l'evenement `OnTakeAnyDamage`. Deux auditeurs INDEPENDANTS y sont abonnes, et c'est tout
+l'interet :
+
+- `SS_PhysicalState.OnTakeAnyDamage_Event` -> `Lib_Life.ApplyStatDamageToActor` : la vie des
+  JOUEURS, celle qui vit dans un script de stat (avec l'etape d'armure et les multiplicateurs
+  Chasseur de primes / Fleau des machines poses le 2026-07-11).
+- `CombatComponent` (bind `Assign On Take Any Damage` sur son owner au Begin Play) : la vie des
+  IA, qui n'ont AUCUN script de stat. Leur vie est `CurrentLife` plafonnee par `LifeWhenNoStat`,
+  la paire exacte que QAI lit et ecrit (`QAI_AgentComponent.cpp:322` et `:4786`). Verifie sur les
+  assets : `AI_AutonomusPolice` et `BASE_Animal` portent un `CombatComponent`, zero reference a
+  `SS_PhysicalState`.
+
+Les ordnances, elles, appelaient par REFLEXION `Lib_Life.ApplyStatDamageToActor` directement
+(l'ancien `ApplySplashThroughLibLife`), c'est-a-dire le DERNIER maillon de la seule branche
+joueur. Or le graphe de cette fonction ne fait qu'une chose : `GetStatByActor` -> `Cast To
+SS_Shield` / `Cast To SS_PhysicalState` -> `SetShield` / `TakeDamage`. Sur une IA le cast echoue,
+la fonction sort, **zero degat, zero erreur, zero log**. Ce n'etait pas un reglage : c'etait
+structurellement impossible.
+
+**Pourquoi ca avait ete cru valide le 2026-07-11** : le log de controle
+`Ordnance impact at X: N actor(s)` comptait les acteurs sur lesquels on avait APPELE la fonction,
+pas ceux qui avaient perdu des PV. `1 actor(s)` s'affichait meme quand rien n'encaissait. Une
+mesure d'appel n'est pas une mesure d'effet.
+
+**Correctif** : `UQModule_RackComponent::Authority_ApplySplashDamage` remplace
+`ApplySplashThroughLibLife` et passe par la porte d'entree, exactement comme les balles
+(`QWeaponBulletSubsystem.cpp:1006`) et comme l'IA (`QAI_CombatProcessor.cpp:4186` et `:3987`) :
+
+- coup direct = `ApplyPointDamage(cible, degat plein, ...)`, instigator = controller du porteur,
+  causer = son pawn ;
+- souffle = `ApplyRadialDamageWithFalloff(degat, degat x 0.1, rayon, falloff 1.0)`, ce qui
+  reproduit a l'identique la decrue historique 100 % au centre -> 10 % au bord, la cible directe
+  etant dans les `IgnoreActors` (elle a deja paye plein tarif) ;
+- `DamagePreventionChannel = ECC_MAX` : AUCUN test de ligne de vue, le souffle traverse le
+  decor comme il l'a toujours fait (decision RzZz 2026-08-18) ;
+- **auto-degat conserve** : le moteur epargne toujours le `DamageCauser`, donc le porteur est
+  servi explicitement avec la meme decrue. Decision RzZz : se prendre son propre souffle doit
+  faire mal, c'est ce qu'un futur module d'amortissement viendra racheter.
+
+Concerne d'un coup les 4 armements qui partagaient ce point unique : missiles d'epaule
+(Nid de guepes), grenades d'epaule (Nid de frelons), frappe aerienne (Balise de frappe),
+grenades collantes.
+
+**Ce que le contournement coutait en plus du degat**, et qui revient gratuitement : `OnDamaged`,
+la riposte QAI (`HandleCombatComponentDamaged`), la mort et `OnDeath`, le drop de loot, les coins
+et l'XP, les points de recherche, `OnActorDeadStopAI`, les regles PvP / PvE / safe-zone du
+`CombatComponent`, et les points faibles des cocons (`AQAI_AgentSpawner::TakeDamage`).
+
+**Drone medical, meme defaut en miroir** : `Lib_Life.ApplyHealToActor` n'ecrit lui aussi que
+dans un script de stat, donc le drone ne pouvait PAS soigner un compagnon IA. Ajout d'un repli
+`HealThroughCombatComponent` qui ecrit `CurrentLife` borne par `LifeWhenNoStat` (le patron exact
+de `UQAI_AgentComponent::TickRecruitedFollowerRegen`) puis pousse le miroir replique via
+`RefreshReplicatedCombatHealth()`.
+
+**Instrument** : le log ne compte plus les appels, il imprime ce que les victimes RENVOIENT
+(`ApplyPointDamage` rend le degat reellement encaisse par `TakeDamage`) :
+`Ordnance blast at X: D dmg / R cm -> direct 'A' took d1, splash landed|empty, self took d2`.
+Visible avec `qmodule.Verbose 1`.
+
+**Etat de verification.** Build : `UnrealEditor-QModule.dll` recompile et relinke le 2026-08-18
+a 01:59. ATTENTION, le target `QangaEditor` NE build PAS en entier, pour une raison ETRANGERE a
+ce chantier : `QSystem/Private/Component/QInteriorPostProcessComponent.cpp:614/619/623` reference
+`FSceneView::InteriorDiffuseLightingIntensityScale` / `InteriorSkyLightIntensityScale` /
+`InteriorIndirectSpecularIntensityScale`, qui n'existent NULLE PART dans le moteur de
+`C:/UE5_Share` (grep moteur complet, zero occurrence). Source modifiee le 2026-08-17 10:27, DLL
+QSystem datant du 2026-08-15 15:36 : ce fichier n'a jamais compile depuis son edition. A traiter
+separement (patch moteur perdu, ou code a retirer).
+
+RESTE A MESURER EN JEU (a faire par RzZz ou en session avec editeur) : `qmodule.Verbose 1`, puis
+`qmodule.Test.AddRack` + `qmodule.Test.GodWall`, puis `qmodule.Test.ShoulderMissiles` /
+`ShoulderGrenades` / `Airstrike` sur une IA, en lisant sa `CombatComponent.CurrentLife` avant et
+apres. Deux points ouverts a trancher a cette occasion :
+1. **Tir ami**. Le degat radial moteur n'a aucun filtre de faction, alors que les balles en ont un
+   (`QWeapon` supprime le degat entre factions amies). Si le `CombatComponent` ne filtre pas
+   lui-meme dans son handler, une salve tuera desormais les compagnons recrutes et l'escouade
+   posee par le Protocole de meneur. A verifier AVANT de considerer le sujet clos.
+2. **Type de degat**. On passe `UDamageType::StaticClass()`, par parite stricte avec les balles.
+   Le projet possede pourtant une taxonomie (`DMG_Base`, `DMG_Weapon`, `DMG_WeaponHeadshot`,
+   **`DMG_Missile`**, `DMG_VehicleDestroyed`, `DmgTypeBP_Environmental`) que le `CombatComponent`
+   utilise pour classer les causes de mort. Passer `DMG_Missile` classerait correctement les kills
+   d'ordnance, et donnerait la cle d'une future resistance au souffle. Non fait ici faute de
+   pouvoir inspecter le contenu de `DMG_Missile` sans editeur.

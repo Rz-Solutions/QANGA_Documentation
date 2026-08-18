@@ -72,8 +72,8 @@
 | Concentration | P | Sway de visée au zoom -30 % | ✔ scopes |
 | Réflexes câblés | P | Changement d'arme +25/50 % plus rapide | ✔ équipement |
 | Analyste balistique | C | Affiche les multiplicateurs de zone des cibles | ➕ |
-| **Nid de guêpes** (2026-07-11, BRANCHÉ + VALIDÉ) | A | Ordnance dorsale style Anthem : 1/2/4 micro-missiles autoguidés courte portée (60 m, ~100 dégâts + souffle 2.5 m), recharge 14/10/6 s, tracking = CHANCE DE TOUCHER 60/80/100 % (les ratés partent dans le décor) | ✔ SV_TriggerShoulderMissiles (visuel BP_Missile ×0.5 homing réel, dégâts serveur Lib_Life) |
-| **Nid de frelons** (2026-07-11, QMD créé + BRANCHÉ + VALIDÉ) | A | Ordnance dorsale : 1/2/4 grenades lobées sur le point visé (50 m, 70 dégâts, souffle 6 m), recharge 12/9/6 s | ✔ SV_TriggerShoulderGrenades (visuel BP_GrenadeProjectile balistique, dégâts serveur Lib_Life) |
+| **Nid de guêpes** (2026-07-11, BRANCHÉ + VALIDÉ) | A | Ordnance dorsale style Anthem : 1/2/4 micro-missiles autoguidés courte portée (60 m, ~100 dégâts + souffle 2.5 m), recharge 14/10/6 s, tracking = CHANCE DE TOUCHER 60/80/100 % (les ratés partent dans le décor) | ✔ SV_TriggerShoulderMissiles (visuel BP_Missile ×0.5 homing réel, dégâts serveur par l'événement de dégât moteur depuis le 2026-08-18) |
+| **Nid de frelons** (2026-07-11, QMD créé + BRANCHÉ + VALIDÉ) | A | Ordnance dorsale : 1/2/4 grenades lobées sur le point visé (50 m, 70 dégâts, souffle 6 m), recharge 12/9/6 s | ✔ SV_TriggerShoulderGrenades (visuel BP_GrenadeProjectile balistique, dégâts serveur par l'événement de dégât moteur depuis le 2026-08-18) |
 
 ### D. Furtivité & Information (13)
 | Module | T | Effet | Ancrage |
@@ -117,7 +117,7 @@
 | Drone médical | A | Drone qui soigne en zone | ✔ base drone existante |
 | Drone de combat | A | Drone offensif temporaire | ✔ IS_DroneBase + QAI |
 | Bulle de bouclier | A | Dôme bloquant les projectiles quelques secondes | ➕ |
-| **Balise de frappe** (2026-07-11, BRANCHÉE + VALIDÉE) | A | Frappe aérienne au point visé : 8/14/22 missiles, zone 10/14/18 m, cooldown 300/240/180 s, délai d'arrivée 3 s | ✔ SV_TriggerAirstrike (visuel BP_Missile multicast sans owner + dégâts serveur via Lib_Life, souffle 7 m décroissant) |
+| **Balise de frappe** (2026-07-11, BRANCHÉE + VALIDÉE) | A | Frappe aérienne au point visé : 8/14/22 missiles, zone 10/14/18 m, cooldown 300/240/180 s, délai d'arrivée 3 s | ✔ SV_TriggerAirstrike (visuel BP_Missile multicast sans owner + dégâts serveur par l'événement de dégât moteur depuis le 2026-08-18, souffle 7 m décroissant) |
 | Largage de ravitaillement | A | Caisse de munitions/soins pour le groupe | ✔ items |
 | Leurre holographique | A | Copie qui attire l'aggro des IA | ✔ QAI perception |
 | Mine de proximité | A | Mine posée avec gestion ami/ennemi | ➕ |
