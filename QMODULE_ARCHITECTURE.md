@@ -1139,6 +1139,47 @@ apres. Deux points ouverts a trancher a cette occasion :
 
 ---
 
+### 15.21 Installer un module prend du temps, et ca se voit (2026-08-19)
+
+**La demande.** Poser un module sur le Mur etait instantane. Desormais l'installation dure, et le
+joueur voit une barre de progression pendant ce temps.
+
+**Ce qui a ete livre.**
+1. **Une duree, configurable a deux niveaux.** `UQModule_Settings::WallInstallSeconds` (3 s par
+   defaut, categorie `QModule|Wall`, donc pilotable depuis `DefaultGame.ini`) et, quand un module
+   merite une attente differente, `UQModule_Definition::InstallSeconds` (0 = utiliser le reglage
+   projet). **`WallInstallSeconds = 0` restaure exactement l'ancien chemin instantane**, ce qui est
+   aussi le garde-fou contre le piege maison `SetTimer(0)` qui EFFACE un timer au lieu de l'armer.
+2. **`TryInstall` scinde en deux, sans qu'une seule regle ne change.** `QMOD_ValidateInstall` porte
+   toutes les validations (aucune mutation) et rend au passage l'inventaire et l'item deja resolus ;
+   `TryInstall` l'appelle puis applique (consommation de l'item, pose du socket). **Tous les
+   appelants existants sont donc inchanges** : bootstrap des modules de base a la connexion, les
+   quatre actions de quete du tutoriel, la console de test.
+3. **Le serveur garde l'autorite et valide DEUX fois.** `SV_InstallModule` valide immediatement (un
+   anneau verrouille ou une case occupee se dit tout de suite, pas au bout de trois secondes), arme
+   un timer porte par le composant du PlayerState, puis a l'echeance appelle `TryInstall` qui
+   revalide tout : en trois secondes le sac, l'anneau ou la case ont pu changer, et l'autorite ne
+   fait pas confiance a sa propre decision passee. L'item n'est donc consomme qu'a la FIN.
+4. **Une installation a la fois par rack.** Une seconde demande est refusee par
+   `EQModule_ActionResult::InstallBusy`, **ajoutee en fin d'enum** pour qu'aucune valeur existante ne
+   change de numero (meme regle qu'au paragraphe 15.16), avec sa phrase localisee dans
+   `QMOD_DescribeActionResult`. Deux timers simultanes voudraient dire deux plaques a l'ecran, et
+   aucune des deux ne decrirait ce que le Mur fait vraiment.
+5. **La plaque.** Nouveau RPC client `CL_InstallStarted(ModuleTag, Seconds)` : cote client
+   uniquement, il ouvre la barre de progression partagee du jeu via
+   `UQNotificationManager::ShowProgress` avec le nom localise du module, **l'icone de sa definition**
+   et l'auto-progression reglee sur la duree. La barre se remplit donc toute seule : **aucun RPC de
+   progression, aucun tick**. Un message a l'aller, un message (`CL_ActionResult`) au retour.
+
+**Dependances ajoutees** : `QNotification` en `PrivateDependencyModuleNames` du `QModule.Build.cs` et
+dans les plugins de `QModule.uplugin`. QNotification est purement client (rien de replique), donc la
+dependance ne remonte jamais cote serveur dedie.
+
+**Le widget de la plaque a ete refait dans la foulee** : voir la copie
+`/Game/Widget/Notifications/V2/W_QProgressNotification_V2`, sur laquelle pointe desormais
+`ProgressNotificationWidgetClass` du gestionnaire de notifications. **Attention, ce widget est
+PARTAGE** : c'est la barre de progression de tout QANGA (recolte, quetes DQS), pas une piece du Mur.
+
 ## 16. Contrat audio central (2026-08-18)
 
 **Pourquoi.** Les 13 refs son du plugin partaient en `PlaySound2D` / `PlaySoundAtLocation`
@@ -1430,3 +1471,113 @@ verifier systematiquement quand on prend une source dans le sous-dossier `SF_Mec
 `IGBR_Repport_Widget`. Lui donner une classe monde aurait deroute un blip d'interface. Bascule sur
 `Scanner_Validated_3`, qui n'a aucun referent. **Ce changement d'une ligne dans
 `QModule_Settings.cpp` n'est PAS encore compile** (editeur ouvert au moment du changement).
+
+### 15.20 Le verrou d'ordnance restait colle aux cadavres : `IsValid` n'est pas "vivant" (2026-08-19, compile vert)
+
+**Symptome (RzZz)** : avec le Nid de guepes ou le Nid de frelons arme, le marqueur de cible reste
+affiche "de temps en temps" et continue de suivre des IA deja tuees.
+
+**Cause, en deux temps.** Le paragraphe 15.14 dit qu'un verrou est tenu "jusqu'a ce que la cible
+meure", mais le test ecrit etait `IsValid(Target)`, qui ne dit pas "vivant", il dit "l'acteur n'a
+pas ete detruit". Un cadavre reste un acteur valide pendant tout son ragdoll. Le verrou survivait
+donc a la mort. Et surtout, deux systemes se battaient :
+
+1. a la mort, QAI detruit les temp trackers attaches a l'agent
+   (`QAI_DestroyTempTrackersForDeadAgent`, appele par `HandleDeath`, qui tourne aussi sur le client
+   via `OnRep_IsAlive`). Le marqueur disparaissait, correctement ;
+2. 0,12 s plus tard, la boucle de verrou voyait `Lock.Marker` a null, `IsValid(Target)` toujours
+   vrai, et **respawnait** le marqueur sur le cadavre, par la branche "the tracker framework dropped
+   the marker under us". Avec `GadgetLockMarkerLifetimeSeconds` a 600 s, le marqueur repose ensuite
+   dix minutes sur le corps.
+
+Le "de temps en temps" du rapport, c'est la difference entre une IA reellement detruite (le verrou
+tombait) et un corps qui reste au sol a portee (le marqueur revenait en boucle).
+
+**Correctif.** Un seul concept, quatre sites, aucun changement de contrat reseau :
+- `QModuleGadgetHUD::IsLockTargetAlive` (namespace anonyme de `QModule_GadgetHUD.cpp`) delegue a
+  `QAI_BehaviorHelpers::IsActorCombatAlive`. QModule dependait deja de QAI (dependance privee,
+  ajoutee pour QModuleLoot), donc rien a inventer : le helper teste `UQAI_AgentComponent::IsAlive`,
+  qui est **replique sans condition** (`DOREPLIFETIME`), puis retombe par reflexion sur le
+  `CombatComponent` BP. Il lit donc la meme chose sur un client que sur le serveur ;
+- retention (`UpdateOrdnanceLocks`) : `bAlive` passe de `IsValid` au test de vie ;
+- acquisition (meme fonction) : le test est place **entre le cone et la trace de visibilite**, moins
+  cher qu'une trace. Sans lui, un cadavre dans le cone serait re-verrouille a la passe suivante,
+  juste apres que la retention l'a lache ;
+- `BuildLockTargetList` : une cible morte entre la derniere passe et la detente ne part plus au
+  serveur ;
+- `SV_TriggerShoulderMissiles` : la revalidation serveur pretendait deja verifier "alive" alors
+  qu'elle ne testait que `IsValid`. Une salve pouvait donc encore se guider sur un corps.
+
+**Regle a retenir** : sur QANGA, "mort" ne se lit jamais avec `IsValid`. Deux modeles de vie
+coexistent (voir 15.19), et le seul qui traverse le reseau pour une IA est `IsAlive` de
+`UQAI_AgentComponent`.
+
+**Reste a valider** : la conduite en jeu (armer le Nid de guepes, tuer une cible verrouillee,
+verifier que le marqueur part tout de suite et ne revient pas). Le lock loop part du pawn du joueur,
+donc un PIE non supervise ne l'exerce pas (voir 15.11, "unattended PIE has no player pawn").
+
+### 16.8 Warnings de cook : 96 kHz et Bink Audio (2026-08-18)
+
+**Symptome.** 4 warnings au cook, qui ne sont en fait que **2 ondes** journalisees deux fois
+(une par le CookWorker, une remontee par `LogInit`) :
+`explosion_far_distant_02` et `explosion_med_long_tail_01`, "High sample rate wave (96000) with
+Bink Audio - perf waste".
+
+**Cause, lue dans le moteur.** `AudioDerivedData.cpp:1896` :
+`if (WaveSampleRate > 48000 && Inputs.BaseFormat == NAME_BINKA)`. Le cook ne redescendait pas les
+ondes parce que `bResampleForDevice=False` dans
+`[/Script/WindowsTargetPlatform.WindowsTargetSettings]` (`DefaultEngine.ini`), alors que
+`MaxSampleRate=48000` y etait deja renseigne. Bink jetait donc tout au-dessus de 48 kHz, mais on
+payait quand meme le stockage et la decompression.
+
+**Pourquoi CES deux ondes.** Les 4 waves du pack sont en 96 kHz / 24-bit. Les deux qui ont averti
+sont celles que cette passe a fait ENTRER dans le cook : `med_long_tail_01` via
+`Cue_Ordnance_Impact`, et `far_distant_02` via la ligne `DirectoriesToAlwaysCook` posee sur tout le
+dossier du pack. Les deux autres avaient deja leur DDC construit.
+
+**FIX : `bResampleForDevice=True`.** Une ligne. `USoundWave::GetSampleRateForCompressionOverrides`
+(`SoundWave.cpp:4401`) rend `FMath::Min(MaxSampleRate, SampleRate de l onde)`, et `GetResampleRate`
+ne rééchantillonne que si la valeur DIFFERE de la source. Donc **jamais de sur-echantillonnage** :
+une onde 44.1 kHz reste a 44.1, une 48 reste a 48, seules celles au-dessus redescendent a 48. Les
+assets sources ne sont pas touches, seule la sortie cuite change. C est aussi ce qui respecte la
+regle de RzZz "ne resample pas un bon original juste pour cocher une case" : on ne resample pas
+l original, on arrete juste d expedier des frequences que le codec jette.
+
+**Portee mesuree.** Scan des sources du projet : **108 fichiers sont au-dessus de 48 kHz** (99 en
+96 kHz, 9 en 192 kHz) sur 252 au total. Les 2 warnings n etaient donc que la partie emergee ; le
+correctif couvre les 108 et fera baisser la taille de l audio cuit.
+
+**Effets de bord a connaitre.** Le drapeau entre dans la cle du DDC audio
+(`AudioCompressionSettings.cpp:47`, `AppendHash("R4DV", bResampleForDevice)`) : **le prochain cook
+reconstruit toute l audio derivee et sera donc plus long**, une seule fois.
+
+**Linux non touche** : la section `[/Script/LinuxTargetPlatform.LinuxTargetSettings]` porte le
+commentaire "Linux is a dedicated-server target only". Un serveur dedie ne cree aucune voix (c est
+la premiere garde de `UQModule_AudioLibrary`), la question du rééchantillonnage ne s y pose pas.
+
+**Deuxieme volet du meme jour : le verrou peignait aussi les PNJ pacifiques.** Capture RzZz a
+l'appui, un androide civil de station portait le marqueur. L'acquisition ne filtrait que "pawn non
+joueur, hors de mon escouade". Elle passe maintenant par la matrice de QAI
+(`QAI_FactionLib::AreFactionsHostile`, la source unique d'hostilite du projet), avec la faction du
+joueur lue **une fois par passe** et non par candidat (la lecture parcourt les composants de
+l'acteur et construit une FString par composant, donc elle ne doit pas tourner sur chaque pawn du
+rayon).
+
+Perimetre choisi par RzZz : **tout sauf les civils (None) et la Dissidence**. Deux factions que la
+matrice declare amies restent volontairement verrouillables :
+- **IcLabs** (police, gardes) : leur hostilite depend du niveau de recherche, qui vit dans le
+  subsystem QPolice cote serveur et n'est pas lisible depuis le HUD client ;
+- **Animal** : l'agressivite predateur/proie se decide par comportement, pas par faction.
+
+Reglage de repli `UQModule_Settings::bLockEnemiesOnly` (`QModule|GadgetHUD`, defaut `true`) : le
+mettre a `false` rend de nouveau tout pawn non joueur verrouillable, sans rebuild.
+
+**Non touche, volontairement** : le tir sans verrou. `FireSelectedDirectGadget` retombe sur l'acteur
+vise par la trace quand aucun verrou n'est pris, et la revalidation serveur ne filtre pas la faction.
+Le joueur peut donc toujours tirer une salve sur un civil s'il vise, avec les consequences QPolice
+qui vont avec : c'est le HUD qui devait arreter de designer tout seul, pas le tir qui devait devenir
+impossible.
+
+**Si un PNJ reste verrouillable apres ce filtre**, ce n'est plus le HUD : c'est la faction de son
+Blueprint. Elle s'authore en override de composant herite (ICH) sur le `CombatComponent`, et se lit
+en spawnant l'acteur en editeur (voir la note ICH dans `Documentation/QAI_ARCHITECTURE.md`).
