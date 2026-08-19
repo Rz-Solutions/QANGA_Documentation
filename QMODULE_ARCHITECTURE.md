@@ -1136,3 +1136,297 @@ apres. Deux points ouverts a trancher a cette occasion :
    utilise pour classer les causes de mort. Passer `DMG_Missile` classerait correctement les kills
    d'ordnance, et donnerait la cle d'une future resistance au souffle. Non fait ici faute de
    pouvoir inspecter le contenu de `DMG_Missile` sans editeur.
+
+---
+
+## 16. Contrat audio central (2026-08-18)
+
+**Pourquoi.** Les 13 refs son du plugin partaient en `PlaySound2D` / `PlaySoundAtLocation`
+depuis 11 sites disperses, **sans attenuation, sans concurrency et sans `OwningActor`**, avec
+un `LoadSynchronous` a chaque lecture (jusqu'a 9 fois par seconde pour le bip de balise). Un
+`LimitToOwner` ne peut rien limiter sans owner, et un son sans attenuation ne se localise pas.
+
+**Ce qui est livre.** `UQModule_AudioLibrary` (`Public/QModule_AudioLibrary.h`), portage direct
+du patron deja eprouve de `UQWeaponAudioLibrary` (chaine NashV2) :
+
+- `ShouldPlayLocalModuleAudio` : remonte Owner / Instigator / parent d'attache (16 sauts, set de
+  visites). Depuis le rack, qui vit sur le PlayerState, la marche atteint le Controller local.
+  C'est ce qui separe la couche LOCALE (non spatialisee, stable a la camera) de la couche WORLD.
+- `IsWorthHearing` : rayon audio PROPRE, volontairement decouple de `OrdnanceVisualRangeM`
+  (800 m). Ce dernier repond "faut-il spawner ce projectile", une question de budget de rendu.
+- `PlayWorldOneShot` / `PlayLocalOneShot` : passent par `AudioDevice->PlaySoundAtLocation`,
+  **aucun `UAudioComponent` cree** pour un one-shot.
+- `SpawnAttachedLoop` / `StopOrFadeLoop` / `SpawnTail` : le composant n'existe que pour une
+  boucle, un son attache ou une tail. `bTailSurvivesOwner` porte la difference de fond entre une
+  tail de depart (suit le lanceur, survit a l'obus) et une tail d'explosion (reste au point).
+- `ResolveSound` : cache de resolution (plus de `LoadSynchronous` par bip) ET generalisation du
+  diagnostic de `PlayWallSound` : une ref vide = silence voulu, une ref renseignee qui ne charge
+  pas = bug de cook, journalise UNE fois avec son chemin. Voir le BUG 1 de la section audio du mur.
+
+`FQModule_AudioEvent` (dans `QModule_Types.h`) decrit un evenement audible : sons local/world/tail,
+attenuation, concurrency, volumes, pitch, politique d'attache, survie de la tail.
+Dependance ajoutee : `AudioExtensions` (prive), comme QWeapon.
+
+**Tranche verticale : le depart des missiles d'epaule.**
+`Client_PlayShoulderMissileLaunchAudio` est appele en tete de `MC_ShoulderMissileVisual`,
+**avant** le gate `IsWorthRendering` : sinon toute salve au-dela de 800 m serait muette pour une
+raison de rendu. Le tireur recoit la couche locale, les autres la couche world attenuee, et la
+tail est accrochee au pawn lanceur.
+
+**CE QUI N'A PAS ETE FAIT, ET POURQUOI.** Le vol et l'impact ne sont PAS traites ici.
+`BP_Missile` (`/Game/Marketplace/BallisticsVFX/FXSpawnerBlueprints/Projectiles/`, partage par le
+lance-roquettes, les tourelles, les vehicules et les deux chemins d'ordnance QModule) porte deja
+un `AudioComponent`, un `RichochetSound`, un `PlaySoundAtLocation` et des refs vers
+`QATT_Big_Weapon`, `QSC_Bullet` et le pack Gamemaster. **Y ajouter un impact en C++ le
+doublerait.** L'inventaire exact de son graphe demande l'editeur ouvert (pont CLIScape).
+
+**Sources cablees** (existantes, remplacables sans toucher au code) : body =
+`explosion_large_no_tail_03` (prise seche, pas de reverb imprimee), tail = `Tail-GL_V2` (tail de
+lance-grenades Nash, meme production que le set de reference du mix), attenuation =
+`QATT_Big_Weapon`, celle que `BP_Missile` utilise deja, pour que depart et impact du meme missile
+parlent la meme piece.
+
+**RESTE OUVERT.** (a) `QSC_Ordnance_Launch` (1 voix par owner, StopOldest) n'existe pas : le champ
+`Concurrency` est laisse NUL, c'est une soft ref de config donc l'asset s'active sans recompiler.
+(b) Les 10 sites audio historiques gardent encore le patron muet et ne sont pas migres vers la
+bibliotheque. (c) Rien n'a ete ecoute en jeu : cette passe est compilee, pas validee a l'oreille.
+
+### 16.1 La balise : de ~21 voix a UNE (2026-08-18)
+
+**Le defaut.** `AQModule_StrikeBeaconActor` appelait `PlaySoundAtLocation` a chaque bip, a une
+cadence qui monte avec le compte a rebours : `BeepFrequency = Lerp(1.5, 9.0, Urgency)`. Sur une
+onde de plusieurs secondes, une SEULE balise pouvait donc tenir une vingtaine de copies d'elle-meme
+vivantes en meme temps. Illisible a l'oreille, et paye sur l'audio thread. Aucune attenuation,
+aucune concurrency, et un `LoadSynchronous` a chaque bip.
+
+**Le fix.** `Client_PulseUplinkBeep` maintient UN `UAudioComponent` (`BeepAudio`) attache a la
+balise et le REDEMARRE a chaque pulsation (`Stop()` puis `Play()`). La limite devient
+**structurelle** : elle ne depend plus d'un asset de concurrency qui nettoierait apres coup. A 9 Hz
+on n'entend que le transient de tete, ce qui est exactement ce que doit etre un tic de compte a
+rebours. `Client_StopUplinkBeep` coupe la voix quand le compte a rebours se termine ET dans
+`EndPlay`.
+
+**Les sons monde de la designation ont enfin une place dans l'espace.** Les cinq (`BeaconThrowSound`,
+`BeaconPlantSound`, `BeaconBeepSound`, `StrikeFireSound`, `StrikeIncomingSound`) jouaient **sans
+aucune attenuation** : une balise plantee etait donc entendue a plein volume par tous les joueurs de
+la planete, sans direction et sans occlusion. Nouveau reglage `DesignationWorldAttenuation`, par
+defaut `QATT_GameplayElement` (le profil du projet pour un objet physique non offensif, ce qu'est
+une balise). `DesignationWorldConcurrency` reste nul, en attente de son asset.
+
+**`StrikeIncomingSound` est desormais ATTACHE** a la balise au lieu d'etre pose a un point du monde :
+le grondement appartient a la balise, donc il la suit et meurt avec elle.
+
+### 16.2 Migration des sites muets
+
+Le point "RESTE OUVERT" de la section audio du mur est traite. Les 5 sites du `GadgetHUD`
+(`GadgetSwitchSound`, `TargetingArmSound` x2, `TargetingCancelSound` x2) et les 5 sites de la
+balise passent maintenant par `UQModule_AudioLibrary` (`PlayLocalSoundRef` / `PlayWorldSoundRef` /
+`SpawnAttachedSoundRef`). Ils heritent donc des gardes serveur dedie, du cache de resolution et
+surtout du **diagnostic de cook** : un asset configure absent du build le DIT une fois, au lieu de
+jouer le silence.
+
+`PlayWallSound` (`QModule_WallWidgetBase`) n'a PAS ete migre : il porte deja son propre
+`WarnedMissingSounds` et fonctionne. Le migrer serait du churn sans gain.
+
+### 16.3 Ce que l'ouverture de BP_Missile a revele (2026-08-18, mesure editeur)
+
+`BP_Missile` (`/Game/Marketplace/BallisticsVFX/FXSpawnerBlueprints/Projectiles/`) est bien le
+projectile PARTAGE : **6 referents** (tourelle, lance-roquettes vehicule, les deux lance-roquettes
+NashV2, `RocketLauncherMissileProjectile`, plus la graine EasyCook), en plus des deux chemins
+d'ordnance QModule qui le spawnent via `AirstrikeMissileClass`.
+
+**Il avait deja plus d'audio que prevu, et moins de qualite que prevu :**
+
+- `SFX_RocketLoop` (AudioComponent) : **la boucle de vol EXISTE**. Lancee par `Play` au
+  `Event BeginPlay` (Sequence Then 1), coupee par `Stop` dans `HitEvent`. Ne pas la doubler.
+- `RichochetSound` (AudioComponent) : passe au `Cubit_ImpactFX_Spawner` comme composant de ricochet.
+- L'impact est **un unique `Play Sound at Location`** dans `HitEvent`, volume 1.0 et pitch 1.0
+  figes, sur **une seule onde** : `explosion_large_08`. Aucune variante, aucun Close/Med/Far,
+  aucune couche sub, aucune tail. Sur une salve de 64 missiles c'est 64 fois le meme fichier.
+- Le `UserConstructionScript` fait `Branch(Is Dedicated Server) -> Destroy Actor` : le projectile
+  se suicide sur serveur dedie, donc aucune voix serveur. Bon point deja en place.
+
+**LE VRAI DEFAUT, mesure et corrige.** `explosion_large_08` avait
+`sound_class_object = None`, `attenuation_settings = None`, `concurrency_set = {}`. Comme le noeud
+BP ne passe aucune surcharge, **l'explosion etait entendue a plein volume par tous les joueurs de
+la planete**, sans distance, sans direction et sans occlusion. Et cette onde n'est pas au missile :
+elle est partagee par `BP_Missile`, `BP_Bomb` et `BP_GrenadeProjectile`. Corriger l'asset repare
+donc les trois systemes d'un coup : classe `QSClass_Weapon`, attenuation `QATT_Big_Weapon`,
+budget `QSC_Ordnance_Impact`.
+
+**Le bip de balise etait sur `QSClass_UI`.** Un objet physique du monde mixe comme de l'interface,
+donc hors du ducking monde. Zero autre referent que la graine de cook, donc reroutage sans risque
+vers `QSClass_GameElement` + `QATT_GameplayElement`. Duree confirmee : **2.3216 s**.
+
+**Profils crees** : `QSC_Ordnance_Launch` (MaxCount 1, LimitToOwner, StopOldest) et
+`QSC_Ordnance_Impact` (MaxCount 16, global, StopFarthestThenOldest, pour que l'explosion la plus
+PROCHE survive a une salve de 64). Force-cook ajoute sur `/Game/Sounds/_SoundClass` et
+`/Game/Sounds/_Attenuation` : `QSC_Ordnance_Launch` n'est atteint que par un litteral C++.
+
+**RESTE.** L'impact n'a toujours qu'une prise. Le remede est un SoundCue de variantes (random sans
+remplacement + modulation de pitch) branche sur le pin Sound du `Play Sound at Location` de
+`BP_Missile`. **CORRIGE le 2026-08-18 : `manage_sound_cue` action `connect_nodes` ne crashe plus.**
+Cause reelle, mesuree dans la source moteur : l'outil traitait `from_node` comme le PARENT, or
+un `wave_player` est une feuille dont `GetMaxChildNodes()` vaut 0 (`SoundNodeWavePlayer.cpp:306`).
+`USoundNode::InsertChildNode` refuse alors SANS RIEN DIRE (`SoundNode.cpp:305`), et la ligne 251
+ecrivait dans un slot inexistant. Second defaut, plus grave : les noeuds etaient crees par
+`NewObject` brut, donc sans `USoundCueGraphNode`, que le moteur passe a `CastChecked` des qu'une
+insertion reussit, donc meme l'appel CORRECT crashait. Le fix passe par `ConstructSoundNode` +
+`LinkGraphNodesFromSoundNodes`, et `from_node` designe desormais la SOURCE, `to_node` la
+DESTINATION (sens du signal). **Actif seulement apres recompilation de CLIScape.**
+
+### 16.4 Assets livres et LE seul geste manuel restant
+
+Crees et verifies par relecture le 2026-08-18 :
+
+| Asset | Reglage | Role |
+|---|---|---|
+| `/Game/Sounds/_SoundClass/Concurrency/QSC_Ordnance_Launch` | MaxCount 1, LimitToOwner, StopOldest | depart d'ordnance : une salve etagee se lit COMME une salve parce que chaque depart releve le precedent |
+| `/Game/Sounds/_SoundClass/Concurrency/QSC_Ordnance_Impact` | MaxCount 16, global, StopFarthestThenOldest | impacts : sur une salve de 64, l'explosion la PLUS PROCHE du joueur survit |
+| `/Game/Sounds/_Ordnance/Cue_Ordnance_Impact` | Modulator (pitch 0.92-1.08, vol 0.9-1.0) -> Random SANS remplacement -> 3 prises | supprime la repetition machine du fichier unique |
+
+Les 3 prises du cue : `explosion_large_08`, `explosion_med_long_tail_01`,
+`explosion_large_no_tail_03`. Cue route `QSClass_Weapon` + `QATT_Big_Weapon` + `QSC_Ordnance_Impact`.
+
+**GESTE MANUEL RESTANT (15 secondes, dans l'editeur).** Ouvrir `BP_Missile`, EventGraph, evenement
+`HitEvent`, branche `Sequence -> Then 1`, noeud **`Play Sound at Location`** : remplacer la valeur
+du pin **Sound** (actuellement l'onde `explosion_large_08`) par
+**`/Game/Sounds/_Ordnance/Cue_Ordnance_Impact`**. Compiler et sauver.
+
+Pourquoi ce n'est pas automatise : l'API Python n'expose pas les graphes K2 (`ubergraph_pages` /
+`function_graphs` n'existent pas cote Python), donc il n'y a aucun chemin scripte SUR
+pour ce pin. Ecraser un graphe partage par 6 systemes au jugE n'en valait pas le risque.
+Sauvegarde prealable du BP : `Saved/AudioPass_Backups/BP_Missile_pre-audio-2026-08-18.uasset`.
+
+Tant que ce pin n'est pas change, l'impact reste l'onde unique, MAIS elle est desormais
+correctement attenuee, classee et budgetee : le gros du defaut est deja corrige.
+
+### 16.5 Grenade collante, largage, drone medical (2026-08-18)
+
+**Etat de depart : les trois acteurs etaient TOTALEMENT muets.** Zero occurrence de `Sound` ou
+`Audio` dans `QModule_StickyGrenadeActor`, `QModule_SupplyCrateActor` et
+`QModule_MedicalDroneActor`. Leurs cosmetiques client etaient deja proprement separes de
+l'autorite, donc les points d'accroche existaient : il n'y avait qu'a les brancher.
+
+**Grenade collante.**
+- `OnPlantedCosmetic` : clonk de collage, profil court (`QATT_Reload_weapon`, ~46 m).
+- `Tick` : **l'oreille ne suit PAS l'oeil.** La lumiere clignote a 14 Hz ; un son cale sur cette
+  cadence empilerait exactement comme le bip de balise. La pulsation a donc son PROPRE compteur
+  (`StickyGrenadeArmPulseHz`, 2.5 Hz par defaut) et UNE voix unique qu'elle redemarre.
+- `MC_Detonate` : coupe la pulsation AVANT la detonation, joue `Cue_Ordnance_Impact` (variantes
+  + modulation, donc une salve ne repete pas le meme fichier), puis une tail **non attachee**.
+  La grenade est detruite 0.6 s plus tard : l'echo d'une explosion appartient au LIEU, jamais a
+  l'objet qui l'a causee. `EndPlay` ajoute pour couper la pulsation dans tous les cas.
+
+**Largage.**
+- `StartFallCosmetics` : boucle de descente attachee a `CrateMesh`, profil longue portee. Une
+  caisse qui tombe d'un ciel a 150 m est un signal de ralliement : il faut l'ENTENDRE arriver.
+- `PlayLandingCosmetics` : coupe la descente (fade 0.12 s), impact lourd + tail au point de
+  chute, non attachee. `EndPlay` coupe la boucle.
+
+**Drone medical.**
+- `BeginPlay`, branche `FApp::CanEverRender()` : blip de deploiement + boucle de hover attachee a
+  `DroneMesh`, spawnee **une seule fois**, jamais dans `Tick`. Le "MaxCount 1 par objet" est
+  structurel (un composant par drone), pas delegue a un asset de budget.
+- `OnRep_PulseCounter` : le blip de soin est pilote par le compteur REPLIQUE, donc une fois par
+  vraie pulsation sur chaque client, sans scrutation ni recalcul local.
+- `EndPlay` : fade du hover (0.25 s) puis blip d'extinction laisse au point, pas attache a un
+  acteur en train de disparaitre. Profil `QATT_GameplayElement` : le drone est cull a 400 m et
+  vit sur l'epaule du joueur, ce n'est pas de l'ordnance.
+
+**Sources** : toutes dans SF_Meca (`Mechanism_Clonk_Small`/`Big`, `Interface_Bips_3_1`,
+`Elevator_Big_Loop`, `Engine_Small_Start`/`Loop`/`End`, `Scanner_Validated_2`), plus
+`Tail-Outdoor` et `Cue_Ordnance_Impact`. Tous ces dossiers sont deja couverts par les lignes
+`DirectoriesToAlwaysCook` posees plus haut : aucune nouvelle ligne necessaire.
+
+**COMPILE ET VERIFIE** le 2026-08-18 a 22:53 (`Result: Succeeded`, cible a jour, aucun source
+plus recent que le DLL). Ecrit d abord sans build parce qu une mise a jour moteur etait en cours
+de reception ; les verifications statiques faites a la place ont d ailleurs attrape un vrai defaut,
+`UAudioComponent` manquait en declaration avant dans DEUX des trois headers, ce qui aurait casse
+le build. **La mise a jour moteur a aussi repare `QSystem/QInteriorPostProcessComponent`** : les
+champs d eclairage interieur de `FSceneView` existent a nouveau, donc le probleme de volume light
+venait bien de la et non d un bug isole (voir 16.3).
+
+### 16.6 Dropship, et pourquoi le bouclier n'a PAS ete traite (2026-08-18)
+
+**LE BOUCLIER N'EXISTE PAS COMME OBJET.** Le brief audio prevoyait "activation / loop / impacts
+rate-limites / break / recharge / extinction". Recherche faite dans tout le plugin : le seul
+"Shield" est `QModule_LegacyFacade::ApplyShieldOverlay`, un **overlay de STAT** qui ecrit
+`MaxShield` / `CurrentShield` sur le StatsComponent du pawn via reflexion. Le commentaire du code
+dit lui-meme que `SS_Shield` "exists complete in the game but is NEVER granted". Il n'y a donc
+aucun acteur, aucun composant et aucun evenement de break/recharge ou accrocher quoi que ce soit.
+**Rien n'a ete ecrit pour le bouclier** : le faire aurait voulu dire inventer un systeme, pas
+sonoriser un existant. A reprendre le jour ou le bouclier devient un vrai effet attache.
+
+**Dropship : uniquement des accents, et JAMAIS une boucle.** Le Lavrik est un vrai Blueprint de
+vehicule, spawne par `SpawnShip` puis demarre par `StartShipEngine` qui appelle `SetVehicleState`
+(valeur 1 = On) par reflexion sur l'acteur ou l'un de ses composants. **Le moteur appartient donc
+au vehicule** et vit sur `QSClass_Vehicle`. La regle de RzZz ("ne jamais doubler le moteur du
+vehicule") est tenue de maniere STRUCTURELLE : les trois evenements ajoutes sont des one-shots,
+jamais un bed. Il n'y a volontairement **pas d'evenement "hover"**, parce qu'un hover bed EST la
+boucle moteur.
+
+- `SpawnShip` : accent d'arrivee (`DropshipApproachAudio`), profil `QATT_Ship`.
+- `OnRep_Phase` : c'est LE point d'accroche, parce que la phase est **repliquee**. Chaque client
+  reagit a la meme transition d'etat au lieu de scruter le vaisseau ou de recalculer le moment
+  localement. Passage a `Hovering` -> rampe ; passage a `Outbound` -> depart. Un joueur qui
+  arrive alors que la phase est deja `Outbound` ne voit pas la transition et n'entend donc pas le
+  depart : c'est le comportement voulu, il l'a rate.
+
+**`DropshipRampAudio` est laisse VIDE volontairement.** `ApplyDoorState` pilote la logique de porte
+**du Lavrik lui-meme** (appel par nom de fonction). Si ce Blueprint voix deja sa rampe, remplir cet
+evenement poserait deux hydrauliques sur une seule porte. A remplir seulement APRES avoir ecoute la
+rampe s'ouvrir en PIE avec l'evenement encore muet.
+
+**RESTE A FAIRE (routage).** Les waves SF_Meca utilisees par les lots 5 et 6 sont encore sans
+SoundClass (l'etat de ~89 % du projet). Elles devraient aller sur `QSClass_GameElement` pour la
+grenade / le largage / le drone, et sur `QSClass_Vehicle` pour les deux accents de dropship. Non
+fait ici : une mise a jour moteur etait en cours et l'editeur ne devait pas etre sollicite. Verifier
+les referents de chaque wave avant de router (plusieurs sont partagees).
+
+**VERIFICATION FAITE A DEFAUT DE BUILD.** Extraction automatique des 72 chemins `/Game/...` du
+constructeur de `QModule_Settings.cpp` et controle sur disque : **70 resolvent**, les 2 restants
+sont des faux positifs pre-existants et sans rapport (`IDA_QModulePhase_T%d`, un gabarit resolu au
+runtime, et `/Game/Phases`, un dossier de scan). Tous les chemins audio des lots 1, 2, 5 et 6
+resolvent donc reellement sur disque.
+
+### 16.7 Passe de routage et de mix, terminee (2026-08-18 soir)
+
+**CORRECTION IMPORTANTE de la section 16.3.** Il y etait ecrit que l'impact du missile etait
+"entendu a plein volume par toute la planete". **C'est FAUX pour `BP_Missile`.** La lecture du
+noeud `Play Sound at Location` (`K2Node_CallFunction_31`) montre que son pin
+`AttenuationSettings` portait `/Game/Systems/Sound/Attenuation/AI_Attenuation` : **un override de
+noeud gagne toujours sur le reglage de l'asset**. L'impact etait donc bien attenue, mais par un
+profil concu pour les voix d'IA, applique a une explosion.
+
+La lecon generale : sur un `Play Sound at Location`, l'attenuation ET la concurrency peuvent etre
+surchargees au noeud. Regler l'onde ne suffit PAS pour ces deux-la, alors que la **SoundClass**,
+elle, vient toujours de l'asset. Verifier les pins du noeud avant de conclure.
+
+Ce qui restait vrai du diagnostic : la SoundClass manquante (corrigee) et le budget de voix absent
+(le pin `ConcurrencySettings` est vide, donc `QSC_Ordnance_Impact` pose sur l'onde s'applique bien).
+
+**`BP_Missile` corrige** (sauvegarde prealable dans `Saved/AudioPass_Backups/`) :
+- pin `Sound` : `explosion_large_08` -> `/Game/Sounds/_Ordnance/Cue_Ordnance_Impact` (3 prises en
+  random sans remplacement + modulation de pitch, donc plus de repetition machine sur une salve) ;
+- pin `AttenuationSettings` : `AI_Attenuation` -> `QATT_Big_Weapon`, le profil que ce meme
+  Blueprint utilise deja pour sa boucle de vol.
+Les deux relus apres compilation et sauvegarde. Note d'outillage : `get_asset_dependencies` a
+repondu que le cue n'etait pas reference JUSTE APRES la sauvegarde (registre pas encore rescanne).
+**Le noeud fait foi, pas le registre**, sur une verification immediate.
+
+**Routage du mix : 22 sons du contrat, 0 probleme restant.** Chaque onde a une SoundClass et plus
+aucun son du monde ne reste sur le bus interface. Grenade et missile en `QSClass_Weapon` ; balise,
+largage et drone en `QSClass_GameElement` ; accents dropship en `QSClass_Vehicle` ; seuls
+`DeviceA_Open` et `DeviceA_Close1` restent en `QSClass_UI`, ce qui est correct, ce sont de vrais
+sons 2D.
+
+**TROIS ondes du monde etaient sur `QSClass_UI`**, pas une : le bip de balise (`Bips_7`), la
+pulsation de grenade (`Bips_3_1`) et le lancer de balise (`Swipe_5`). Toutes jouees en position
+dans le monde, toutes mixees comme de l'interface. C'est un travers recurrent du projet, a
+verifier systematiquement quand on prend une source dans le sous-dossier `SF_Meca/UI/`.
+
+**Piege evite.** Le blip de soin du drone visait `Scanner_Validated_2`, aussi referencee par
+`IGBR_Repport_Widget`. Lui donner une classe monde aurait deroute un blip d'interface. Bascule sur
+`Scanner_Validated_3`, qui n'a aucun referent. **Ce changement d'une ligne dans
+`QModule_Settings.cpp` n'est PAS encore compile** (editeur ouvert au moment du changement).
