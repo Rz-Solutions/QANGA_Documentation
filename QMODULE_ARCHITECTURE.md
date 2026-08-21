@@ -794,7 +794,9 @@ module, ou elle reste hors de vue au-dela de la fenetre de grace. Le cone ne par
 retention. Le tir ne libere plus rien.
 
 **Reglages** (`QModule|GadgetHUD`, retunables sans recompiler) : `GadgetLockConeDegrees` (35),
-`GadgetLockMaxTargets` (6, DECOUPLE du nombre de missiles), `GadgetLockLostSightGraceSeconds` (3),
+`GadgetLockMaxTargets` (6, DECOUPLE du nombre de missiles : **PLUS VRAI depuis 15.23**, c'est
+desormais un PLAFOND, le budget effectif du Nid de guepes est le nombre de missiles de la phase),
+`GadgetLockLostSightGraceSeconds` (3),
 `GadgetLockMarkerLifetimeSeconds` (600, long EXPRES : le HUD est proprietaire de la suppression du
 marqueur, le timer du tracker n'est plus qu'un filet, et la boucle repose un marqueur que le
 framework aurait detruit sous elle).
@@ -1581,3 +1583,229 @@ impossible.
 **Si un PNJ reste verrouillable apres ce filtre**, ce n'est plus le HUD : c'est la faction de son
 Blueprint. Elle s'authore en override de composant herite (ICH) sur le `CombatComponent`, et se lit
 en spawnant l'acteur en editeur (voir la note ICH dans `Documentation/QAI_ARCHITECTURE.md`).
+
+---
+
+### 15.22 Les zones sures refusent les modules actifs (2026-08-20, compile vert)
+
+**Demande RzZz** : dans une safe zone, un module cyborg ACTIF ne doit pas repondre, et on ne
+doit pas pouvoir y envoyer une balise ni quoi que ce soit d'autre. Avec un retour propre a
+l'ecran et un petit son, pas un refus muet.
+
+#### Ce qu'est une safe zone (mesure, pas supposition)
+
+`WV_SafeArea` (`/Game/Systems/Combat/WV_SafeArea`), fille de `WorldVolume`, meme famille que
+`WV_PoliceVolume`, `WV_Underground` et `WV_DisableJetpack`. Elle porte un `Detection_Box` et un
+`Detection_Sphere`, implemente `BPI_WorldVolume` (`OnEnterVolume` / `OnExitVolume`) et appelle
+`CombatComponent.AddSafeArea` / `RemoveSafeArea` sur l'acteur qui entre. QModule ne touche a rien
+de tout ca : il LIT la presence du volume, il ne s'abonne pas au composant de combat (que QPolice
+remet a zero quand le joueur est recherche, ce qui en fait une source peu fiable pour nous).
+
+Les volumes sont deja poses : maps `L_RelayPlanetary*` (les relais du reseau QAssistance),
+`_Optimised_Lvl_Capital`, et les maps de dev `L_Dev_Start`, `L_ItemTest`, `L_TurretsTest`,
+`L_Dev_AI_ARENA`.
+
+#### La detection : un OVERLAP, jamais une trace
+
+`UQModule_SafeZoneLibrary` (nouveau, `Public/QModule_SafeZoneLibrary.h`) est le verdict unique que
+lisent le client et le serveur. Il interroge le canal d'objet `WorldVolume`
+(`ECC_GameTraceChannel4`, profil `WorldVolume` : `QueryOnly`, Overlap) avec un
+`OverlapMultiByObjectType` et filtre les acteurs par classe.
+
+**Ecrit en trace, ce test ne se declenche jamais.** Le profil `WorldVolume` repond Overlap et
+jamais Block ; or `LineTrace*ByProfile` ne retourne `true` que sur un hit BLOQUANT. Le meme test
+ecrit en trace compile, tourne, coute du temps et rend toujours `false`.
+**Dette reperee au passage, hors perimetre** : `QAI_SubSystem.cpp` teste ses safe areas exactement
+comme ca (`QAI_TraceSafeAreaVolume`, `LineTraceMultiByProfile` + segment degenere de 0,17 cm), donc
+sa politique de fuite forcee et son blocage de spawn en zone sure sont tres probablement des
+no-ops. A verifier et corriger dans une tache dediee, pas ici.
+
+#### Le perimetre : 8 modules actifs sur 9
+
+Refuses : `BaliseDeFrappe`, `NidDeGuepes`, `NidDeFrelons`, `ProtocoleDeMeneur`, `DroneMedical`,
+`RappelDeFlotte`, `LargageDeRavitaillement`, `TranspondeurDeTransit`.
+Autorise : `AntenneLonguePortee` (la radio n'emet rien dans le monde ; un hub protege est
+justement l'endroit ou on s'assoit pour ecouter).
+
+Liste **en dur** dans `QMOD_IsModuleBlockedInSafeZone`, comme `QMOD_IsBeaconModule` juste a cote :
+c'est une regle de design, pas un reglage. Choix RzZz du 2026-08-20, avec sa consequence assumee :
+**le transpondeur ne repond plus dans une station**, alors que les relais sont des safe zones. Le
+voyage rapide reste accessible par le bouton Assistance du menu (les 4 edits BP du par. 15.13 qui
+devaient masquer cet onglet ne sont toujours pas faits).
+
+#### Ou sont les portes
+
+Client (retour au joueur, `QModule_GadgetHUD.cpp`) :
+- `HandleFirePressed`, **devant `BeginTargeting`** : un geste de designation ne peut meme pas
+  s'armer dans un volume protege ;
+- `FireSelectedDirectGadget`, en tete : une salve dorsale est ARMEE par la pression et tiree plus
+  tard par le clic, donc son proprietaire peut etre entre dans le volume entre les deux ;
+- `UpdateTargeting` : le point designe devient rouge et affiche `ZONE SURE` avant le clic, comme
+  `HORS PORTEE` et `PAS DE CIEL` ;
+- nid de guepes / nid de frelons : les cibles verrouillees situees dans un volume protege sont
+  retirees de la salve, exactement comme le fait le serveur.
+
+Serveur (autorite, `QModule_RackComponent.cpp`) : `SV_ThrowBeacon` (lanceur + point designe),
+`SV_TriggerAirstrike`, `SV_TriggerSupplyDrop` (lanceur + point), `SV_TriggerLeaderProtocol`,
+`SV_TriggerFleetRecall`, `SV_TriggerMedicalDrone`, `SV_TriggerShoulderMissiles` (lanceur + filtre
+des verrous + point de visee), `SV_TriggerShoulderGrenades` (lanceur + point resolu), et
+`Authority_ExecuteBeaconPayload` sur le lieu de repos de la balise (une balise peut rouler ou
+rebondir a l'interieur pendant son compte a rebours). Refus en `QMOD_VLOG`, comme leurs voisins :
+c'est la porte client qui parle au joueur.
+
+**Deux exemptions volontaires, ne pas les "corriger"** :
+1. **Le rappel du drone medical n'est jamais refuse.** La touche est un TOGGLE dont le RECALL
+   serveur passe avant ses propres controles ; refuser le rappel abandonnerait un drone deploye
+   dehors des que son proprietaire rentre dans un hub. Cote client, meme exemption, meme raison
+   (c'est deja celle de la porte de recharge, par. 15.15).
+2. **Le transpondeur n'a de porte que cliente.** QAssistance est 100 % Blueprint : il n'existe
+   aucun entonnoir C++ ou poser une garde d'autorite. Un client modifie peut donc encore ouvrir le
+   menu depuis une station. Le jour ou l'on veut fermer ca vraiment, c'est un edit BP dans
+   `QAssistance_Client.OpenAssistanceFromModule`, pas ici.
+
+#### Le son du refus
+
+`ShowTransientReticleMessage` est le canal unique des refus du HUD au sol. Le blip
+(`UQModule_Settings::GadgetDenySound`, par defaut le meme `Scifi_Interface_ButtonA_Invalid_Wav`
+que le Mur) y est joue une fois pour toutes, donc **tous** les refus du HUD ont maintenant une
+voix, pas seulement la zone sure : `RECHARGE`, `AUCUN MODULE ARME`, `PAS D'ANTENNE`, `AUCUNE
+CIBLE`, `HORS PORTEE`. Fenetre anti-mitraillette de 0,25 s (`PlayDenyBlip`). Un clic de lancement
+sur un point refuse sonne aussi : a ce moment le geste est deja demonte, le blip est la seule
+chose qui puisse encore dire non.
+
+#### Reglages (`QModule|SafeZone`)
+
+- `bBlockActiveModulesInSafeZone` (defaut `true`) : coupe-circuit complet, sans rebuild.
+- `SafeZoneVolumeClass` : soft class, defaut `/Game/Systems/Combat/WV_SafeArea.WV_SafeArea_C`.
+  Soft et non chemin en dur : rien ne charge tant qu'aucun module n'est presse, et la reference
+  seme le cook.
+- `SafeZoneVolumeChannel` : defaut `ECC_GameTraceChannel4`, qui est `WorldVolume` dans
+  `DefaultEngine.ini`. Un canal de collision est un fait d'ini, pas un fait de code.
+
+#### L'instrument
+
+`qmodule.Test.SafeZone [DistanceM]` separe les trois pannes qui se ressemblent en jeu :
+
+```
+QMOD_SAFEZONE|enabled=1|class=...|loaded=1|channel=4|net=...
+QMOD_SAFEZONE|volume=<nom>|distM=..|shapes=Detection_Box[obj=..,resp=..]
+QMOD_SAFEZONE|volumes=N|selfTest=inside|pawn=..|boxInside=..|overlap=..|aheadOverlap=..
+QMOD_SAFEZONE|perimeter=Module.X=1 Module.Y=0 ...
+```
+
+- `volumes=0` : aucun volume charge de ce cote du reseau (streaming), rien a voir avec la requete ;
+- `volumes>0` et `selfTest=BLIND` : la requete est aveugle (profil ou canal des formes), c'est le
+  cas a diagnostiquer avec la colonne `shapes` ;
+- `selfTest=inside` : la detection fonctionne ; `boxInside`/`overlap` disent seulement ou se
+  trouve le joueur.
+
+Le `selfTest` interroge le centre de la premiere forme trouvee, donc il ne demande **aucun pawn**
+et tourne sur une session non supervisee (ou `GetPawn()` est nul, cf. par. 15.12).
+
+#### Etat de la verification (2026-08-20)
+
+Mesure, pas opinion :
+- **Build QangaEditor : `Result: Succeeded`** (froid, nouvelle UCLASS + nouvelle commande console).
+- **`QATS.QModule.SafeZone.Perimeter` : Success.** Les 8 tags refuses existent bien dans le
+  registre du projet et sont refuses, la radio ne l est pas, un tag invalide non plus.
+- **`QATS.QModule.SafeZone.VolumeIsSeenByTheOverlap` : Success.** Le test pose d abord un
+  CONTROLE (une boite au profil `WorldVolume`) interroge par un overlap brut : il prouve que la
+  scene physique repond et que le canal est le bon, et que le filtre de classe rejette bien un
+  volume qui n est pas une safe area. Puis il spawne la VRAIE classe `WV_SafeArea` et verifie que
+  `QMOD_IsLocationInSafeZone` la voit, et qu un point lointain ne l est pas.
+  Detail a connaitre : dans un monde de test le volume arrive **dormant**, parce que
+  `WorldVolume` arme sa forme dans son propre graphe `BeginPlay` (`SetCollisionEnabled` +
+  `SetCollisionProfileName` + `SetBoxExtent`) et qu il n y a la ni GameState ni manager. Le test
+  reproduit ce que fait ce graphe avant de mesurer.
+
+**Ce qui reste a mesurer en jeu, et par qui** : lancer `qmodule.Test.SafeZone` en PIE sur une map
+qui porte un volume (`L_TurretsTest`, `L_Dev_Start`, un relais planetaire), et lire la ligne
+`selfTest=` ; puis la meme chose cote serveur dedie, pour confirmer que les volumes y sont bien
+charges (s ils ne le sont pas, le serveur ne refuse rien et seul le client refuse : conservateur,
+mais a savoir). Restent aussi a valider a l oreille et a l oeil : le blip de refus et le message
+`ZONE SURE` en situation.
+
+**Piege d outillage rencontre** : une sonde lancee en `-game -nullrhi` **crashe** sur ce projet
+(`UWorld::SendAllEndOfFrameUpdatesInternal`, une dizaine de secondes apres le chargement de la
+map) et ses `-ExecCmds` ne sont jamais executes. Le chemin headless qui marche est
+`Automation RunTests StartsWith:QATS.`. Et depuis Git Bash, un argument `/Game/...` est reecrit en
+`C:/Program Files/Git/Game/...` : lancer l executable via PowerShell avec `--%`.
+
+### 15.23 La salve du Nid de guepes partait ailleurs des que le joueur bougeait (2026-08-21, PAS ENCORE COMPILE)
+
+**Symptome (RzZz)** : a l arret, les micro-missiles suivent la cible designee et le tir est
+satisfaisant. Des que le joueur se deplace, jetpack surtout, "les missiles font n importe quoi" et
+ne vont pas forcement sur la cible designee.
+
+**Trois causes distinctes, mesurees avant de toucher a quoi que ce soit.**
+
+**1. La salve etait repartie sur TOUS les verrous tenus, jusqu a 6.** Depuis le rework 15.14, un
+verrou ne tombe PAS quand on detourne le regard (c est voulu) et le plafond etait un plat
+`GadgetLockMaxTargets = 6`, independant du module. Le serveur, lui, distribue les missiles en
+round-robin, `ValidTargets[Index % Num]` : avec 4 missiles et 6 verrous, UN seul missile part sur
+ce que le joueur vise. A l arret face a un ennemi, le tableau contient 1 verrou et tout converge.
+En vol, le cone de 35 deg balaye le paysage sans occlusion, le tableau se remplit, et la salve part
+sur des cibles peintes au passage. Ce n est pas qu un probleme visuel : l assignation porte aussi
+les degats.
+
+**2. Le demi-tour.** L ejection est dominee par le vecteur Up du pawn et le virage du profil de vol
+est fixe (`HolmingForce` 150 deg/s dans `DA_QModule_ShoulderMissile`). Cible a l horizontale :
+virage de 60 a 90 deg, c est la belle courbe voulue. Cible EN DESSOUS (le cas normal en jetpack) :
+virage de 120 a 180 deg, soit plus d une seconde de boucle et une vingtaine de metres parcourus a
+redescendre par la position du tireur.
+
+**3. Le missile s arme dans la figure du tireur (deduit, pas encore prouve en jeu).** Mesure sur le
+CDO de `BP_Missile` : `TimeToEnableCollision = 0.5`, `DistanceToEnableCollision = 0` (branche
+morte). La collision est coupee au `UserConstructionScript` puis rallumee 0,5 s apres le
+`BeginPlay`, ou que soit le missile. Ce delai a ete taille pour un missile d arme a 1500 km/h, a
+200 m de son tireur a ce moment. Celui du module part a 15 km/h (417 cm/s) avec 2600 cm/s2
+d acceleration : il s arme a **5,3 m**, et avec la cause 2 il revient vers le joueur. Le visuel est
+spawne **sans Owner ni Instigator**, et le pack n a aucune autre exclusion du tireur que ce timer.
+
+**Ce qui a change** (3 fichiers, aucune signature d RPC, aucun nom expose au BP, aucune cle ini
+supprimee) :
+
+- `UQModule_GadgetHUDComponent::ResolveOrdnanceLockBudget` (nouveau) : le budget de verrous du Nid
+  de guepes est desormais `Stat.Cyborg.Missile.Count` de la phase courante (1/2/4), plafonne par
+  `GadgetLockMaxTargets`. Un marqueur = un missile. C est une RESTAURATION de la conception
+  d origine (catalogue 9.12 : "pose jusqu a N marqueurs, N = missiles du module"). Le Nid de
+  frelons ne lit que la tete de liste : il garde le plafond plat. Le stat est lisible en local, le
+  cache d agregats etant reconstruit sur les clients par `OnRep_Sockets` ;
+- meme fonction, apres la passe de retention : un `while` retire le surplus quand le budget
+  RETRECIT en cours de partie (phase retiree, module desinstalle), par la meme regle que
+  l eviction, le verrou dont le joueur s est le plus detourne ;
+- `Authority_FireOneShoulderMissile` : l ejection est recourbee vers la cible **seulement** par ce
+  que le retournement depasse le quart de tour (`Reversal = -dot(FlyDirection, ToTarget)`, borne a
+  `MaxBendAlpha = 0.45`). Consequence voulue : au sol, cible a peu pres de niveau, le produit
+  scalaire est positif ou quasi nul, la correction vaut ZERO et le tir qui plait aujourd hui est
+  inchange. Le pop d epaule reste dans tous les cas, il devient simplement plus lateral quand la
+  cible est sous les pieds ;
+- `MC_ShoulderMissileVisual` : exclusion explicite et MUTUELLE du pawn du tireur
+  (`IgnoreActorWhenMoving` dans les deux sens), sur l instance transitoire uniquement. Le
+  `BP_Missile` partage n est pas touche.
+
+**Autres faits mesures ce jour, a garder.**
+
+- Profil de vol du module (`DA_QModule_ShoulderMissile`, classe `DA_Missile_C`) : InitialSpeed 15,
+  TargetSpeedNear 190, TargetSpeedFar 260 (km/h, facteur 0.036), Acceleration 2600 cm/s2,
+  HolmingForce 150 deg/s, WaveOffset 1.5, WaveSpeedScale 1.2, ExplodeNearHoming 220 cm.
+- `MissileMovementComponent_C` : le homing est recalcule A CHAQUE TICK
+  (`RInterpToConstant` vers `FindLookAtRotation`, puis `AddLocalOffset` **avec sweep**), et le
+  `ForceStop` de proximite se declenche sous `SquaredDistanceToExplodeFromTarget`. Le vol n est
+  donc jamais "verrouille" au depart : c est bien la trajectoire initiale qui decide de la tete que
+  ca a.
+- `BP_Missile` porte aussi une **fusee de proximite sol** independante de la collision : toutes les
+  0,2 s, `CheckHit` interroge WorldScape (`GetDistanceOceanAndGroundFromLocation`) et declenche
+  `HitEvent` sous le seuil.
+- PISTE NON VERIFIEE : dans `CalcSpeed`, la vitesse d avance est `OwnerSpeed + CurrentSpeedTarget`,
+  ou `OwnerSpeed` semble etre la norme de la velocite de l acteur **Owner** du missile (chaine
+  `Get Owner` -> `Get Owner`). Si c est bien ca, donner un Owner au missile lui ferait heriter de
+  la vitesse du tireur. A ne PAS faire sans mesure : `TryFeedback` et `CalculateActorHit` de
+  `BP_Missile` se servent aussi de l Owner pour le retour de degats.
+
+**Reste a valider, et par qui.** Rien de tout ca n est compile : QModule ne se Live-Code pas, il
+faut une reconstruction editeur ferme. Ensuite, en jeu (RzZz) : `qmodule.Verbose 1`, une salve a
+l arret puis une en jetpack, et lire `Shoulder missiles: N queued on M locked target(s)` (M doit
+etre au plus le nombre de missiles de la phase). Puis a l oeil : le pop d epaule doit etre
+IDENTIQUE au sol, et les missiles ne doivent plus tourner autour du joueur en vol. La cause 3 n est
+confirmee que si les explosions parasites collees au joueur disparaissent.
