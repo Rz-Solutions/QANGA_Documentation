@@ -347,6 +347,7 @@ M1 livre : module runtime + module editor, Settings + ini, tags natifs, types, D
 - **Principe UI (décision utilisateur)** : l'écran Mur v2 se construit sur des **COPIES** de l'UI Phase existante ; l'ancien chemin (W_PhaseRouter/W_PhaseTree...) reste vivant et intouché jusqu'à l'ordre explicite de suppression. Le Mur doit épouser le design des UI du jeu tout en reproduisant la lecture de la maquette du tableau de bord (hexagones, liseré des modules de base, pastilles de phases, ambre Voss, anneaux verrouillés).
 - **Copies créées** (`/Game/Widget/QModuleV2/`, originaux intacts) : W_QModuleV2_Router, W_QModuleV2_Wall, W_QModuleV2_HexCell, W_QModuleV2_Level, PUW_QModuleV2_Module, W_QModuleV2_Description. Les références internes des copies pointent encore le legacy : le recâblage sur l'API QMOD_* se fait copie par copie, jamais sur les originaux.
 - **`UQModule_WallWidgetBase`** (C++) : toute la géométrie hexagonale native (HexToLocal/LocalToHex avec arrondi cubique, anneaux, distances), binding du mur du joueur local, événements `QMOD_OnWallBound`/`QMOD_OnWallChanged` (event-driven, zéro tick). Le BP enfant (la copie W_QModuleV2_Wall, à reparenter) ne porte que l'habillage.
+- **BIND TARDIF MULTIJOUEUR (bug pré-live 0.0.23, corrigé le 2026-08-22)** : sur serveur dédié, l'écran restait VIDE toute la session (ni grille ni cœur) alors que le serveur créait et répliquait le mur correctement (gameplay des modules fonctionnel : jetpack, drone, scan). Cause mesurée en PIE dédié : TROIS canaux répliqués arrivent chacun à leur rythme au join (le PlayerState, son composant mur, et le lien `PlayerController->PlayerState`) ; le widget ne tentait son bind qu'UNE fois au Construct (à +4 s : rien n'est encore là), la réouverture de l'onglet ne re-tentait jamais, et même à l'arrivée du rack (+7 s mesuré) `PlayerController->PlayerState` était ENCORE null. Invisible en solo (le mur précède toujours le HUD) et en PIE listen local. Correctif (QModule_RackComponent + QModule_WallWidgetBase) : délégué statique `OnRackReplicatedToClient` émis au BeginPlay non-autorité du rack + re-tentative bornée `TryBindLocalPlayerWall` (0,5 s, 60 s max, stoppée au premier succès) + filet au changement de visibilité. Preuve en PIE dédié : `Wall bound on late retry.` 0,5 s après l'arrivée du rack, grille et stock reconstruits, validé visuellement. Leçon générale : côté client, ne jamais supposer qu'un composant répliqué ET le lien PlayerState du contrôleur sont disponibles ensemble à un instant donné ; tout accrochage UI au join doit savoir attendre.
 - **Boucle de test UI** : settings `WallWidgetClass` + commande `qmodule.Test.OpenWall` (viewport direct, aucun menu existant touché).
 - **CELLULE STYLÉE EN JEU le 2026-07-04** : `UQModule_HexCellWidgetBase` (C++) + BP `W_QModuleV2_Cell` fabriqué par outils (arborescence de widgets nommés, ZÉRO graphe) : fond hexagonal rempli (`T_FrameHexMask`), bordure couleur famille, monogramme généré (CORE pour le Cœur), sous-titre NIV X (rien sur les inactifs : l'atténuation suffit, règle maquette), pastilles de phases, liseré intérieur des modules de base ; slots verrouillés par le C++ (designer-proof). **Leçons d'art** : l'art hex du projet est FLAT-TOP (géométrie basculée en conséquence : x=1.5s·q, y=√3·s·(r+q/2)) et vit dans des textures CARRÉES 256x256 → cellules carrées obligatoires (l'espacement hexagonal reste mathématique). Itérations pilotées par retours visuels utilisateur (3 allers-retours corrigés à chaud par Live Coding).
 - **PREMIER AFFICHAGE EN JEU le 2026-07-04** : rendu de grille 100 % natif dans la base (`Canvas_WallGrid` lié par nom via BindWidgetOptional, auto-bind du mur au Construct, cellules = HexCellClass BP optionnelle sinon images `T_FrameHex` teintées : actif teal / inactif gris-bleu / cellules libres en filigrane, anneaux 0..2, ancrage central, event-driven). Vérifié en PIE : `wall binding OK`, widget au viewport, zéro erreur runtime, Cœur GS niveau 2 actif + 4 modules de base inactifs. La copie `W_QModuleV2_Wall` n'a AUCUN graphe ajouté (habillage legacy conservé, contenu legacy replié en Collapsed, rien de supprimé).
@@ -491,7 +492,8 @@ renommage de FONCTION casse en silence (log une fois via QMOD_VLOG).
 2026-07-29, ajoute le 2026-08-12) sur le client local, et les restaure a la sortie et a
 l'EndPlay (`Settings->TargetingSuspendedPresets`). Ne PAS utiliser `BlockWhenOthersPressed`
 pour ca : son test depend de l'ordre d'iteration d'une TMap dans la frame, donc il ne
-bloque que parfois.
+bloque que parfois. **La restitution est DIFFEREE tant que la touche est tenue** (voir 15.27) :
+rendre un combo pendant que le clic est enfonce fait tirer une pression neuve.
 
 **Briques partagees** : `AQModule_ThrownDeviceActor` (une parabole en forme fermee, evaluee a
 l'identique partout depuis {depart, vitesse, up, gravite, horodatage serveur} repliques une
@@ -499,6 +501,41 @@ fois ; resolue dans le repere local du lanceur, jamais en Z monde) ; enfants =
 `AQModule_StrikeBeaconActor` et `AQModule_StickyGrenadeActor` (salve dorsale collante qui
 detonne en ligne, fusee = index x ChainDelay pour que le rythme ne depende pas du terrain) ;
 `QModule_TrackerBridge` (acces reflexif partage au framework Lib_Tracker/TK_* du jeu).
+
+**L'ART DE LA BALISE (2026-08-24).** La balise n'est plus le conteneur d'airdrop rapetisse a
+0.12 : elle a ses deux coques dediees, `/Game/Systems/QModule/Meshes/SM_Beacon_Folded` (en vol)
+et `SM_Beacon_Deployed` (une fois plantee), echangees par `AQModule_StrikeBeaconActor::
+ApplyBeaconShell` (BeginPlay pour la pliee, `OnPlantedCosmetic` pour la deployee, donc jamais
+sur serveur dedie). Reglages : `BeaconFoldedMesh`, `BeaconDeployedMesh`, `BeaconMeshScale`
+(1.0, les meshes sont modelises a la bonne taille : 27 cm) dans `UQModule_Settings`.
+`ThrownDeviceMesh` reste le conteneur : c'est le repli de la brique de base, la grenade le
+surchargeait deja de son cote, donc rien n'a bouge pour elle.
+
+Les 4 slots matiere (`BEACON_Steel`, `BEACON_SignalRed`, `BEACON_Gunmetal`,
+`BEACON_HazardStripes`) reutilisent les instances des armes NashV2
+(`/Game/Items/Weapons/NashV2/Material_Nash/`, toutes filles de `M_Weapon_Main`) :
+Metal_Steel, Metal_Red, Metals_SteelPolish, BackDots. Aucun materiau nouveau n'a ete cree.
+
+**Piege du pivot, a ne pas re-casser.** `Authority_Plant` posait la balise a
+`ImpactPoint + Normale * 4 cm` en dur. Ce n'etait pas une garde anti-terrain : le conteneur
+d'airdrop a son pivot 5,5 cm AU-DESSUS de sa base (a l'echelle 0.12), donc les 4 cm ne
+faisaient que compenser son enfouissement. Les nouvelles coques sont modelisees pivot-a-la-base
+(zmin = -1,0 cm et 0,0 cm) : avec les 4 cm elles FLOTTERAIENT. D'ou le hook virtuel
+`GetPlantedSurfaceOffsetCm()` (4.0 par defaut sur la brique de base, donc la grenade est
+inchangee) que la balise surcharge vers `UQModule_Settings::BeaconGroundOffsetCm` (1,0 cm).
+Le calcul reste cote SERVEUR : le resultat voyage dans `PlantedLocation` deja replique, zero
+changement de contrat reseau.
+
+**Import : ne pas refaire l'erreur.** Sur UE 5.7 c'est **Interchange** qui importe le FBX, pas
+l'ancien importeur. Passer un `FbxImportUI` a un `AssetImportTask` ne configure donc PAS
+l'import : les options sont traduites, et `auto_generate_collision=False` devient
+`Collision=False`, ce qui jette silencieusement les UCX. Il faut passer par
+`InterchangeManager` + `InterchangeGenericAssetsPipeline` (`mesh_pipeline.collision` = le nom
+vivant, `import_collision` est deprecie). Resultat mesure : 1 hull convexe sur la pliee, 4 sur
+la deployee, exactement les UCX du FBX.
+
+**Dette signalee, non corrigee** : 25 912 triangles par coque, 1 LOD, Nanite off, soit 4x le
+fusil d'assaut NashV2 (6 353 tris) pour un objet de 27 cm. A arbitrer par RzZz.
 
 **LA VISEE ET LA COLONNE D'ORDONNANCE (lots 2-3 de la refonte, 2026-08-12).**
 L'apercu de visee est passe des spheres moteur aux TIRETS LASER orientes (mesh
@@ -1731,7 +1768,7 @@ map) et ses `-ExecCmds` ne sont jamais executes. Le chemin headless qui marche e
 `Automation RunTests StartsWith:QATS.`. Et depuis Git Bash, un argument `/Game/...` est reecrit en
 `C:/Program Files/Git/Game/...` : lancer l executable via PowerShell avec `--%`.
 
-### 15.23 La salve du Nid de guepes partait ailleurs des que le joueur bougeait (2026-08-21, PAS ENCORE COMPILE)
+### 15.23 La salve du Nid de guepes partait ailleurs des que le joueur bougeait (2026-08-25, compile et reconstruit)
 
 **Symptome (RzZz)** : a l arret, les micro-missiles suivent la cible designee et le tir est
 satisfaisant. Des que le joueur se deplace, jetpack surtout, "les missiles font n importe quoi" et
@@ -1809,3 +1846,673 @@ l arret puis une en jetpack, et lire `Shoulder missiles: N queued on M locked ta
 etre au plus le nombre de missiles de la phase). Puis a l oeil : le pop d epaule doit etre
 IDENTIQUE au sol, et les missiles ne doivent plus tourner autour du joueur en vol. La cause 3 n est
 confirmee que si les explosions parasites collees au joueur disparaissent.
+
+### 15.24 Le reticule de designation : de la masse au geste (2026-08-21, compile vert)
+
+**Demande RzZz** : « la crosshair des modules actifs quand on vise avec X n est pas tres jolie et
+ne met pas vraiment en valeur. Il faudrait plus un petit crosseur dynamique tout fin au centre de
+l ecran avec, pourquoi pas, le nom du module qui s affiche a cote. » Cinq propositions dessinees
+et comparees en maquette interactive, arbitrage : **l iris octogonal**.
+
+#### Ce qui n allait pas, mesure
+
+L ancien reticule empilait QUATRE widgets sur l axe de tir dans une `UVerticalBox` : icone de
+module 20 px, hexagone PLEIN de 54 px (`T_FrameHex`), nom, distance. Trois defauts, tous
+structurels :
+
+1. **Il couvrait le point qu il servait a designer** : 47 x 74 px d encombrement mesure autour du
+   pixel vise, la ou les propositions tiennent dans 32 x 32.
+2. **Il ne bougeait jamais.** Viser une solution parfaite et viser un mur avaient la meme allure a
+   la teinte pres, alors que c est l information la plus utile du geste.
+3. **Le nom tombait SOUS le centre**, sans plaque de fond : ambre sur du sable clair, il
+   s effacait. Et le centrage portait sur la colonne entiere, donc l hexagone flottait ~10 px
+   au-dessus du point qu il pretendait marquer.
+
+Quatrieme defaut, de langage celui-la : le rouge servait a la fois au refus dur (hors portee) et a
+l indisponibilite (recharge). **Ce ne sont pas la meme chose pour un joueur** : l un est une faute
+de visee, l autre est une attente.
+
+#### Ce qui remplace
+
+`SQModule_Reticle` (`Private/QModule_SReticle.h/.cpp`), un `SLeafWidget` **peint**, pas assemble.
+Le choix du dessin direct n est pas cosmetique : des filets de 1,25 px et une ouverture animee ne
+se font pas avec une texture d hexagone, et faire poser cinq sous-widgets par Slate pour atteindre
+les memes pixels n ajouterait que des facons de deriver les uns par rapport aux autres.
+
+- **L iris** : quatre coins chanfreines a 45 degres (la forme mere octogonale des icones du jeu),
+  dont l OUVERTURE porte l etat. `EQModule_ReticleTone` a trois valeurs et chacune a sa couleur ET
+  son ecartement : `Valid` = 84 % et ambre terrain `#EB8D0C`, `Refused` = 120 % et interdit
+  `#FF4046`, `Pending` = 106 % et gris `#9FB0BC`. L interpolation vers la cible se fait dans le
+  `Tick` du widget, jamais par pas discret : c est le mouvement qui informe.
+- **Le pixel vise reste libre** : un carre de 2,5 px, qui respire lentement (2,1 s) uniquement
+  quand la solution est bonne.
+- **La plaque laterale** : le nom part a droite sur un fond sombre chanfreine (coupes 45 degres en
+  haut-droite et bas-gauche), tenu par un filet ambre et relie au point par un trait de rappel de
+  10 px. Elle est **taillee sur son texte** (mesure `FSlateFontMeasure`, hauteur comprise), parce
+  que les noms vont de « Nid de frelons » a « Largage de ravitaillement ». L icone du module y est
+  reprise a 16 px, et les deux lignes portent une ombre portee de 1 px.
+- **Deux fioritures de geste** : `PlayArm` fait venir les coins de l exterieur (175 %) au moment
+  ou X est maintenu, `PlayCommit` les fait decrocher (155 %) en s effacant sur 0,35 s au lancer.
+
+#### Le compte a rebours de recharge (et pourquoi pas un anneau)
+
+En `Pending`, la deuxieme ligne devient `PRET DANS {N} S`, derive de
+`Rack->QMOD_GetGadgetReadyTime(Tag) - ServerNow`. **Cout reseau nul** : cette date est deja
+repliquee au proprietaire (`COND_OwnerOnly`). Un anneau de progression reste hors de portee ici,
+et ce n est pas un oubli : le client ne connait jamais la DUREE TOTALE du cooldown, seulement sa
+fin. Le dock, lui, l affiche deja. Ne pas re-tenter le liseret sur le reticule sans d abord
+repliquer la duree.
+
+#### Pieges traverses, a ne pas refaire
+
+- **Un brush construit sur la pile dans `OnPaint` est un brush pendouillant** : l element de dessin
+  survit a l appel de peinture. `SolidBrush` et `IconBrush` sont donc des MEMBRES du widget.
+- **Les couches se marchent dessus vite** : le texte en consomme deux (ombre puis glyphes), donc la
+  marque part a `LayerId + 4`.
+- **Les conversions double sur les vecteurs Slate sont depreciees** et ce module compile les
+  warnings en erreurs : tout reste en `FVector2f`, y compris le retour de `Measure`.
+- **UBT refuse de compiler tant que l editeur tourne** (`Unable to build while Live Coding is
+  active`). UHT, lui, passe : c est une validation partielle utile pour les declarations, pas une
+  preuve de compilation.
+
+#### Perimetre et non-regression
+
+Un seul fichier de logique touche (`QModule_GadgetHUD.cpp/.h`), plus les reglages. **Aucun
+Blueprint, aucun contrat reseau, aucun nom expose** ne change. `QMOD_SetState` passe de
+`(FText, bool)` a `(FText, EQModule_ReticleTone)` : verifie avant, ces fonctions ne sont pas des
+`UFUNCTION` et **aucun `.uasset` de `Content/` ne les reference** (recherche par chaine sur tout
+le contenu), donc le changement de signature ne peut casser aucun appelant BP.
+
+15 reglages sous `QModule|Reticle` dans les Project Settings (rayons, ecartements par etat,
+epaisseur, tailles de police, couleurs, `bReticleShowPlate`) : le feel se retouche **sans
+rebuild**. Les trois couleurs nouvelles sont ecrites en `FromSRGBColor`, jamais en flottants bruts.
+
+**Reste a valider en jeu (RzZz)** : le claquement a l armement et au lancer, la lisibilite de la
+plaque sur sable en plein soleil, le rendu de l ordonnance dorsale (Nid de frelons, sans distance),
+et l etat `Pending` sur un module reellement en recharge. Les textes `RECHARGE`, `PAS DE CIEL`,
+`HORS PORTEE` et `PRET DANS {0} S` attendent toujours leur String Table.
+
+### 15.25 L apercu de visee : du fil de fer au marquage lisible (2026-08-22, compile vert)
+
+**Retour RzZz** : « le marqueur au sol est beaucoup trop fin quand on choisit l endroit d une
+balise », et la courbe de lancer est « extremement moche et grossiere, pas accordee a notre DA,
+ca fait pas jeu fini ».
+
+#### Les chiffres qui donnent raison au retour
+
+Mesures prises dans `QModule_TargetingPreviewActor.cpp` avant de toucher quoi que ce soit :
+
+| Element | Avant | Effet a l ecran |
+|---|---|---|
+| Segments de l arc | 26 cm de long, pas de 88 cm, **8 cm de large** | des confettis alignes, pas une trajectoire |
+| Anneau au sol | segments de **5 cm** de large sur un cercle de 10 m de rayon | un fil, invisible des qu on s eloigne |
+| Point de chute exact | **rien** | l impact se devine la ou les tirets s arretent |
+| `Intensity` du materiau | **5**, jamais pilotee par le C++ | additif sature vers le blanc |
+
+**La cause de fond n est aucune de ces valeurs prise isolement, c est l absence de compensation
+de distance.** Des centimetres fixes donnent une epaisseur correcte a 5 m et deux pixels a 40 m,
+or une balise se lance justement a 30-45 m (portee balistique : `ThrowHorizontalSpeedCms` 2400 x
+`ThrowMaxFlightSeconds` 2.0). Toute la preview etait donc dimensionnee pour une distance a
+laquelle on ne l utilise jamais.
+
+#### Ce qui remplace
+
+- **L arc devient un ruban** : 48 segments (au lieu de 34) qui remplissent `TargetingArcFillRatio`
+  = 86 % de leur pas au lieu de 30 %, larges de 8 cm cote main a 22 cm cote impact. Le flux reste
+  (les segments defilent), mais il se lit comme une trajectoire continue et non comme des points.
+- **Un octogone se pose sur le point de chute exact**, toujours, module a empreinte ou non. C est
+  la meme forme mere que le reticule (15.24) : le HUD et le monde parlent la meme langue, et le
+  joueur voit enfin OU ca tombe. Il tourne lentement a l envers de l anneau (-4 deg/s).
+- **L anneau d empreinte s epaissit** : 18 cm au lieu de 5, segments couvrant 72 % de leur pas au
+  lieu de 45 %, 28 segments au lieu de 20, reperes cardinaux de 110 cm au lieu de 60.
+- **Compensation de distance** (`QModuleTargetingPreview::DistanceScale`) : toutes les largeurs
+  sont authorees pour `TargetingPreviewDistanceRefCm` (12 m) et grandissent jusqu a
+  `TargetingPreviewDistanceMaxScale` (x2.6). Clampe des deux cotes : jamais plus fin qu authore,
+  jamais une dalle.
+- **`Intensity` est enfin pilotee** (`TargetingPreviewIntensity`, defaut 2.2 au lieu des 5 du
+  materiau).
+
+#### Sur la couleur, ce qui a ete verifie et ce qui ne l est pas
+
+RzZz decrit la courbe comme bleue. **Trois verifications disent que ce n est pas un probleme de
+parametrage** : le `Color` par defaut de `M_QModule_HoloDash` vaut deja `(0.83, 0.27, 0.004)`,
+soit l ambre terrain (lu depuis le moteur, pas depuis le source) ; `ApplyTint(true)` EST appele en
+fin de `EnsureMaterial`, donc la teinte est posee des la premiere visee ; et il n existe aucun
+`DrawDebug*` ni `PredictProjectilePath` de debug dans tout QModule. **Hypothese retenue, non
+prouvee** : le materiau est `MSM_Unlit` + `BLEND_Additive` avec une intensite de 5, ce qui sature
+vers le blanc, et un trait blanc additif prend la teinte de ce qu il recouvre, le ciel la plupart
+du temps. D ou la baisse d intensite. **Si la courbe reste bleue apres cette passe, le coupable
+n est pas QModule** : chercher un autre systeme qui dessine par-dessus, et demander une capture.
+
+#### Perimetre
+
+Deux fichiers (`QModule_TargetingPreviewActor.h/.cpp`) plus onze reglages dans
+`UQModule_Settings`, categorie `QModule|Targeting`. Aucun asset cree, aucun Blueprint touche,
+aucun contrat reseau : la preview est locale, cosmetique et non repliquee. Le nombre de composants
+passe de 58 a 88 plans unlit, crees une fois et visibles seulement pendant le geste.
+
+**Tout se regle sans rebuild** (Project Settings, meme en PIE) : largeurs, remplissage, rayon et
+epaisseur de l octogone, intensite. C est volontaire : le reglage fin d un feel se fait a l oeil,
+en jeu, pas dans un `.cpp`.
+
+#### CORRECTIF du meme jour : les largeurs passent en PIXELS D ECRAN
+
+Test en jeu de RzZz sur la version ci-dessus : « c est un peu grossier, c est baveux, ca ne
+respecte pas l espece de pixel ratio qu on a sur l ecran ». **Il avait raison, et c est chiffrable.**
+
+Une largeur en centimetres monde grossit avec la perspective. 22 cm x 2,6 de compensation = 57 cm,
+ce qui a 30 m avec un FOV de 90 degres sur 1920 px couvre **22 PIXELS d ecran**, a cote d un HUD
+dessine en filets de 1 px. L epaississement de la premiere passe corrigeait le bon symptome (le
+fil de 5 cm invisible au loin) avec la mauvaise unite.
+
+**La bonne unite est le pixel.** `PixelsToWorldCm` convertit, SEGMENT PAR SEGMENT :
+`largeur_cm = (2 * distance * tan(FOV/2) / largeur_viewport) * pixels_voulus`, FOV lu sur le
+`PlayerCameraManager` du proprietaire et resolution lue sur son viewport. Un trait garde alors le
+meme poids a 5 m et a 45 m, exactement comme une ligne d interface.
+
+Reglages remplaces (les `*Cm` de largeur n existent plus) : `TargetingArcHeadWidthPx` = 2.6,
+`TargetingArcTailWidthPx` = 1.4, `TargetingRingWidthPx` = 2.2, `TargetingImpactMarkWidthPx` = 2.2,
+bornes `TargetingPreviewMinWidthCm` = 1.2 et `TargetingPreviewMaxWidthCm` = 45.
+`TargetingArcFillRatio` retombe a 0.58 : des tirets detaches se lisent comme des graduations, un
+ruban plein a 86 % se lit comme une masse. **Le RAYON de l octogone et de l anneau reste en
+centimetres monde** : un rayon veut dire quelque chose au sol, seule l epaisseur du trait qui le
+dessine est une affaire d ecran.
+
+**Piste suivante si ca bave encore, non faite** : `M_QModule_HoloDash` adoucit ses bords par un
+`Power` sur U et V. A 22 px c etait du flou ; a 2,6 px le meme degrade sert d antialiasing. A ne
+durcir qu apres mesure, et ca ne demandera pas de build (c est un asset). Note : l API Python de
+5.7 n expose pas `expression_collection` sur `MaterialEditorOnlyData`, il faudra passer par
+`manage_material_graph` ou par l editeur.
+
+### 15.26 L arc de lancer partage : la grenade emprunte la preview des balises (2026-08-22)
+
+**ETAT : LIVRE. API C++ compilee verte, branchement Blueprint POSE, compile et sauvegarde le
+2026-08-22 (verifie sur disque). Test en jeu par RzZz encore du.**
+
+**Demande RzZz** : « est-ce que cet arc que tu viens d ameliorer peut etre utilise et remplacer
+l arc degueulasse qu on a quand on lance des grenades ? »
+
+#### Ce que la grenade affichait (mesure)
+
+`IS_GrenadeBase` (parent `WeaponScript_C`) porte un composant `TrajectoryView`
+(`StaticMeshComponent`) qui affiche **`SM_ThrowPath`**, un mesh modelise du **5 juin 2024**, dont
+le materiau est `M_Invisible_Inst2` emprunte au pack de demo `AdvancedCamera/UltraVolumetrics`.
+Au clic droit (`Combat_2ndTrigger`), le BP le rend visible et le repositionne devant la camera
+(socket `FP_Camera` + forward, decale de 20 cm a droite) dans une boucle Gate + Delay 0.
+
+**Ce n est donc pas une trajectoire** : c est une courbe decorative figee. Elle ignore la vitesse
+du jet, la gravite et le terrain, et ne dit pas ou la grenade tombe. C est tres probablement elle
+que RzZz decrivait comme « la spline bleue », et non l arc de designation de QModule.
+
+**Ne pas supprimer `SM_ThrowPath`** : il est aussi pose dans deux niveaux du Capital
+(`L_LO_PI_A_YellowWall_12`, `L_LO_PI_B_YellowWall_14`) et graine dans `DA_EasyCookSeed_QANGA`.
+Le branchement doit cesser de l AFFICHER, pas le detruire.
+
+#### Les deux mesures qui ont decide de l implementation
+
+1. **La conversion de vitesse** : le Construction Script de `BP_GrenadeProjectile` fait
+   `InitialSpeed = ProjetileSpeedKm/h / 0.036`. Les 200 km/h du spawn valent donc 5555,6 cm/s.
+   `QMOD_ShowThrowArcFromSpeed` refait exactement cette division : l arc dessine EST l arc vole.
+2. **La gravite n est pas le -Z du monde.** Le projectile utilise un
+   `NinjaProjectileMovementComponent` dont la gravite vient d un volume de gravite planetaire
+   resolu au BeginPlay (`GetViaTraceGravityAreaByLocation` -> `NinjaPhysicsVolume`). Une
+   prediction standard (`PredictProjectilePath`, qui impose une gravite constante en -Z) aurait
+   donc dessine un arc faux des que le joueur s eloigne d un pole. **La resolution reprend la
+   methode deja utilisee par QModule pour ses balises : parabole dans le repere du LANCEUR**,
+   gravite alignee sur son `GetActorUpVector`, via `AQModule_ThrownDeviceActor::SampleArc`.
+
+#### Ce qui est livre
+
+- `UQModule_ThrowPreview_World_SubSystem` : detient l acteur de preview, un par monde. **Un
+  subsystem et pas une TMap statique par monde** : le multi-monde (PIE a plusieurs clients dans
+  un process) est un bug que ce projet a deja paye. Jamais cree sur serveur dedie.
+- `UQModule_ThrowPreviewLibrary` : trois noeuds BP, `QMOD_ShowThrowArcFromSpeed` (Thrower, Start,
+  AimRotation, SpeedKmh), `QMOD_ShowThrowArc` (version vecteur) et `QMOD_HideThrowArc`.
+- Traces : meme canal et meme marche pas a pas que `SolveAimArc`, donc une grenade et une balise
+  de frappe sont d accord sur ce qu est « le sol ». Arret au premier impact, octogone pose dessus.
+- **Sans anneau de zone** (tranche par RzZz : « sans l anneau, on verra peut-etre plus tard »).
+  Le parametre `FootprintRadiusCm` existe, a 0 par defaut : l allumer plus tard ne demande pas de
+  toucher au code. Pour information, le rayon d explosion reel de la grenade est de 700 cm.
+
+#### Les deux limites, connues et assumees
+
+- **Les ricochets ne sont pas predits.** La grenade rebondit (`bShouldBounce`, `MaxBounces`) ;
+  l arc montre ou elle TOUCHE en premier, pas ou elle finit. C est le bon repere pour viser.
+- **Le cas gravite nulle n est pas reproduit.** Si aucun volume de gravite n est trouve sous le
+  projectile, son BeginPlay met `ProjectileGravityScale = 0` et la grenade part tout droit ;
+  l arc, lui, suppose une gravite normale. Symptome a reconnaitre : l arc courbe alors que la
+  grenade file droit.
+
+#### Le branchement pose dans `IS_GrenadeBase` (2026-08-22)
+
+Quatre operations, toutes reversibles, sur l evenement `Combat_2ndTrigger` :
+
+1. **`QMOD_ShowThrowArcFromSpeed` insere dans la boucle de rafraichissement existante**, entre le
+   `Set World Location` (`K2Node_CallFunction_48`) et le `Delay 0` (`K2Node_CallFunction_34`). La
+   boucle Gate + Delay 0 du BP est donc reutilisee telle quelle, rien n a ete recree.
+   Entrees : `Thrower` <- `Try Get Owner Pawn`, `AimRotation` <- **`Get Control Rotation`**,
+   `Start` <- le `vector + vector` qui alimentait deja le mesh, `SpeedKmh` = 200.
+2. **`QMOD_HideThrowArc` insere au relachement**, entre le `Set Visibility(false)` et le
+   `Gate.Close`.
+3. **Le meme Hide branche sur `OnRep_IsHidden`.** Sans ca, ranger l arme en gardant le clic droit
+   enfonce laissait la Gate ouverte : la boucle continuait de tourner et l arc serait reste a
+   l ecran. L ancien mesh ne montrait pas le probleme parce qu il etait simplement invisible.
+4. **L ancien mesh neutralise sans etre supprime** : le `Set Visibility` du clic droit est passe a
+   **FALSE** (`K2Node_CallFunction_27`). Un seul defaut de pin a changer pour revenir en arriere,
+   le composant, le mesh et le graphe restent intacts.
+
+**Choix a connaitre sur le point de depart.** Le tir reel part de socket `FP_Camera` + forward *
+100, mais cette chaine passe par un `Cast To Character` IMPUR : la brancher depuis une AUTRE
+chaine d execution aurait donne la valeur du dernier cast execute, pas la valeur courante. La
+chaine de la boucle, elle, est evaluee dans ce contexte et fait ses preuves depuis 2024. L ecart
+entre les deux est le decalage esthetique de 20 cm a droite de l ancien mesh, invisible sur un jet
+de 30 m. **La direction, elle, vient bien de `Get Control Rotation`, c est-a-dire de ce qui decide
+du tir**, et pas de la rotation camera qu utilisait l ancien affichage.
+
+**Verifications faites** : `compile_blueprint` propre (0 erreur, 0 warning), asset sauvegarde et
+les trois symboles (`QMOD_ShowThrowArcFromSpeed`, `QMOD_HideThrowArc`, `QModule_ThrowPreviewLibrary`)
+relus dans le `.uasset` sur disque. Sauvegarde d avant dans
+`Saved/ClaudeBackups/IS_GrenadeBase.before_throwarc.uasset`.
+
+**Dette preexistante, laissee telle quelle** : `validate_blueprint_graph` note ce Blueprint D, avec
+un `timeline_deploy` et son `Play from Start` jamais declenches, un `For Each Loop` et un
+`Set Relative Rotation` morts, quatre pins de `Make Array` vides et deux noeuds purs orphelins.
+**Aucun de ces points ne touche les noeuds ajoutes ici** ; ils sont anterieurs et hors perimetre.
+
+### 15.27 Le clic qui lance un module donnait un coup de poing (2026-08-22, compile vert)
+
+**ETAT : LIVRE. QangaEditor Win64 Development compile vert le 2026-08-22 a 12:21
+(QModule_GadgetHUD.cpp.obj + UnrealEditor-QModule.dll refaits, Result: Succeeded). Test en jeu
+par RzZz encore du. Cibles Qanga et QangaServer PAS recompilees.**
+
+**Symptome RzZz** : « a chaque fois que je clique pour lancer mon module actif, ca me met un
+coup de poing », donc le systeme de degats corps a corps part sur le lancement d une balise ou
+d une salve dorsale.
+
+#### La cause, mesuree dans le code
+
+Ce n est PAS une collision de bindings : la suppression du tir marche bien pendant la visee.
+Le coup part a la RESTITUTION. `HandleLaunchClick` desarme d abord (`CancelTargeting` /
+`CancelOrdnanceArm`), donc `RestoreSuspendedInputs()` remet les combos **pendant que le bouton
+gauche est encore physiquement enfonce**. Or `UInputsComponent::ProcessInputEvents`
+(`Plugins/InputSystem/Source/InputSystem/Private/InputsComponent.cpp`) raisonne ainsi : un
+`UCurrentInputData` qui matche une touche tenue et qui n est PAS dans
+`ProcessedPressedInputsData` recoit `CheckCallInputEvent(true)`, c est-a-dire une PRESSION
+complete. Pendant la suspension l input n a jamais ete marque traite, donc au retour des combos
+le composant emet une pression neuve, qui part sur l evenement `Combat_1stTrigger` du pawn
+(interface `QangaInputsInterface`) : tir de l arme, ou coup de poing si les mains sont vides,
+ce qui est le cas puisque le geste range l arme (`StowWeaponForGesture`).
+
+Le composant tick APRES le PlayerController (prerequisite de tick pose dans son BeginPlay),
+donc le coup partait la MEME frame que le lancement. Reproductible a 100 %.
+
+**Piege a connaitre** : relacher le bouton ne suffit pas. `PressedKeysSetSameFrame` n est
+rafraichi qu en FIN de `ProcessInputEvents`, donc restituer sur la frame du relachement emet
+encore la pression. Il faut attendre au-dela.
+
+#### Le correctif (100 % dans QModule, aucune touche a InputSystem)
+
+`UQModule_GadgetHUDComponent::RestoreSuspendedInputs(bool bForce)` :
+- un input dont une touche est encore enfoncee (`APlayerController::IsInputKeyDown`) n est PAS
+  restitue, il part dans `DeferredRestores` ;
+- une pompe timer (`FlushDeferredInputRestore`, periode 0,02 s) rend les combos une fois toutes
+  les touches relachees ET deux ticks de decantation passes ;
+- garde-fou : au-dela de 10 s la restitution passe quand meme, avec un `QMOD_VLOG`. Perdre le
+  clic gauche pour de bon serait pire qu un coup de poing. Cette ligne ne doit jamais apparaitre
+  dans une session normale ;
+- `bForce = true` a l `EndPlay` : mort, voyage, depossession rendent tout sur le champ.
+
+Deux pieges couverts dans `SuspendConflictingInputs` : une deuxieme suspension alors qu une
+restitution est encore en attente lirait des combos VIDES et rendrait au joueur un input sans
+aucune touche. Le code reprend donc les combos gardes de cote dans `DeferredRestores`, et sort
+tout de suite si `SuspendedInputs` n est pas deja vide.
+
+**Effet de bord assume** : apres le lancement, le clic gauche reste muet jusqu au relachement.
+Un clic = un module, pas de tir parasite. Pour retirer, il faut relacher et recliquer.
+
+**Ce qui reste a prouver en jeu** : lancer une balise et une salve dorsale mains nues, verifier
+qu aucun degat de melee ne part, puis que le clic gauche retrouve son comportement normal apres
+relachement.
+
+### 15.28 Le Nid de frelons posait sa ligne DANS l axe de tir, pas en travers (2026-08-22, PAS ENCORE COMPILE)
+
+**ETAT : code ecrit, PAS COMPILE (editeur ouvert au moment du changement, et QModule ne se
+Live-Code jamais). Rebuild froid QangaEditor arme. Test en jeu par RzZz encore du.**
+
+**Symptome RzZz (capture en jeu)** : sans cible verrouillee, ou en visant simplement le sol,
+la salve du Nid de frelons se posait en FILE INDIENNE, alignee sur la direction de tir. Elle
+creusait un sillon qui s eloigne du joueur au lieu de dresser un barrage devant lui.
+
+#### La cause
+
+`SV_TriggerShoulderGrenades` construisait bien deux axes horizontaux, mais elle etalait les
+impacts sur le MAUVAIS. `LineDirection` etait la direction joueur -> point vise, et l espacement
+(`StickyGrenadeSpacingCm`, 260 cm) s appliquait dessus ; l axe lateral, lui, ne servait qu a une
+gigue de +/-35 cm. Resultat geometrique : une ligne longue de `260 x (N-1)` cm dans l axe de
+visee, epaisse de 70 cm en travers. Exactement l inverse de l intention de barrage.
+
+#### Le correctif
+
+Les deux axes sont echanges dans leur ROLE, pas dans leur calcul :
+
+- `AimAxis` = direction joueur -> point vise, projetee a plat (l ancien `LineDirection`) ;
+- `LineDirection` = `Up x AimAxis`, l axe lateral, et c est LUI qui porte l espacement ;
+- la gigue de +/-35 cm passe sur `AimAxis` : elle casse l alignement au cordeau sans jamais
+  reconstruire le sillon (elle vaut 13 % d un pas d espacement).
+
+L axe vient de la VISEE, pas de la rotation du pawn : en strafe ou pendant une rotation sur
+place ALS, le mur ne pivote pas sous le reticule. Deux filets ajoutes : visee droit sous ses
+pieds (plus d axe horizontal) -> forward du pawn ; paire up/visee degeneree -> right du pawn,
+sans quoi toute la salve s empilerait sur un seul point.
+
+Le placement sol sort dans un helper pur `ResolveStickyGroundLineOffset` (namespace anonyme de
+`QModule_RackComponent.cpp`), teste par `QModule.StickyGrenade.GroundLineIsPerpendicularToAim` :
+centrage sur le point vise, zero etalement sur l axe de visee sans gigue, ligne colineaire a
+l axe lateral, portee `espacement x (N-1)`. Meme patron que le test de motif Phase 2 juste
+au-dessus.
+
+**Ce qui ne change PAS** : le mode CIBLE VERROUILLEE. Un pawn tenu garde son motif en espace
+cible dans ses bounds de collision (`ResolveStickyTargetLocalOffset`), intact.
+
+**Consequence assumee sur la choregraphie** : la fusee reste `index x ChainDelay`, donc la
+chaine d explosions BALAYE desormais le mur de gauche a droite au lieu de rouler en
+s eloignant. C est la lecture voulue pour un barrage. Le commentaire de
+`Authority_FireOneShoulderGrenade` qui disait « index 0 = le plus proche du joueur » a ete
+corrige en consequence.
+
+**Mesure geometrique** (joueur en +X, point vise a 15 m, 4 grenades, espacement 260 cm) :
+les 4 impacts restent a X=1500 et s etalent de Y=-390 a Y=+390, soit un mur de 7,80 m
+perpendiculaire a la visee, centre sur le reticule.
+
+**Fichiers** : `Plugins/QModule/Source/QModule/Private/QModule_RackComponent.cpp` (helper +
+test + axes + placement), `Plugins/QModule/Source/QModule/Public/QModule_StickyGrenadeActor.h`
+(brief de design remis a jour). Aucun contrat reseau touche : meme RPC, memes parametres, la
+geometrie est calculee cote SERVEUR comme avant.
+
+**Ce qui reste a prouver en jeu** : tirer une salve sans verrou sur du plat, verifier que le
+mur se dresse en travers de la visee, puis recommencer en strafe et en visant ses pieds.
+
+### 15.29 Le coeur illisible, la carte de survol, et le piege ShiftChild (2026-08-22, compile vert, valide en jeu par RzZz)
+
+Deux demandes de RzZz sur le Mur, et un meme piege UMG derriere les deux.
+
+#### A. Le coeur ecrivait du bleu sur du bleu
+
+**Symptome (capture en jeu)** : la case centrale affichait son libelle CORE dans une couleur
+qu on ne distinguait pas du fond, et le texte etait plaque tout en haut de l hexagone.
+
+**Cause mesuree** : `QMOD_SetupCell` peint le libelle avec la couleur de FAMILLE
+(`QModule_HexCellWidgetBase.cpp`, bloc `Text_Monogram`). Le coeur est de famille
+`Module.Family.System` = `#3F6E96` (`QModule_Settings.cpp:279`). Or le remplissage d une case
+active est un `Lerp(FillBaseColor, FamilyColor, 0.55)`, soit `#3F607D` sur le coeur : contraste
+calcule **1,15 pour 1**. Le texte etait litteralement peint dans la couleur de son propre fond.
+Et comme le coeur est le seul module a qui le code refuse son icone (exclusion `!bCore`), son
+libelle occupait la place du logo, tout en haut, la ou l hexagone est le plus etroit.
+
+**Correctif** : mise en page dediee au coeur (`ApplyContentOrder`) = la ligne NIV passe en haut,
+le libelle CORE prend le milieu large de l hexagone, les pastilles restent en bas. Couleur
+dediee `CoreCaptionColor` (blanc bleute `#E2ECF6`), exposee en UPROPERTY pour rester reglable
+sans code. **Les 106 autres definitions ne changent pas d un pixel** : les deux modifications
+sont enfermees derriere `bCore`, et une seule definition sur disque porte `bIsWallCore`
+(`QMD_GeneralSystem`, verifie par balayage des 107 QMD).
+
+#### B. Carte de survol : savoir ce qu est un module sans cliquer
+
+**Demande RzZz** : le nom et un descriptif n existaient que dans la fiche du panneau droit, au
+CLIC. Forme retenue apres arbitrage : une carte ancree a l hexagone survole (l oeil reste sur la
+grille). La piste "bandeau en haut a gauche" a ete ecartee sur mesure : la bande de titre est
+deja occupee par le titre MODULES 2.0 du conteneur de menu partage et par la lecture de capacite.
+
+**Mecanique** : `UQModule_HexCellWidgetBase` diffuse `OnCellHovered(Q, R, bEntered)` depuis ses
+`NativeOnMouseEnter/Leave` existants (ajout purement additif). Le Mur ecoute, et apres
+`HoverCardDelay` (0,12 s, UPROPERTY) affiche une carte : icone, nom, famille, niveau, et la
+description du niveau ou le module en est. Elle sert aussi les tuiles MODULES EN STOCK, qui sont
+les memes widgets (sentinelle `StockRowSentinel` en R) : elles affichent EN STOCK - NON INSTALLE
+a la place du niveau. Case vide = aucune carte.
+
+**Points a connaitre :**
+
+- La couche est `SelfHitTestInvisible` et la carte `HitTestInvisible`. **Obligatoire** : une
+  carte qui prend la souris la retire de la cellule dessous, qui envoie un "sortie", ce qui
+  ferme la carte, ce qui rend la souris a la cellule... les deux clignotent sans fin.
+- `HandleCellHovered` ne ferme la carte que si la cellule qui sort est CELLE QUE LA CARTE SUIT :
+  Slate envoie sortie(precedente) AVANT entree(suivante) quand la souris glisse d une case a sa
+  voisine, sinon la nouvelle carte serait tuee par la sortie de l ancienne.
+- Elle se cache d office dans trois cas ou elle mentirait : reconstruction de la grille,
+  rafraichissement du stock, et sortie de l onglet (la cellule ne recoit alors JAMAIS de sortie).
+- Placement : ancre sur la GEOMETRIE de la cellule, pas sur le curseur (elle ne tremble pas), en
+  passant par l espace absolu, seul moyen de survivre au `ScaleBox` de la grille dont l echelle
+  suit la fenetre. Bascule de cote selon la moitie d ecran, recalage vertical pres des bords.
+
+#### C. Le piege : `ShiftChild` ne reordonne RIEN au runtime
+
+**Symptome (capture RzZz)** : la carte se dessinait DERRIERE les hexagones.
+
+**Cause** : `UPanelWidget::ShiftChild` (moteur, `PanelWidget.cpp:200-210`) ne fait que
+`Slots.RemoveAt` + `Slots.Insert` + invalidation de layout. **Le widget Slate deja construit n en
+entend jamais parler** : a l ecran, l ordre de dessin reste celui des `AddChild`, car c est
+`OnSlotAdded` qui empile le slot dans le `SOverlay` vivant (`Overlay.cpp:37-44`). Et la grille
+monte son `ScaleBox` sur la racine dans `QMOD_RebuildGrid`, donc APRES le chrome : elle passe
+devant. Aucune erreur, aucun log, juste un widget qui reste derriere.
+
+**Correctif** : `RaiseHoverLayer` retire la couche de son parent puis la re-ajoute (le slot est
+reconstruit en dernier = dessine au-dessus), appele a la fin de `QMOD_RebuildGrid` une fois la
+grille montee, pour que la geometrie de la couche soit deja etablie au premier survol. Les
+reglages du slot (alignements) sont re-appliques : ils vivent sur le slot, qui est neuf.
+
+**Bug latent trouve dans la foulee** : la meme mecanique cassait l empilement INTERNE des
+cellules. Un module installe sur une case DEJA affichee voyait son icone atterrir sous la ligne
+de niveau, parce que `AddChild` empile a la fin et que le `ShiftChild(0, IconBox)` cense la
+remettre en tete est un no-op sur un widget vivant. Invisible jusqu ici parce qu une cellule
+garde l ordre etabli a sa creation. `ApplyContentOrder` reordonne donc par remove+add, avec une
+comparaison prealable de l ordre : quand la pile est deja bonne (le cas courant), elle ne
+reconstruit rien.
+
+**Fenetre ou `ShiftChild` marche quand meme** : tant que le widget n est pas encore monte dans
+l arbre (`CreateWidget` -> configuration -> `AddChildToCanvas`). D ou des precedents trompeurs
+dans ce meme fichier : le `ShiftChild(0, Backdrop)` de `NativeConstruct` est tout aussi
+inoperant, mais inoffensif (tout le chrome est ajoute apres, donc passe devant de toute facon).
+Ne pas le prendre pour une preuve que la fonction marche.
+
+#### Fichiers et reste a faire
+
+**Fichiers** : `QModule_HexCellWidgetBase.h/.cpp` (delegue de survol, `CoreCaptionColor`,
+`ApplyContentOrder`), `QModule_WallWidgetBase.h/.cpp` (couche + carte + `RaiseHoverLayer` +
+`HoverCardDelay`). Aucun contrat reseau touche, aucune donnee touchee, aucun asset modifie.
+
+**Trou de DONNEES a connaitre** : sur les 107 QMD sur disque, **40 portent des
+`LevelDescriptions`, 67 n en ont aucune** (la dette de coquilles du 27/07). La carte affiche
+donc nom, famille et niveau pour tous, mais reste muette sur le descriptif des deux tiers du
+catalogue. C est un chantier de contenu, pas de code.
+
+**Cible serveur** : `UnrealServer` n a pas ete recompilee (objets du 14/08). Sans consequence
+ici, tout ce lot est du client, mais a repasser avant un build serveur dedie.
+
+---
+
+## 17. Le dock des gadgets passait par-dessus toute l'interface (corrige le 2026-08-25)
+
+**Symptome (RzZz).** La lecture permanente du module arme (le dock, coin bas-droite) se dessinait
+par-dessus tout : les menus, les reglages de la Star Map, n importe quelle interface ouverte, et
+jusqu a l ecran de chargement. Elle restait nette au-dessus d un menu floute.
+
+**Cause, mesuree.** Toute l interface du jeu tient dans UN seul widget : `Qanga_MasterWidget`, pose
+sur le viewport a **ZOrder 0** par `WidgetGlobalComponent` (BeginPlay, pin `ViewportZOrder` du CDO
+= 0). Ce widget contient `W_Cinematic`, `Overlay_Master` (W_HUD, W_Lobby_V2, W_EmoteList,
+W_GameplayMenus, W_SystemMenus...), `Canvas_PopUps`, `W_QNotificationManager`, **`W_LoadingScreen`**,
+`W_DebugOverlay` et `Canvas_AdminPopUps`. La Star Map, elle, s ajoute au viewport par
+`StarMap_Component.StarMap_Open`, **egalement a ZOrder 0**. Autrement dit : **toute l UI du jeu vit a
+ZOrder 0**, et le dock etait ajoute a **45**. Il ne pouvait donc rien avoir au-dessus de lui.
+
+**Correctif.** Une seule constante partagee, `QModuleGadgetHUD::HudViewportZOrder = -1`, porte
+desormais les DEUX surfaces de HUD du composant : le dock (`EnsureWheel`, etait 45) et le reticule
+de designation (`EnsureReticle`, etait 120). Elles sont rangees SOUS la pile UI : une interface
+ouverte les couvre exactement comme elle couvre le reste du HUD (le menu gameplay a un
+`BackgroundBlur` plein ecran + un voile plein ecran, le dock est donc floute et assombri avec le
+HUD au lieu de rester net par-dessus). Aucun effet sur l input : les deux sont `HitTestInvisible`,
+ils ne prenaient deja aucun clic. Meme correctif dans QAI : le repli `GroupHUD->AddToViewport(0)`
+de `QAI_CyborgRecruitmentComponent` passe a `-1` (a Z egal, un widget ajoute APRES le master widget
+passe au-dessus de lui, donc 0 ne suffisait pas). Aucun contrat reseau, aucune donnee, aucun asset
+touche : des constantes et des arguments.
+
+**A verifier a l oeil au premier test** : le reticule iris passe desormais SOUS `W_DynamicCrosshair`.
+QModule ne masque pas le crosshair pendant le geste (verifie : aucune reference au crosshair dans
+tout le plugin) et le geste ne change pas l item actif, donc le crosshair reste affiche pendant la
+designation. L iris ayant une ouverture centrale, le crosshair y etait deja visible par transparence
+et le changement devrait etre invisible ; si un croisement genant apparait, la correction est d une
+ligne (rendre au reticule un ZOrder propre, positif).
+
+**Ce qui n a PAS ete descendu, VOLONTAIREMENT** : `QModule_WorkbenchActor` (Z 150) et
+`QModule_TestCommands` / `qmodule.Test.OpenWall` (Z 100). Ce ne sont pas des surfaces de HUD : les
+deux posent `bShowMouseCursor = true` et un `FInputModeGameAndUI` (l etabli avec `SetWidgetToFocus`).
+Ce sont des surfaces MODALES, elles doivent dominer le HUD qu elles remplacent. Les passer en negatif
+les ferait s ouvrir SOUS le HUD et sous les menus : ce serait la vraie regression. Leur defaut restant
+(un etabli ouvert reste au-dessus si le joueur ouvre le menu systeme par-dessus) ne se corrige pas par
+le ZOrder mais en FERMANT l etabli quand une interface s ouvre. Chantier separe.
+`ShaderFeedbackHUDComponent` (Z 100 par defaut, reglable en ini) appartient a un autre plugin et n a
+pas ete touche.
+
+**Regle a retenir pour tout widget C++ ajoute au viewport dans QANGA** : `ZOrder >= 0` = par-dessus
+TOUTE l interface du jeu, ecran de chargement compris. Un element de HUD se pose en dessous
+(negatif) ; seul un element qui doit vraiment dominer l UI merite un ZOrder positif.
+
+### 15.30 Le missile partait en fusee, et les degats n avaient aucun rapport avec lui (2026-08-25, route A, PAS ENCORE COMPILE)
+
+**Symptomes (RzZz, apres 15.23)** : (1) "assez souvent" un missile part dans le ciel au lieu d aller
+sur la cible ; (2) un missile qui explose a quelques metres de l IA lui fait quand meme 100 % des
+degats, et des cibles meurent alors qu aucun missile ne les a visuellement atteintes. Aucun de ces
+deux symptomes sur le Nid de frelons.
+
+**Mesures (assets, pas deductions).**
+
+- `QMD_NidDeGuepes`, StatMods en Override : `Missile.Count` [1,2,4], `Missile.ReloadSec` [14,10,6],
+  `Missile.TrackingMult` **[0.6, 0.8, 1.0]**.
+- `QMD_NidDeFrelons` : `GrenadeLauncher.Count` [1,2,4], `ReloadSec` [12,9,6], et **AUCUN stat de
+  tracking**. Le frelon n a pas de notion de rate : c est la premiere moitie de la reponse a
+  "pourquoi lui va bien".
+
+**Cause 1 : un rate n etait pas un tir a cote, c etait un tir vers RIEN.** Sur
+`bHits == false`, le serveur envoyait `MC_ShoulderMissileVisual(..., nullptr, FVector::ZeroVector)` :
+pas d acteur de homing ET pas de point d ancrage, donc le visuel ne se guidait sur rien du tout. Il
+recevait en plus une culbute aleatoire biaisee vers le haut. Comme l ejection Anthem est verticale,
+le rate montait tout droit a 190 km/h pendant toute sa duree de vie (6 s, soit ~300 m) et explosait
+en altitude. Le design de 2026-07-11 disait "les rates partent dans le decor" : c etait vrai quand
+les missiles partaient vers l avant, ca a cesse de l etre au passage a l ejection verticale du
+2026-07-12, et personne ne l avait vu. En phase 1 c est 4 tirs sur 10.
+
+**Cause 2 : les degats sont une HORLOGE, pas un impact.** `Authority_ApplyOrdnanceDamage` est un
+timer serveur arme au tir, calibre par une formule de ligne droite. Le visuel, lui, est un decor
+client (`TotalDamage` et `DamageRadius` forces a 0, l acteur se detruit sur serveur dedie). Les deux
+ne communiquent pas. D ou : degats pleins meme quand le shell explose loin, cible qui meurt sans
+qu un missile l ait touchee, shell qui continue de voler sur un cadavre. Et le fusible de proximite
+etait a **220 cm mesures depuis l ORIGINE de l acteur**, c est-a-dire le centre de capsule : sur un
+humanoide ca detone bien au-dessus de la tete, ce qui se lit comme un rate meme quand la frappe
+porte.
+
+**Route A livree (correctifs de lisibilite, l architecture n est pas touchee).**
+
+- `Authority_FireOneShoulderMissile` : un rate a maintenant sa propre destination,
+  `FlightDestination` = point de la cible decale lateralement de 4 a 7 m et de 2 a 5 m au-dela. Meme
+  arc, meme lecture, et il explose dans le decor a cote de ce qu il a manque. La culbute aleatoire
+  est supprimee : elle ne servait qu a masquer l absence de destination ;
+- le point de vol part TOUJOURS dans le multicast, touche ou rate. Seul l ACTEUR suivi est retenu
+  sur un rate, ce qui est exactement ce qui fait partir le tir a cote quand la cible bouge ;
+- la correction d ejection de 15.23 s applique desormais aux deux cas, puisqu un rate a une
+  destination lui aussi ;
+- **un seul modele de vol**, `QModuleOrdnance::EstimateShoulderMissileFlightSeconds`, lu par les
+  DEUX cotes : le serveur arme son horloge de degats avec, le client en tire la duree de vie du
+  shell (+1 s de grace, parce que le modele mesure une LIGNE DROITE alors que le vol est un arc, et
+  que son plancher de 0,8 s est deja court a bout portant). Un shell ne survit donc plus a sa propre
+  frappe. C etaient deux copies
+  de la meme arithmetique, dont une figee a 6 s ;
+- fusible de proximite : 220 cm -> **150 cm** (`SquaredDistanceToExplodeFromTarget` 48400 -> 22500).
+  Pas plus bas VOLONTAIREMENT : a 190 km/h une frame a 60 fps couvre 88 cm, donc une sphere plus
+  serree se fait TRAVERSER entre deux ticks et le shell passe a cote sans detoner.
+
+**Correctif annexe, assume.** `QModule_RackComponent.h` declarait
+`TObjectPtr<UAudioComponent> InstallLoopAudio` sans jamais declarer `UAudioComponent`. Le header ne
+compilait que grace a l ordre du build unity, qui le faisait passer apres un autre `.cpp` incluant
+`AudioComponent.h`. Une compilation du seul fichier le casse net (`error C2582`). Une ligne
+`class UAudioComponent;` ajoutee aux forward declarations. Defaut anterieur, revele par la
+verification, pas cause par elle.
+
+**Ce que la route A NE corrige PAS, et ce qu il faudra faire (route B).** Le visuel reste
+decoratif : un shell qui accroche un relief pendant son piquet meurt en route et les degats tombent
+quand meme. La difference de fond avec le Nid de frelons est architecturale :
+`AQModule_StickyGrenadeActor` est un **acteur serveur replique** avec un `ProjectileMovementComponent`
+maison qui vise `TargetAnchor + vitesse_cible x temps_restant` et une heure d arrivee deterministe
+(`FlightEndServerTime`) ; le projectile arrive a l heure dite par construction et les degats partent
+de sa vraie detonation. Le Nid de guepes est le SEUL module d ordnance a faire l inverse. Route B =
+lui donner le meme patron. Tout ce que la route A touche disparait alors.
+
+**Etat de verification.** Rien de la route A n est compile : une compilation de module est REFUSEE
+tant que Live Coding tourne dans l editeur ("Unable to build while Live Coding is active"). La
+compilation d un fichier SEUL passe outre, mais elle bute sur deux defauts d includes anterieurs que
+le build unity masque : celui de `QModule_RackComponent.h` (corrige ci-dessus) puis `QAI_SubSystem.h`
+lignes 176 et 190, qui construit `FObjectKey(Pawn)` avec un `APawn` seulement forward-declare. Ce
+dernier n a PAS ete touche : autre plugin, hors perimetre. Il faut donc une reconstruction editeur
+ferme pour valider quoi que ce soit.
+
+**Reste a valider en jeu (RzZz)** : `qmodule.Verbose 1`, puis lire
+`Shoulder missiles: N queued on M locked target(s), hit chance X%`. Si X vaut 60 ou 80, les missiles
+qui partent de cote sont les rates prevus, et ils doivent maintenant tomber DANS LE DECOR a cote de
+la cible, plus jamais dans le ciel. Si X vaut 100 et qu un missile part quand meme au ciel, il reste
+une cause non identifiee.
+
+## 18. Couverture en items d inventaire : 17 -> 48 modules (2026-08-25)
+
+Constat de depart : le menu admin de spawn d items (`Content/Widget/Debug/PUW_Debug`) ne montrait que
+17 modules sur 105. Ce menu liste les valeurs de la map `ItemKey:DAItem` de `DA_AllRef` filtrees sur
+`AvailableAdminSpawn` : un module sans item `IDA_` n y a jamais figure, faute d asset a lister.
+
+**Livre** : 31 paires `IDA_`/`IS_` creees par duplication du gabarit de leur domaine, chacune liee a
+son `QMD_` par `ItemDataAsset` et inscrite dans `DA_AllRef`. Verifie au rebuild du registre :
+`QModule registry ready: 105 definition(s) from 105 scanned asset id(s), 48 item(s) mapped`, map a
+334 entrees, aucune entree nulle, aucune erreur en PIE. Repartition : 26 cyborg branches, le
+Transpondeur de transit, 3 modules d arme (Amplificateur de degats, Chambre thermique, Recycleur de
+douilles) et 1 vehicule (Hydroglisseur). Sauvegarde d avant lot : `Saved/QModuleItems_Backup_20260825/`.
+
+**Perimetre volontairement exclu** : les 50 modules qui ne sont que des coquilles (un `QMD_` de nom
+et d icone, aucune implementation). Decision RzZz du 2026-08-25 : leur donner un item ne ferait que
+mettre en circulation des objets sans effet ; ils recevront un item quand ils seront developpes.
+
+### 18.1 Le test "coquille" qui ment
+Compter `StatMods` / `AbilityGrants` / `BehaviorGrants` **ne suffit pas** a conclure qu un module
+n est pas implemente : `QMD_Drone`, `QMD_Repair` et `QMD_Scanner` sont en jeu depuis la v1 avec zero
+StatMod, leur logique vivant dans les `IS_*` indexes par `GetCurrentPhase` (tags `Phase.Item.*`, un
+namespace distinct de `Module.*`). Sur les 51 modules a zero effet, ce test produisait un faux
+positif : **le Transpondeur de transit**, gadget C++ complet (roue des gadgets, bouton du menu de
+jeu, regles de zone sure, tests automatises) sans aucune stat agregee.
+
+Le discriminant fiable est la presence du tag `Module.<Nom>` **en litteral dans le C++ du plugin**,
+principalement le tableau `GadgetTags[]` de `QModule_GadgetHUD.cpp`. Une vraie coquille n apparait
+que dans son propre `QMD_<Nom>.uasset`. Corollaire pour toute recherche future : les `.uasset` sont
+binaires (`rg -a` obligatoire) et le C++ designe les stats par **identifiant natif**
+(`Stat_Cyborg_Move_SprintSpeed`), jamais par la chaine `"Stat.Cyborg.Move.SprintSpeed"` : une
+recherche par chaine rate tous les consommateurs C++.
+
+### 18.2 Creer un item ne le distribue pas
+Seul le panneau admin se peuple automatiquement a l inscription dans `DA_AllRef`. Les autres canaux
+sont curates a la main, un par un :
+- **vente : FAIT le 2026-08-25.** `Content/GameplayActors/Shop/BP_Module_Machine.OrderedItemsSelling`
+  passe de 14 a **45 entrees** (les 31 nouveaux items ajoutes, liste triee par nom d asset, donc les
+  cyborg d abord puis les modules d arme et de vehicule). Compilation propre, 0 entree nulle, 45
+  references verifiees dans le `.uasset`. `GameShopPrice` fixe le prix, jamais la presence.
+- **loot** : `QModuleLoot` est actif (`DefaultGame.ini`, `Enabled=True` depuis 2026-08-14) mais tire
+  dans les maps `Item:DropWeight` des tables `Content/Phases/QModuleV2/Loot/LDA_QMLoot_*`. **Toujours
+  pas fait** : y ajouter des entrees **dilue les poids existants sans aucun signal**, c est donc une
+  passe d equilibrage a part entiere, un lot a la fois.
+- **equipement / revente** : pilotes par `UseTags`, laisse vide sur les items de module comme sur les
+  14 d origine. Consequence assumee : ces items ne sont vendables a aucun marchand filtrant par
+  `ShopBuyItemTags`.
+
+### 18.3 Ce qu il faut savoir sur BP_Module_Machine (mesure 2026-08-25)
+- `OrderedItemsSelling` est un simple `TArray<DA_Item>` : **c est la seule source de la marchandise**.
+- `OrderedItemsStocks` (tableau d entiers parallele, herite de `BP_Shop`) est **vide, et l est sur
+  TOUS les marchands mesures** (vendeur d armes 13 items, GoldReseller 1, Reseller_Machine 9) : c est
+  un reliquat, ne pas chercher a le remplir en croyant reparer quelque chose.
+- La machine **n a pas de `ShopKey`**, elle n entre donc pas dans le stock persiste en sauvegarde
+  (`SAT_EncodeShopItems` / `SAT_ShopRecoverItemsStockByTime`, pilotes par `ItemsManagerGS`) : sa liste
+  est lue en direct, une sauvegarde existante voit immediatement les nouveaux articles.
+- `MarketDynamicRates = MDR_StaticPrice` : prix statique, le `GameShopPrice` de l item s applique tel
+  quel. `SellPriceMultiplier = 0.5` ne concerne que le rachat au joueur.

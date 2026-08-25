@@ -1045,3 +1045,169 @@ jour la graine. Aucune suppression n'est prévue par ce chantier.
 zone de dépose) appartient au système. On retire un onglet de menu, pas le réseau.
 
 **Reste à brancher (spécifié, non livré au 2026-07-31)** : voir QMODULE_ARCHITECTURE.md §15.13.
+
+---
+
+### 9.24 Rappel de flotte v2 : la livraison volee (2026-08-25, valide en jeu par RzZz)
+
+- **Brief RzZz** : « le fait de le faire spawn comme ca betement, deja c est pas beau ».
+  v1 posait le vehicule possede a 25 m derriere l appelant. v2 le fait ARRIVER.
+- **Nouvel acteur** : `AQModule_VehicleDeliveryActor` (QModule). 5 phases repliquees
+  Summon / Inbound / Rendezvous / Settle / Released. Le vehicule livre est le VRAI
+  vehicule possede du joueur, sorti du pipeline garage `SpawnPlayerOwnedVehicle_C`
+  (possession, persistance et anti-doublon inchanges), jamais une doublure cosmetique.
+- **Un acteur, deux regimes** : l approche se fait en `E_VehiclePhysicsState::SplineNoPhysics`
+  (2), le regime « pilote de l exterieur, aucune simulation » que `VehicleSplineTrack`
+  utilise deja pour les trains, et le vehicule est rendu en `SimulateAllowed` (1) des que
+  son siege pilote est pris. Rien ne se bat avec le Blueprint : on utilise l etat qu il a
+  deja pour ca.
+- **Modele reseau** : `VehicleBase` ne replique AUCUN mouvement (`bReplicateMovement=false`,
+  mesure sur le CDO) et est coupe a 300 m (`NetCullDistanceSquared=9e8`). Le vol ne peut
+  donc pas passer par la replication du vehicule : l acteur replique une poignee de
+  parametres + l horloge serveur, et CHAQUE machine evalue le meme arc localement et ecrit
+  la transform, exactement comme le spline track cote client. Le vehicule est rendu
+  `bAlwaysRelevant` le temps de la scene puis restaure.
+- **Embarquement** : rien a ecrire. Courir dans un vehicule en mouvement est une mecanique
+  existante et eprouvee entre joueurs (`QPlatform` sur `ALS_Base_CharacterBP` +
+  `PawnOnVehicleComponent`). Il ne manquait qu un pilote pour la livraison.
+- **LES QUATRE PIEGES, tous payes en playtest** (a relire avant de toucher au rendez-vous) :
+  1. **QPlatform embarque par un vrai `AttachToActor`** (`QPlatformComponent.cpp:189`). Des
+     que le joueur touche la coque, son pawn devient ENFANT du vehicule, donc sa position
+     monde est PRODUITE par le vaisseau. Une ancre qui lit sa position pour placer le
+     vaisseau referme la boucle : le couple derive ensemble et « le ship s attache au player ».
+  2. **Suivre sa position jusqu au bout est injouable** : ancre = sa position + offset, donc
+     avancer vers la porte repousse le vaisseau d autant. L ancre se VERROUILLE sur un point
+     monde fixe des l arrivee.
+  3. **L offset doit etre gele en espace MONDE**, jamais reconstruit depuis son cap vivant :
+     en ALS le perso s oriente vers la camera des qu il bouge, donc un offset exprime dans
+     son repere fait balayer 16 m de fuselage autour de lui a chaque coup de souris.
+  4. **Mesurer la boite NON collisionnante envoie la livraison a l horizon** : elle avale les
+     rayons d attenuation des lumieres, les FX et les child actors. Velkara Passenger mesure :
+     queue 940 cm / ventre 32 cm en collisionnant, contre 2878 cm / 2663 cm tous composants.
+     Et en jeu un composant pas encore positionne est encore a l origine du monde, qui sur une
+     planete est a des milliers de km. D ou les plafonds durs `FleetRecallMaxLeadOffsetCm` /
+     `FleetRecallMaxBellyOffsetCm`, qui loggent `(CLAMPED)` quand ils mordent.
+- **Geometrie autour de la PORTE, pas du fuselage** : le Velkara embarque par sa rampe
+  arriere, donc la distance origine-queue est mesuree sur la coque collisionnante et le
+  vaisseau se pose nez dans l axe du joueur, assez en avant pour que la rampe atterrisse
+  `FleetRecallDoorApproachCm` devant lui. Decalage lateral a zero par defaut.
+- **Reglages** : ~20 cles `[/Script/QModule.QModule_Settings]` categorie `QModule|FleetRecall`.
+  `UQModule_Settings::Get()` rend le CDO relu a chaque frame, donc TOUT se regle en direct
+  dans Project Settings pendant le PIE, sans rebuild. Vivant en plein vol :
+  `ApproachEaseExp` (2.6, la courbe de deceleration), `InboundSeconds` (16),
+  `DescentFraction` (0.35), `FollowStiffness` (3.0), `TurnStiffness` (2.0). Figes a
+  l acquisition, donc effectifs au rappel suivant : `DoorApproachCm` (300),
+  `SideOffsetCm` (0), `BellyClearanceCm` (40), `ArrivalLeadSeconds` (0.5),
+  `EntryDistanceCm` (300000).
+- **Kill switch** : `bFleetRecallCinematicDelivery=False` rebascule sur le spawn v1, qui
+  reste aussi le repli automatique si la scene ne peut pas demarrer.
+- **Test** : `qmodule.Test.Recall` (court-circuite le niveau de module ET le cooldown).
+  Deux lignes de log NON gatees par `qmodule.Verbose` : la mesure de coque a l acquisition
+  et une ligne par transition de phase avec la distance vaisseau-appelant.
+- **RESTE** : portee planete/orbite/univers (progression du catalogue, par.7.1) toujours pas
+  implementee ; trajet visible sur la carte ; variante vehicule terrestre (pas de graphe de
+  routes : MassTraffic est desactive dans le .uproject) ; sons ; refus parlant quand le ciel
+  n est pas degage.
+
+## Etat mesure du remplissage des fiches (2026-08-22)
+
+Mesure faite asset par asset sur les **105 QMD** de `/Game/Phases/QModuleV2/`, en croisant trois
+sources : le contenu reel des assets (StatMods, AbilityGrants, BehaviorGrants, LevelDescriptions),
+la recherche des **consommateurs** de chaque tag de stat (C++ du projet + les 5 Blueprints qui
+appellent `QMOD_GetStat`), et le tableau de leviers de `QMODULE_ACTIVATION_ALIGNMENT.md`.
+
+**40 modules ont une description, 65 n'en ont aucune.** Parmi ces 65 :
+
+| Categorie | Nombre | Ce qui manque |
+|---|---|---|
+| Stat mesuree ET lue par le jeu | 8 | rien : descriptions ecrites le 2026-08-22 |
+| Chiffres en data, stat SANS aucun lecteur | 7 | un consommateur (etage 2 de l'activation) |
+| Ni data, ni code, ni capacite | 50 | l'effet lui-meme |
+
+**Regle appliquee (arbitrage RzZz, 2026-08-22)** : on n'ecrit une description que pour un module
+dont l'effet EXISTE. Un module muet est moins grave qu'un module qui promet un bonus qu'il ne
+donne pas : le joueur paierait un socket et des phases pour rien, et la fiche deviendrait un
+mensonge que le code devrait ensuite rattraper.
+
+### Les 8 renseignes (effet verifie de bout en bout)
+
+| Module | Stat | Valeurs | Lu par |
+|---|---|---|---|
+| AmortisseursCinetiques | FallDamage.Reduction | Add 30/60/100 % | ALS_Base_CharacterBP `SV_OnLanded` |
+| BlindageDeDrone | Drone.ImpactsAdd | Add 1/2/3 impacts | IS_DroneBase |
+| CompacteurDeMatiere | Inventory.StackMult | Mult +25/50/100 % | InventoryComponent |
+| NanoRegenerateur | Health.RegenPerSec | Add +1/2/3 PV/s | QModule_LegacyFacade |
+| NanoReparateurDeDrone | Drone.RepairTimeMult | Mult -20/40/60 % | IS_DroneBase |
+| Negociateur | Trade.SellPriceMult | Mult +3/6/9 % | InventoryComponent `SV_SellItem` |
+| SacDigitiqueEtendu | Inventory.Size | Add +4/8/12 slots | InventoryComponent |
+| ServomoteursDeJambes | Move.SprintSpeed | Mult +8/16/25 % | CyborgAdapter + ALS |
+
+### Les 7 a un consommateur pres
+
+Ils portent deja des chiffres credibles, mais **le tag n'a aucun lecteur** : installer le module
+ne change rien. Ce sont les candidats les moins chers a rendre reels.
+
+| Module | Tag sans lecteur | Valeurs en attente |
+|---|---|---|
+| AmplificateurDeDegats | Stat.Weapon.Damage | Mult +5/10/15 % |
+| CanonRenforce | Stat.Weapon.Damage | Add +10/20/30 |
+| ChambreThermique | Stat.Weapon.Damage | Mult +20/35/50 % |
+| ChargeurRapide | Stat.Weapon.FireRate | Mult 10/20/30 % |
+| BlindageSousCutane | Stat.Cyborg.Armor.Flat | Add 10/20/30 |
+| NoyauSurcadence | Stat.Vehicle.Speed.Max | Mult +10/20/30 % |
+| RecycleurDeDouilles | Stat.Weapon.MatterPerShot | Add 1/2 |
+
+Note : `Stat.Weapon.FireRate` a bien une occurrence en C++, mais c'est un **plafond** de securite
+(`GlobalStatClampMaxByTagName`, `QModule_Settings.cpp`), pas une lecture. Un plafond sur une stat
+que personne ne lit ne fait rien. Rappel de semantique (alignement par. 7.1) : dans QANGA,
+"FireRate N %" veut dire delai x (1 - N), donc l'operation doit rester Add.
+
+### Les 50 coquilles, par famille
+
+L'effet n'existe nulle part : ni StatMod, ni AbilityGrant, ni BehaviorGrant, ni code C++ ou BP
+portant leur nom. Elles passent quand meme `IsDefinitionValid` (qui n'exige que ModuleTag +
+Domain + MaxLevel), donc elles s'affichent, s'installent et coutent des ressources.
+
+- **System (15)** : AccreditationVoss, AnalyseNecrologique, BalisePersonnelle, BoiteNoire,
+  ContreScan, EchoDeConstellation, FilonQuotidien, GyroscopeDeporte, InterfaceDeContrats,
+  LeurreDrone, OeilThermique, ReputationICLab, TraducteurUniversel, TraqueurDeButin,
+  VoixDeCommandement
+- **Engineering (11)** : BulleDeBouclier, DroneDeCombat, FabricateurDeMunitions, Grappin,
+  ImpulsionEMP, KitDeSabotage, LeurreHolographique, MineDeProximite, MurInstantane,
+  ReparateurAutomatique, TourelleSentinelle
+- **Stealth (9)** : AnalyseurDeMenace, DroneSpectre, FauxTranspondeur, InterceptionRadio,
+  MarqueurTactique, PasFeutres, PeauCameleon, RadarPassif, VisionNocturne
+- **Combat (6)** : Adrenaline, ChargeurNeuronal, CiblageAssiste, CompensateurNeural,
+  MouchardReflexe, Rage
+- **Survival (4)** : ArmureReactive, Condensateur, IsolationFaraday, TrousseInterne
+- **Economy (2)** : AimantDeCollecte, Spectrometre
+- **Mobility (2)** : MicroPropulseurs, SprintDeFond
+- **Piloting (1)** : PiloteDeChasse
+
+Pieges deja documentes a garder en tete pour ce lot : **PasFeutres n'a aucun levier possible**
+(il n'existe AUCUN systeme d'audition d'IA dans le projet, l'ancre du catalogue etait fausse) et
+**Condensateur est a re-cadrer** (il n'existe pas de stat d'energie ou d'endurance). Voir
+`QMODULE_ACTIVATION_ALIGNMENT.md` par. 7.1.
+
+**Trois QMD n'ont aucune famille** (`SynergyTags` vide) : CanonRenforce, ChargeurRapide,
+NoyauSurcadence. Consequence visible : leur cellule et leur carte de survol tombent sur la
+couleur de repli au lieu d'une couleur de famille.
+
+### Dette de localisation sur TOUT le champ LevelDescriptions (mesure 2026-08-22)
+
+Les **138 descriptions** presentes sur les 48 modules renseignes sont **toutes
+`culture-invariant`** : aucune ne passe par une String Table, donc **le gather de localisation
+les saute toutes**. Elles resteront en anglais en francais comme en espagnol, sans la moindre
+erreur pour le signaler. Ce n'est pas une regression des 8 fiches ecrites ce jour : c'etait deja
+vrai des 114 descriptions preexistantes, et les 8 nouvelles ont ete ecrites de la meme facon
+pour rester homogenes plutot que de creer un ilot traduisible au milieu.
+
+Rappel de methode (verifie) : `text_is_culture_invariant == False` **ne prouve pas** qu'un texte
+est ramasse. Le seul test fiable est `text_is_from_string_table == True`, ou la presence de la
+chaine dans `Content/Localization/Game/en/Game.po`. Depuis une session, la seule voie qui produit
+un texte reellement traduisible est `unreal.TextLibrary.text_from_string_table(...)`, et le pont
+ne sait pas AJOUTER une cle a une table existante (il ne sait que creer une table neuve).
+
+**Chantier si l'equipe veut ces fiches traduites** : une String Table dediee (par exemple
+`ST_QModule_Descriptions`) portant les 138 cles, puis repointer chaque `LevelDescriptions`
+dessus. A faire en une passe pour tout le champ, jamais fiche par fiche.

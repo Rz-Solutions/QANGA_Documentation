@@ -1,5 +1,7 @@
 # QStorage: coffre a stockage LOCAL, replique, persistant, constructible et posable
-### Document de design v2 (consolide apres revue hostile) : a valider par RzZz. Aucun fichier n a ete modifie, aucune ligne de code n a ete ecrite.
+### Document de design v3 : ARBITRE PAR RzZz le 2026-08-22. Le design est valide, J1 est autorise. Aucune ligne de code n avait ete ecrite au moment de l arbitrage.
+
+> Historique : v1 (design initial), v2 (consolide apres trois revues hostiles), v3 (arbitrages RzZz integres, voir 0.1).
 
 ---
 
@@ -7,14 +9,39 @@
 
 1. On construit un conteneur a contenu **local** (chaque coffre a ses propres objets), server-authoritative, persistant a travers les mises a jour, utilisable en deux poses : construit par QBuilder, ou place a la main dans un sous-niveau QLevel.
 2. Ca vit dans un nouveau plugin `Plugins/QStorage/` (couche Q\*), C++ mince plus assets BP, **sans aucune dependance sur QModule** (voir 1.3).
-3. La verite du contenu reste l `InventoryComponent` BP (`Content/Systems/Item/InventoryComponent.uasset`) attache au runtime cote serveur, patron deja en prod dans `Content/Systems/Vehicle/VehiclesOwned/VehiclePlayerOwner.uasset`.
-4. Zero replication de l acteur : le modele reseau copie `Content/GameplayActors/Shop/BP_Shop.uasset` (mesure `replicates=false`), avec ouverture par le canal d interaction existant `Lib_OptimizedState::SendOptimizedActorInteraction`.
+3. La verite du contenu reste l `InventoryComponent` BP (`Content/Systems/Item/InventoryComponent.uasset`) cote serveur : attache au runtime pour le coffre de niveau, **deja present et cable** sur le builder pour le coffre construit.
+4. **Les deux poses n ont pas le meme modele reseau, et c est voulu** (encadre en tete de section 5). Le coffre construit **est** le builder, qui se replique deja (`bReplicates = true`, `QBuilder_BuilderActor.cpp:22`) : on garde sa chaine en production. Le coffre de niveau ne se replique pas et passe par snapshot et deltas, sur le canal d interaction existant `Lib_OptimizedState::SendOptimizedActorInteraction`.
 5. Le client n envoie **jamais** de position ni de reference d objet : il dit "j interagis", le serveur resout l acteur, choisit le coffre et renvoie un handle.
 6. L identite durable est un `FGuid` alloue par le serveur, resolu au respawn par un index d ancrage **calcule uniquement cote serveur**, avec tombstone a la destruction.
 7. La persistance passe par `GameDataManager` / `DataObject` (`Plugins/DataManager/Content/`), mais **QStorage possede sa propre cadence d ecriture** : une cle tableau par coffre, index segmente par secteur, flush a la fermeture de session, jamais par mouvement d objet.
 8. Le versionnement est un entier `SchemaVersion` avec echelle de migration, jamais l egalite stricte destructrice de QBuilder (`Plugins/QBuilder/Source/QBuilder/Private/QBuilder_SubSystem.cpp:994`) ni de DQS.
 9. L UI duplique `Content/Widget/Storage/PUW_VehicleStorage.uasset` ; on ne touche ni `BP_Storage` ni `PUW_Storage3d` (44 emplacements de relais et stations).
+9bis. **Ce que le chantier repare en plus de ce qu il ajoute** : la chaine storage du builder existe deja mais s indexe sur un `BuilderID` **realloue a chaque chargement** (`QBuilder_SubSystem.cpp:728` et `:733`, champ sauvegarde marque `// Not Use`). Le contenu des zones construites ne survit donc pas de facon fiable a un redemarrage. QStorage y substitue son `FGuid` : c est **tout** le perimetre cote construit (4.0 et 7.4).
 10. **Le seul vrai point dur** : la couche d ecriture heritee. `TempDB.WriteTempData` reecrit le slot monde ENTIER plus son miroir `BACKUP_`, et `AsyncSaveGameToSlot` serialise en memoire **de facon synchrone sur le game thread** (`C:/UE5_Share/Engine/Source/Runtime/Engine/Private/GameplayStatics.cpp`). Tout le design plie devant ce fait : c est lui qui impose l index segmente, la cadence possedee par QStorage, les plafonds durs, et un banc de mesure au jalon J1.
+
+---
+
+## 0.1 Arbitrages RzZz du 2026-08-22
+
+Les dix questions de la section 11 sont tranchees. La section 11 conserve les decisions
+et leur motif. Ce qui change structurellement :
+
+| Sujet | Arbitrage | Effet |
+|---|---|---|
+| Regle "premier objet a construire" | **Lecture B, definitif** | Le perimetre de QStorage cote construit se reduit a fournir l identite stable a la place du `BuilderID`. J6 devient marginal. Voir 4.0 et 7.4. |
+| WAL d intention (4.3) | **Supprime** | Remplace par une fenetre de perte bornee, assumee, journalisee, plus un toggle `.ini` de flush post-transfert evalue au banc J1. Voir 4.3. |
+| Existence contre contenu (7.3) | **Option b** | Fenetre assumee, reconciliation, recuperation admin. Un `QBuilder_SaveData` force est mesure au banc J1, et n est adopte que sur pose et destruction. |
+| Deplacement et destruction | **Point d extension additif accepte** | Destruction refusee si des piles resolues subsistent, deplacement autorise a vide uniquement. Voir 7.5. |
+| Acces | **`OwnerOnly` par defaut** | Partage par `Allowed_By_ID` (`Plugins/QBuilder/Source/QBuilder/Public/QBuilder_Client.h:47`), `Public` reserve aux coffres de niveau, `GroupOnly` plus tard. L enum reste inchange. |
+| Synchronisation live | **Retenue** | Deltas, snapshot fige et rebase conserves tels quels. Plan B explicite : refresh a l ouverture. |
+| Composant d etat | **BP en v1** | Le port C++ n est pas abandonne, il est en attente de bascule. Le repli du 2.4 reste conditionne a l INCONNU 6. |
+| Tirage pondere | **Extraction `Cy_*` dediee** | Pas de copie : `Plugins/QModule/Source/QModule/Public/QModuleLoot_Library.h` impose lui-meme le no-duplicates entre ses trois consommateurs. |
+| Set QBuilder | **ICLAB** | Et l entree `QA_ICLAB_StorageBase` existante est **rebranchee ou remplacee**, jamais doublee. Voir 7.1. |
+| Migration des anciens contenus | **Aucune** | Les contenus keyes sur `BuilderID` numerique ne sont pas stables par construction. `qstorage.Orphans` les ramasse. Voir 4.0. |
+| Plafonds initiaux | **Fixes en `.ini`** | 128 sessions simultanees, `MaxHotContainers` 256, 5000 coffres persistes par monde, 2000 entrees par segment d index. A revisiter avec la courbe J1. |
+
+**Consequence sur le planning** : J0 ne porte plus aucun inconnu de **design**. Il ne reste
+que des mesures, replacees dans les jalons ou elles servent. J1 peut demarrer.
 
 ---
 
@@ -42,13 +69,24 @@ Le V1 prevoyait une dependance privee sur QModule pour `QModuleInventory` et `QM
 - `QModule_InventoryBridge.h:21-52` est pawn-centric (`FindInventoryComponent(APawn*)`, `PawnOwnsInstance(APawn*)`) et se declare server-only par nature. Il ne s applique pas a un coffre. Surtout, `GrantItemAsset` fait `GenerateNewItemInstance + AddItemToInventory` (`Plugins/QModule/Source/QModule/Private/QModule_InventoryBridge.cpp:362-374`) : il **cree une instance neuve**, donc perd `SlotAttachments`, `Rarity`, `CustomizationInstanceId`. Le "ou le pont QModuleInventory" du V1 pour les transferts etait faux et dangereux : **il est retire**.
 - Le jalon J5 (loot dans les coffres) creerait la pression inverse QModule vers QStorage, donc un cycle.
 
-`QStorage.Build.cs` : `Core, CoreUObject, Engine, QLevel` (public/prive selon usage), rien d autre. `RollWeightedItem`, `ResolvePickupClass` et `HashWorldLocation` (`Plugins/QModule/Source/QModule/Public/QModuleLoot_Library.h:19-66`) sont soit copies dans QStorage avec un commentaire de provenance, soit extraits en `Cy_*` par une tache dediee validee **avant J1** (question 8 a RzZz).
+`QStorage.Build.cs` : `Core, CoreUObject, Engine, QLevel` (public/prive selon usage), rien d autre. `RollWeightedItem`, `ResolvePickupClass` et `HashWorldLocation` (`Plugins/QModule/Source/QModule/Public/QModuleLoot_Library.h:19-66`) sont **extraits en `Cy_*` par une tache dediee** (arbitrage RzZz). La copie est ecartee : l en-tete de `QModuleLoot_Library` impose deja le no-duplicates du tirage pondere entre ses trois consommateurs actuels, une copie irait contre ce que le fichier declare lui-meme. Cette extraction ne se trouve pas sur le chemin du socle J1 (elle sert au remplissage, donc a J5) : elle est planifiee comme tache dediee avant J5, avec relecture des trois consommateurs existants.
 
 **Critique ecartee, partiellement** : l argument du "poids transitif" (QStorage tirerait QAI et DQS) est **non fonde**. Les `PrivateDependencyModuleNames` de QModule ne remontent pas dans QStorage, et QModule est deja actif projet-wide donc deja charge. J adopte quand meme l independance, mais pour le motif du cycle J5, pas pour le poids.
 
 ### 1.4 Activation
 
 `UQStorage_DevSettings`, section `[/Script/QStorage.QStorage_DevSettings]` dans `Config/DefaultGame.ini`, **`Enabled=False` a la livraison**. Categorie de log `LogQStorage`.
+
+**Chemin retour apres desactivation.** Repasser `Enabled=False` sur un monde qui a deja
+tourne ne doit rien detruire. Regle : a l extinction, le subsystem flushe ce qu il a en
+memoire puis cesse toute activite ; les acteurs ne s enregistrent plus, aucune ouverture
+n est servie (refus `Unresolved`, jamais un coffre vide), et **aucune ecriture, aucune
+purge, aucun tombstone n est emis**. Les segments d index et les DataObjects de coffres
+restent intacts sur disque et sont repris tels quels a la reactivation, sous reserve du
+controle de `SchemaVersion` du 4.4. Un coffre deja pose reste visible et devient
+simplement inerte, avec un message localise. La consequence est assumee : un aller-retour
+d activation n est pas une operation de nettoyage, et le nettoyage reste manuel et
+explicite (`qstorage.Orphans`).
 
 ---
 
@@ -161,12 +199,65 @@ Classes : `UQStorage_World_SubSystem` (registre des coffres vivants, registre de
 
 ## 4. Identite et persistance
 
+### 4.0 QStorage corrige un bug de persistance qui existe deja (fait apporte par RzZz, verifie)
+
+La chaine storage de `Content/Systems/QBuilder/Actor/QBuilder_Builder_Actor_BP` est
+complete de bout en bout : `InventoryComponent`, `PersistentDataComponent` avec bind sur
+`OnDataReady`, `OptimizedStateComponent`, `InteractServer` et `InteractClient` cables, et
+ouverture de `PUW_VehicleStorage` par `PopUpDialogClass`. **Son seul defaut est son
+identite de persistance** : `SetIdAndGetData(Conv_StringToName(Conv_IntToString(GetBuilderID())))`.
+
+Ce `BuilderID` n est pas durable, et la mesure est sans ambiguite :
+
+- `QBuilder_SaveGame_CreateBuilder` alloue un index neuf a la restauration
+  (`Plugins/QBuilder/Source/QBuilder/Private/QBuilder_SubSystem.cpp:728`) puis l ecrase
+  sur l acteur (`:733`). **Le `QBuilder_BuilderID` sauvegarde n est jamais relu** ; le
+  champ porte d ailleurs le commentaire `// Not Use`
+  (`Public/Struct/QBuilder_Struct_Data.h:341`).
+- `QBuilder_ServerBuilder_GetNewIndex` (`Private/QBuilder_SubSystem.cpp:429-441`) rend le
+  premier index du pool de recyclage s il n est pas vide, sinon `Server_Builders.Num()`.
+  L identite est donc **ordinale** : elle depend de l ordre d iteration de
+  `QBuilder_SaveGame_LoadData` et de l etat du pool.
+
+Consequence : des que l ordre ou la taille du tableau sauvegarde change d un cran (un
+builder detruit, un builder ajoute, un index recycle), chaque builder suivant se decale et
+`SetIdAndGetData` **tombe sur le DataObject d un autre builder**. Le contenu des zones
+construites ne survit donc pas de facon fiable a un redemarrage. Le defaut est invisible en
+solo continu, ou les indices coincident.
+
+**Ce que cela change pour le chantier** :
+
+1. QStorage ne se contente pas d ajouter une fonctionnalite, **il repare cette chaine** en
+   substituant son `FGuid` serveur au `BuilderID` comme cle de `SetIdAndGetData`. C est le
+   coeur du perimetre cote construit, et c est tout le perimetre (voir 7.4).
+2. **Aucune migration des anciens contenus** (arbitrage RzZz). Une donnee keyee sur un
+   entier ordinal non stable ne porte pas d identite reconstituable : la migrer reviendrait
+   a rattacher des contenus au hasard. Les enregistrements existants sont traites comme
+   orphelins, listes par `qstorage.Orphans`, jamais effaces automatiquement (7.3).
+3. **A dire a l equipe et au support** : des plaintes de coffres de base vides apres un
+   redemarrage sont l expression de ce bug, pas une regression du chantier. C est un
+   argument de priorisation, pas une excuse : la chaine reste cassee tant que J1 a J4 ne
+   sont pas livres.
+
 ### 4.1 Identite : GUID serveur, ancre serveur, tombstone
 
 Le relecteur data a raison : dans le V1, l identite reelle etait la position, le GUID n en etait qu un alias. Corrige sur trois points.
 
 1. **L ancre n est calculee que par le serveur.** Le client ne la connait pas, ne l envoie pas, ne peut pas la fabriquer (voir 5.1). Cela supprime d un coup : la generation de loot a volonte, la divergence de quantification `FRepMovement` pour une piece QBuilder, et le cas `NM_ListenServer` ou `ServerTransformFull` n est jamais assigne (`Plugins/QBuilder/Source/QBuilder/Private/World/QBuilder_BuilderActor.cpp:176-186`, replique `COND_InitialOnly` ligne 32) et ou les clients reposent leur builder a l identite.
 2. **Tombstone obligatoire.** A la destruction d un coffre : ecriture d une pierre tombale persistee (GUID, ancre, `CreatedSeq`), refus de toute resolution d ancre vers un GUID marque detruit, et appel de `DeleteDataObject` / `DeleteDataFromDB` (exposes par `Plugins/DataManager/Content/GameDataManager.uasset`, jamais appeles par le V1) sur le DataObject du coffre, dans la meme transaction. Sans cela, la boucle est triviale : remplir, detruire, ramasser la restitution au sol, reconstruire au meme endroit a moins de 10 cm, recuperer le contenu une seconde fois.
+
+   **Un tombstone ne protege pas d une restauration de sauvegarde.** Le chemin d ecriture
+   produit un `BACKUP_` en plus du slot principal, et une restauration admin d un slot
+   monde anterieur au tombstone **ressuscite l enregistrement pre-tombstone**, donc rend le
+   contenu detruit. Le tombstone rend le rejeu impossible **en vol**, jamais apres un
+   retour arriere de fichier. Trois consequences ecrites : les tombstones vivent dans le
+   **meme** segment que les enregistrements qu ils annulent (une restauration partielle ne
+   peut pas ramener un record sans son tombstone) ; `CreatedSeq` est **monotone par monde**
+   et un record dont la `CreatedSeq` est superieure a la sequence courante connue est
+   refuse et journalise ; toute restauration de sauvegarde est declaree comme une operation
+   qui peut dupliquer des objets, et elle doit etre suivie d un `qstorage.Orphans`. Ce
+   n est pas un defaut de QStorage : c est une propriete de toute restauration de fichier,
+   et elle est documentee plutot que masquee.
 3. **Collision de bucket refusee, pas devinee.** Si deux coffres vivants tombent dans le meme bucket de 10 cm, le second refuse son enregistrement avec `UE_LOG(LogQStorage, Error)` nommant les deux GUID. Un coffre non ouvrable et bruyant vaut mieux qu un coffre qui herite du contenu d un autre.
 
 Options ecartees, pour memoire : la cle de position seule (troncature au centimetre, `Plugins/QNetState/Source/QNetState/Public/OptimizedStateTypes.h:61-67`) et la cle composite QBuilder (melange un `BuilderID` reattribue, collisionne).
@@ -189,11 +280,107 @@ Un debounce cote QStorage ne freinait que l index, pas le contenu, parce que le 
 
 **Note de sincerite** : cela n annule pas le cout, cela le borne. Le slot monde reste reecrit en entier, deux fois, sur le game thread, a chaque flush. C est pourquoi le banc de mesure passe de J7 a J1 (voir 9).
 
+### 4.2bis ARBITRAGE DU 2026-08-22 : le contenu sort du slot monde
+
+Le banc a tranche (voir 9.1). RzZz a choisi la voie **(B)** : le contenu des coffres
+quitte le slot monde partage. Tout le 4.2 ci-dessus reste vrai comme **description du
+chemin herite** et comme justification, mais il n est plus le chemin d ecriture de
+QStorage. Ce qui suit le remplace.
+
+**Le probleme mesure, en une phrase** : la segmentation d index bornait le re-encodage,
+mais `SaveGameToMemory` porte sur le slot **entier** a chaque flush, sur le game thread,
+et rien ne bornait ce poste. 10,83 ms a 1000 conteneurs, 62,80 ms a 5000.
+
+**Le nouveau chemin, et pourquoi il coute zero milliseconde de game thread.**
+
+Les donnees de QStorage ne sont **pas** des UObject : ce sont des `FQST_ItemStack` et des
+`FQST_ContainerRecord`, c est-a-dire des `FName`, des `FString` et des entiers. Rien
+n oblige a passer par `USaveGame`, et c est precisement `USaveGame` qui impose
+`SaveGameToMemory` sur le game thread. Donc :
+
+1. **sur le game thread** : on **copie** les structures du segment sale dans un paquet de
+   travail. C est une copie memoire de `TArray<FQST_...>`, sans encodage, sans
+   serialisation, sans reflexion ;
+2. **sur un thread de fond** (`AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, ...)`)
+   : on encode le codec `QSTCRATE` **et** on ecrit le fichier. Les **deux** postes mesures
+   par le banc partent du game thread, y compris l encodage, qui etait le plus cher des
+   deux (130 ms contre 31 ms a 5000) ;
+3. l ecriture est un `FFileHelper::SaveArrayToFile` sur un fichier **propre a QStorage**,
+   jamais le slot partage : sa taille ne depend plus de ce que le reste du jeu y met.
+
+**Le piege a ne pas recopier de QBuilder.** `QBuilder_AsyncSave`
+(`Plugins/QBuilder/Source/QBuilder/Private/QBuilder_SubSystem.cpp:751-760`) fait la bonne
+chose (tout le travail sur un thread de fond) mais capture un `UQBuilder_Data_WorldSaveGame`
+cree par `NewObject` et **non enracine**, consomme sur ce thread : rien ne le protege du
+ramasse-miettes pendant l ecriture. Nous ne reproduisons pas ce montage. Comme notre
+paquet de travail ne contient **aucun UObject**, la question ne se pose pas : c est le
+deuxieme argument, apres le cout, pour ne pas passer par `USaveGame`.
+(Ce defaut de QBuilder est signale comme tache separee, hors perimetre de ce chantier.)
+
+**Ce que (B) nous fait perdre, et qu il faut donc refaire nous-memes.**
+
+- **La segmentation par port serveur**, qui venait gratuitement de `GameDataManager`. Le
+  chemin devient explicite : `Saved/SaveGames/QStorage/Port<Port>/<Monde>/Segment_<X>_<Y>.qst`.
+  La limite du 4.6 reste vraie et inchangee : en mode hors ligne il n y a pas de port,
+  donc pas de segmentation, et deux instances sur la meme map partagent le fichier.
+- **Le miroir `BACKUP_`**. Nous ecrivons donc en deux temps : fichier temporaire, puis
+  remplacement atomique, et conservation d **une** generation precedente. Un remplacement
+  atomique vaut mieux qu un miroir ecrit une seconde plus tard, qui recopiait l etat
+  fautif (4.3).
+- **Le chargement au demarrage**, qui devient notre travail : lecture paresseuse par
+  segment, a la premiere resolution d ancre dans ce secteur, jamais un chargement global.
+
+**Ce que (B) nous rend.**
+
+- Le plafond `MaxPersistedContainersPerWorld` cesse d etre une contrainte de frame. Il
+  reste comme garde-fou memoire et disque, et il est reevalue quand le nouveau chemin sera
+  mesure, avec le meme banc.
+- Le format nous appartient de bout en bout, donc le `SchemaVersion` et l echelle de
+  migration du 4.4 s appliquent a un fichier que nous sommes seuls a ecrire. La reserve du
+  4.4 sur `E_DataDivider` et le payload d item, elle, reste entiere : `EncodedData` reste
+  produit par `Obj_ItemInstance`.
+
+**Ce qui ne change pas** : la verite du contenu reste l `InventoryComponent` cote serveur,
+l identite reste le `FGuid` avec ses tombstones, la cadence reste "a la fermeture de
+session, jamais par mouvement d objet", et le toggle `bFlushAfterTransfer` du 4.3 reste
+`False` par defaut, mais devient beaucoup moins cher a activer.
+
+**A mesurer avant d appeler cela resolu** : le nouveau chemin doit repasser au banc, avec
+la meme courbe, et prouver que le cout game thread se reduit bien a la copie. Tant que
+cette courbe n existe pas, (B) est une intention, pas un resultat.
+
 ### 4.3 Atomicite d un transfert
 
 `TryMoveItemToAnotherInventory` retire de la source puis ajoute a la cible : deux DataObjects distincts, coalesces par le `Delay 1 s + Do Once` de `WriteTempData`. Si les deux mutations tombent de part et d autre d un cycle et que le process meurt entre les deux, l objet est retire du joueur et jamais ajoute au coffre. Le `BACKUP_` n aide pas : il est ecrit une seconde apres le slot principal, il miroite l etat fautif.
 
-Correctif retenu : **journal d intention** (une ligne WAL dans le segment d index : GUID, ItemKey, quantite, sens, seq) ecrite avant la mutation, retiree apres confirmation d ecriture ; au chargement, toute intention non retiree est rejouee ou annulee, et journalisee en Warning. Alternative moins couteuse a evaluer a J4 : faire aboutir les deux cotes du transfert dans la meme cle serialisee, ce qui n est possible que pour un transfert coffre vers coffre, pas joueur vers coffre.
+**Le journal d intention (WAL) du V2 est supprime. Arbitrage RzZz, et il a raison** : ce
+journal vivait dans le segment persiste **a la fermeture de session**, donc il n etait pas
+durable au moment precis du crash qu il pretendait couvrir. Et le rendre durable imposait
+un flush par mutation, ce qui detruisait la cadence du 4.2. Un WAL non durable est pire
+qu absent : il donne une garantie que le systeme ne tient pas.
+
+Ce qui le remplace, en trois pieces :
+
+1. **Une fenetre de perte bornee et assumee.** Perimetre exact : les transferts joueur vers
+   coffre effectues pendant une session d ouverture qui se termine par un crash du process.
+   Tout ce qui est ferme proprement est ecrit (flush de fermeture de session et flush
+   synchrone d `EndPlay`, 4.2). La borne est donc la duree d une session d ouverture, pas
+   la duree de la partie. Elle est **ecrite dans la doc du plugin**, journalisee au
+   demarrage suivant (une session ouverte non fermee est detectable : elle laisse un
+   marqueur d ouverture dans le segment), et remontee en Warning nommant le GUID.
+2. **Un toggle `.ini` de flush post-transfert, rate-limite**
+   (`bFlushAfterTransfer`, `FlushAfterTransferMinIntervalSeconds`), **False par defaut**.
+   Il ecrit le segment du coffre apres un transfert, au plus une fois par intervalle. Il
+   n est **active que si le banc J1 montre que le cout passe** : c est precisement la
+   courbe que le banc mesure. Ce n est pas une promesse, c est une option instrumentee.
+3. **L alternative meme-cle reste en piste pour J4** : faire aboutir les deux cotes du
+   transfert dans la **meme** cle serialisee rend le transfert atomique par construction.
+   Elle ne couvre que coffre vers coffre (les deux cotes appartiennent a QStorage), jamais
+   joueur vers coffre, dont un cote appartient au `PersistentDataComponent` du joueur.
+
+**Ce que nous ne promettons pas** : l atomicite d un transfert joueur vers coffre face a un
+arret brutal du process. Aucun mecanisme a notre portee ne la donne sans payer une ecriture
+par mutation sur le chemin que le 4.2 vient precisement de degager.
 
 ### 4.4 Versionnement
 
@@ -224,7 +411,32 @@ Vraie en dedie (`Port<Port>/<Gamemode>_Port_<Port>`, `Plugins/DataManager/Conten
 
 ## 5. Reseau
 
-**Le coffre ne se replique jamais.** `bReplicates = false`, dans les deux poses.
+> **Consequence de la lecture B, ajoutee en v3 : cette section ne decrit plus qu une des
+> deux poses.** En lecture B le coffre construit **est** le builder, et
+> `AQBuilder_BuilderActor` porte `bReplicates = true`
+> (`Plugins/QBuilder/Source/QBuilder/Private/World/QBuilder_BuilderActor.cpp:22`,
+> `GetLifetimeReplicatedProps` a `:29`). Le coffre construit se replique donc **deja**, et
+> sa chaine inventaire, sa replication d objets et son UI `PUW_VehicleStorage` sont **en
+> production**. On ne les remplace pas : on leur donne une identite stable (4.0, 7.4).
+>
+> Les deux poses n ont donc pas le meme modele reseau, et c est assume :
+>
+> | | Coffre construit (lecture B) | Coffre de niveau |
+> |---|---|---|
+> | Acteur | `AQBuilder_BuilderActor`, **replique** | `AQStorage_Container_Actor`, **non replique** |
+> | Contenu vers le client | chaine existante (replication d objets) | snapshot et deltas, 5.1 |
+> | UI | `PUW_VehicleStorage`, deja cablee | 5.4 et section 8 |
+> | Ce que QStorage apporte | l identite stable uniquement | tout |
+> | Nombre attendu | borne par le nombre de zones de construction | jusqu a 21429 ancres CONTAINER |
+>
+> Le cout de replication qui justifiait le "jamais replique" est paye **aujourd hui** par
+> les builders existants, sans QStorage : nous n aggravons rien. Il reste la seule bonne
+> raison de ne pas repliquer les coffres de niveau, dont le nombre est d un autre ordre.
+> **Tout ce qui suit s applique au coffre de niveau**, et au coffre construit **seulement
+> si** une mesure montre que la chaine existante ne tient pas la charge, ce qui serait un
+> chantier distinct sur QBuilder et non sur QStorage.
+
+**Le coffre de niveau ne se replique jamais.** `bReplicates = false`.
 
 Correction d argument : le V1 justifiait cela pour le coffre **construit** par le nom de paquet `/Temp.../_LevelInstance_<compteur statique>`. C est faux pour ce cas : cet argument ne vaut que pour un acteur pose dans un sous-niveau streame (`Engine/Private/LevelStreaming.cpp:2780-2795`), et `AQModule_WorkbenchActor` prouve qu un acteur player-built spawne au runtime se replique correctement. **Le vrai argument pour le coffre QBuilder est le cout** : aucun ReplicationGraph n existe dans le projet (0 `ReplicationDriverClassName` dans `Config/`), la pertinence est la boucle naive du NetDriver, et 21429 ancres CONTAINER sont deja cataloguees. Pour le coffre de niveau, l argument `/Temp` reste valable et suffisant.
 
@@ -237,8 +449,20 @@ void QST_ToServer_OpenNearest();                       // NO position, NO key, N
 UFUNCTION(Server, Reliable, WithValidation)
 void QST_ToServer_Close(FGuid ContainerGuid);
 
+// Direction NAMES BOTH ENDPOINTS: it is the only thing that says which inventory
+// SourceSlot indexes and which one TargetSlot indexes. Without it _Validate cannot
+// bound-check either index, and the server cannot tell a deposit from a withdrawal.
+UENUM(BlueprintType)
+enum class EQST_MoveDirection : uint8
+{
+    PlayerToContainer = 0,   // SourceSlot indexes the pawn inventory, TargetSlot the container
+    ContainerToPlayer = 1,   // SourceSlot indexes the container, TargetSlot the pawn inventory
+    WithinContainer   = 2    // both index the container
+};
+
 UFUNCTION(Server, Reliable, WithValidation)
-void QST_ToServer_MoveSlot(FGuid ContainerGuid, uint32 ExpectedContentVersion, uint8 Direction,
+void QST_ToServer_MoveSlot(FGuid ContainerGuid, uint32 ExpectedContentVersion,
+                           EQST_MoveDirection Direction,
                            int32 SourceSlot, const FString& ExpectedSourceInstanceId,
                            int32 TargetSlot, int32 Quantity);
 
@@ -255,6 +479,15 @@ void QST_ToClient_Closed(FGuid ContainerGuid, EQST_Refusal Reason);   // contain
 UFUNCTION(Client, Reliable)
 void QST_ToClient_Refused(FGuid ContainerGuid, EQST_Refusal Reason);
 ```
+
+**L inventaire source est nomme par `Direction`, et par rien d autre.** Le V2 laissait
+`uint8 Direction` sans semantique ecrite, ce qui rendait `_Validate` ambigu : un index de
+slot ne veut rien dire tant qu on ne sait pas quel inventaire il indexe, et les deux n ont
+ni la meme taille ni le meme proprietaire. `Direction` est donc un enum a trois valeurs qui
+**designe les deux extremites a la fois** ; le serveur en deduit quel conteneur borner,
+lequel verifier en propriete (`PawnOwnsInstance` ne s applique qu au cote joueur), et quel
+sens de flux journaliser. Un `Direction` hors enum est un refus `Unresolved`, pas un
+defaut silencieux sur une branche.
 
 Le serveur maintient `TMap<FQST_AnchorKey, TWeakObjectPtr<AQStorage_Container_Actor>>` alimente par le `BeginPlay` des acteurs **serveur** ; a l ouverture il choisit lui-meme le coffre le plus proche du pawn dans `MaxInteractDistanceCm` et renvoie le `FGuid`. Le fill ne se declenche **que** pour un record cree par le `BeginPlay` d un acteur serveur reel, jamais par un RPC client. Patron existant : `Lib_OptimizedState::SendOptimizedActorInteraction` aboutit sur `InteractServer(APlayerController*, bool, FName)` (`Plugins/QNetState/Source/QNetState/Private/RequesterOptimizedState.cpp:458-474`), qui prend le PC et resout l acteur serveur lui-meme. On se branche sur ce canal plutot que d en ouvrir un nouveau.
 
@@ -278,11 +511,33 @@ Le V1 annoncait "1 a 2 octets". Mesure contraire sur le port C++ : tous les sett
 
 Retenu : **`bServerMulticast = false` explicite sur tout appel**, lecture par pull uniquement, **garde de distance sur le pull** (sinon un client enumere a distance quels coffres sont pleins).
 
+**Throttle du pull, ecrit noir sur blanc.** Un pull sans plafond est un canal de requetes
+serveur ouvert que le client cadence lui-meme : c est le meme defaut que celui qu on vient
+de corriger sur les snapshots. Regles chiffrees, toutes en `.ini` :
+
+- **plafond par joueur** : `PullMaxPerSecond`, defaut 4 requetes par seconde et par
+  PlayerController, compteur en fenetre glissante ; au-dela, refus `RateLimited`, aucune
+  file d attente, aucun travail serveur ;
+- **plafond par coffre et par joueur** : une reponse au plus toutes les
+  `PullMinIntervalSecondsPerContainer` secondes (defaut 1,0). Deux demandes rapprochees sur
+  le meme coffre rendent la meme reponse memoisee, sans relecture d etat ;
+- **garde de distance evaluee avant tout travail**, sur la meme constante que l ouverture
+  (`MaxInteractDistanceCm`), et **revalidee**, jamais heritee d une ouverture precedente ;
+- **le pull ne repond que sur un coffre deja enregistre cote serveur** : il ne declenche ni
+  chargement de niveau, ni attachement de composant, ni remplissage. Un coffre non charge
+  rend `NotReady`. Sans cette regle, un client balaye la carte et fait charger le monde au
+  serveur, coffre par coffre ;
+- **compteurs exposes** par `qstorage.Status` (pulls servis, refuses, memoises) pour que le
+  reglage se fasse sur une mesure et non sur une intuition.
+
 **Critique partiellement ecartee** : "supprimer `bOpened` car un booleen n a pas de semantique pour N ouvreurs" est **non fonde en tant que tel**. Le bit reste utile pour le visuel a distance ; ce qu il faut, c est qu il soit pilote par le **compteur serveur d ouvreurs** de la session (passe a false quand le compteur retombe a zero), pas par la fermeture du premier joueur. Je conserve `bOpened` avec cette semantique explicite. Le reste de la critique (multicast, cout) est integralement retenu.
 
 ### 5.4 Client : pas de reutilisation aveugle de l InventoryComponent
 
-Le V1 affirmait qu on remplirait un `InventoryComponent` transitoire cote client "format identique a `F_ItemRequestReply`, donc reutilisation du chemin BP existant". **Rien ne l etaye** : `GameDataManager.BeginPlay` est gate `Is Server`, `InventoryComponent.BeginPlay` reste a `IsInventoryReady = false` sans `PersistentDataComponent` pret, `W_Inventory` consomme des `Obj_ItemInstance` (portes par `DnD_ItemInstance`) et non des `FQST_ItemStack`, et aucun chemin BP mesure ne construit un `Obj_ItemInstance` cote client. C est un **inconnu bloquant tranche a J0** (INCONNU 2), avec deux branches ecrites d avance :
+Le V1 affirmait qu on remplirait un `InventoryComponent` transitoire cote client "format identique a `F_ItemRequestReply`, donc reutilisation du chemin BP existant". **Rien ne l etaye** : `GameDataManager.BeginPlay` est gate `Is Server`, `InventoryComponent.BeginPlay` reste a `IsInventoryReady = false` sans `PersistentDataComponent` pret, `W_Inventory` consomme des `Obj_ItemInstance` (portes par `DnD_ItemInstance`) et non des `FQST_ItemStack`, et aucun chemin BP mesure ne construit un `Obj_ItemInstance` cote client. **En v3, cette question ne concerne plus le coffre construit** : en lecture B il est
+replique et son UI fonctionne deja en prod (voir l encadre en tete de section 5). Elle ne
+porte donc que sur le **coffre de niveau**, ce qui la deplace de J0 vers **J2**, ou elle
+est mesuree au moment ou l on ecrit le panneau. Deux branches, ecrites d avance :
 
 - **branche A** (l inventaire client peut devenir pret via `SetNotPersistentData`) : le wrapper alimente un `InventoryComponent` transitoire, `W_Inventory` est reutilise tel quel, section 8 inchangee ;
 - **branche B** (il ne peut pas) : le panneau coffre est alimente par un **modele pur** construit depuis les `FQST_ItemStack`, `W_Inventory` **n est pas reutilisable tel quel** pour le panneau coffre, et la section 8 est reecrite (le panneau joueur, lui, reste `W_Inventory`, il pointe un inventaire local deja pret).
@@ -310,6 +565,13 @@ Le probleme suppose (sous-niveau client-only) n existe pas : `UQLevel_SubSystem`
 - **Contenu initial** : `FQST_FillSpec` sur le preset. Table `DA_Loot` tiree avec `RollWeightedItem` (seul tirage reellement pondere du projet ; `GetSeededItemByLocation` ignore les poids et sature en int32 a l echelle planetaire), plus `GuaranteedStacks` pour une salle de boss.
 - **Determinisme** : tirage **une seule fois, cote serveur, paresseusement a la premiere ouverture**, graine `HashWorldLocation`, puis persiste. Le client ne tire jamais.
 - **`RestockSeconds`** : un restock ne peut se declencher que quand le coffre est charge cote serveur, donc a la premiere ouverture posterieure a l echeance. C est un rechargement **paresseux**, pas un timer monde. Le V1 laissait ce point implicite ; il est desormais ecrit.
+- **Le rechargement est une propriete du profil, pas du coffre** (arbitrage RzZz). C est
+  `FillProfileTag` qui decide : un profil de loot commun porte un `RestockSeconds` non nul
+  et se recharge paresseusement, un profil de recompense (les `GuaranteedStacks` d une
+  salle de boss) porte `RestockSeconds = 0` et est **definitivement pille, par serveur,
+  pour tous les joueurs**. Un profil mixte est refuse a la validation du DataAsset : un
+  coffre de boss qui repousse ses garanties est une machine a farmer, et le refuser au
+  moment de l edition coute moins cher que de le decouvrir en prod.
 - **Pieges d edition, non negociables** : poser dans `LevelData.Level`, puis **regenerer l optimise** (c est `OptimisedLevel` qui est streame, et le cook ecrase `Level` par `OptimisedLevel`). L acteur doit porter le tag **`QL_ExcludeMerge`**, sans quoi la passe d optimisation le **detruit** des qu un `UStaticMeshComponent` est absorbe dans un ISM (`Plugins/QLevelEditor/Source/QLevelEditor/Private/QLevel_Editor_OptimisationLibrary.cpp:611-645`, `:809-822`). `ExcludeMergeClass` est un tableau `.ini` qui **remplace** le defaut C++ (`Config/DefaultEditor.ini:39`, une seule entree `VehicleSpawner_C`) : le tag acteur est plus sur.
 - Le coffre ne doit **jamais** etre enregistre dans la map de nettoyage a l unload de `QModuleLoot` (elle detruit ce qu elle a spawne).
 
@@ -321,7 +583,31 @@ Le probleme suppose (sous-niveau client-only) n existe pas : `UQLevel_SubSystem`
 
 Procedure a 5 etapes, **marquee SUPPOSE dans le dossier** (deduite par `rg -a` sur des .uasset, jamais verifiee au pont) : creer le `QA_*` (`UQBuilder_Data_ActorData`, `ActorClass = BP_QStorage_Container_Build`), creer le `QDD_*`, inscrire sous un ID int32 unique dans `Content/Systems/QBuilder/Data/QBuilder_Qanga_ActorData.uasset`, referencer dans le `QTS_` du set, puis **`DB_Optimise` dans `Content/Systems/QBuilder/Tools/QBuilder_DataTools.uasset`** (sans quoi la piece est invisible du runtime, sans erreur ni log).
 
-Nommage corrige : le segment median des assets QBuilder existants est le **set** (`ICLAB`), et "QANGA" n est pas un set connu. Le set d accueil et le `QTS_` correspondant doivent etre **nommes par RzZz** (question 9), pas inventes ici.
+**Set d accueil : ICLAB** (arbitrage RzZz). Le segment median des assets QBuilder est le
+set, et "QANGA" n en etait pas un.
+
+**On ne cree pas une piece parallele : on rebranche celle qui existe.**
+`Content/Systems/QBuilder/Data/ICLAB/Actor/Storage/QA_ICLAB_StorageBase` pointe deja vers
+`BP_Storage_ForBuild_C` avec exactement la configuration du 7.2, **lue au pont par RzZz le
+2026-08-21** : `ActorIsReplicated = False`, `ActorAlwaysOnServer = True`,
+`ActorPersistantOnServer = False`. Cela **ferme l INCONNU 11** et confirme le 7.2 sur une
+mesure et non sur une deduction.
+
+Mais `BP_Storage_ForBuild` **ne reference pas d `InventoryComponent`** : c est une coquille
+vide, un coffre constructible qui n a jamais eu de contenu propre. Deux consequences :
+
+- l entree de catalogue est **remplacee ou rebranchee**, jamais doublee. Ajouter un
+  `QA_*` parallele laisserait deux coffres visibles dans le menu de construction, dont un
+  inerte, et rendrait le diagnostic illisible ;
+- la procedure a 5 etapes ci-dessus n est donc pas a executer en entier : l entree, le
+  `QDD_`, l inscription et le `QTS_` existent. **Reste le rebranchement de `ActorClass`
+  (ou le peuplement de `BP_Storage_ForBuild`) et le `DB_Optimise`**, qui reste obligatoire
+  et reste le piege : sans lui la piece est invisible du runtime, sans erreur ni log.
+
+Le nom final de l asset est fixe apres l arbitrage de la lecture B (7.4), puisque cette
+lecture peut supprimer le besoin d une piece separee. La procedure a 5 etapes reste
+**marquee SUPPOSE** pour les etapes non encore exercees (deduite par `rg -a`, jamais
+verifiee au pont) : elle est validee au pont avant toute ecriture de catalogue.
 
 ### 7.2 Regles de spawn
 
@@ -340,22 +626,116 @@ Fait nouveau, integralement retenu : l existence d un coffre construit vit dans 
 
 Regle de reconciliation ecrite, **non negociable** : un enregistrement QStorage dont l ancre ne produit aucun acteur **n est jamais efface automatiquement**. Il est conserve, journalise en Warning, liste par `qstorage.Orphans`, et recuperable par commande admin. Une purge n a lieu que sur demande explicite, avec liste affichee avant execution, et TTL configurable en nombre de demarrages sans resolution.
 
-Deux options a trancher (question 2) : (a) forcer un `QBuilder_SaveData` a la pose et a la destruction d un coffre, ce qui aligne les cadences mais paie une ecriture Gzip complete de tous les builders a chaque evenement, cout a mesurer ; (b) accepter la fenetre et vivre avec la reconciliation ci-dessus.
+**Option (b) tranchee par RzZz** : on accepte la fenetre, avec la reconciliation ci-dessus
+et la recuperation admin. L autosave a 600 s avec rotation est verifie
+(`Plugins/QBuilder/Source/QBuilder/Public/QBuilder_DevSettings.h:31`,
+`QBuilder_AutoSaveGame_Time = 600.0f`).
+
+Le banc J1 mesure en plus le cout d un `QBuilder_SaveData` force. **S il passe**, il est
+adopte sur les **deux seuls evenements rares** : la pose et la destruction d un coffre.
+**Jamais sur un mouvement d objet**, ce qui reintroduirait exactement le probleme que le
+4.2 vient de resoudre.
+
+**Correction technique au passage (v3)** : le profil de cout de QBuilder n est pas celui
+qu on croyait. `QBuilder_AsyncSave` execute `SaveGameToSlot` **entierement dans un
+`AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask)`**
+(`Plugins/QBuilder/Source/QBuilder/Private/QBuilder_SubSystem.cpp:751-760`), donc la
+serialisation en memoire **n est pas** sur le game thread, contrairement au chemin
+`AsyncSaveGameToSlot` du 4.2. Le cout game thread de QBuilder est la **collecte** :
+`QBuilder_SaveGame_CreateData` recopie `ISM_DATA` et `ACTOR_DATA` de **tous** les builders
+(`:710-713`, declaree `Public/QBuilder_SubSystem.h:212`). Le banc doit donc instrumenter
+**la collecte**, pas `SaveGameToMemory` : ce sont deux profils differents, et les
+confondre ferait mesurer la mauvaise chose. Les trois etages sont mesurables separement,
+tous exposes publiquement : `QBuilder_SaveGame_CreateData` (collecte, game thread),
+`QBuilder_SaveData_SerializeData` et `QBuilder_SaveData_CompressData` (Gzip), ces deux
+derniers hors game thread dans le chemin reel.
+
+**Dette signalee, hors perimetre** : le lambda de `QBuilder_AsyncSave` capture un
+`UQBuilder_Data_WorldSaveGame` cree par `NewObject` et non enracine, consomme sur un thread
+de fond. Rien ne le protege du GC pendant l ecriture. Tache separee, a ne pas traiter dans
+ce chantier.
 
 ### 7.4 La regle "premier objet a construire pour pouvoir construire"
 
-**Ce mecanisme n existe pas** : QBuilder ne connait qu une autorisation (proprietaire ou `Allowed_By_ID`, `Private/QBuilder_SubSystem.cpp:380`) et un prix. Deux lectures :
+**LECTURE B, TRANCHEE PAR RzZz. Definitif.**
 
-- **Lecture A, litterale** : le coffre est une piece QBuilder qu il faut construire en premier. Logiquement circulaire, et exige un gate serveur additif ;
-- **Lecture B** : poser le coffre **cree** la zone de construction (chemin existant `QBuilder_Builder_ClientCreateBuilderActorWithBuild`). La regle devient structurelle.
+Le mecanisme de gating n existe pas dans QBuilder, qui ne connait qu une autorisation
+(proprietaire ou `Allowed_By_ID`, `Private/QBuilder_SubSystem.cpp:380`) et un prix. Deux
+lectures etaient possibles :
 
-**Avertissement ajoute apres revue** : en lecture B, le coffre est le builder, et `Content/Systems/QBuilder/Actor/QBuilder_Builder_Actor_BP.uasset` embarque **deja** un `InventoryComponent`, un `PersistentDataComponent`, un `OptimizedStateComponent` et le struct `Inventory_Storage`, et reutilise deja `PUW_VehicleStorage`. Dans ce cas, une moitie de QStorage duplique une chaine existante et le chantier se reduit a : cabler l inventaire du builder sur une UI et une interaction, plus un gate de construction. **La lecture A ou B doit etre tranchee avant J1**, pas avant J6 : c est la seule decision qui peut supprimer quatre jalons.
+- ~~Lecture A, litterale : le coffre est une piece QBuilder qu il faut construire en
+  premier.~~ **Ecartee** : logiquement circulaire, et elle exigeait un gate serveur additif
+  pour un benefice nul par rapport a B.
+- **Lecture B, retenue** : poser le coffre **cree** la zone de construction (chemin
+  existant `QBuilder_Builder_ClientCreateBuilderActorWithBuild`). La regle devient
+  **structurelle** : il n y a rien a garder puisqu on ne peut rien construire sans zone, et
+  la zone n existe que si le coffre est pose.
 
-Dans les deux cas, le garde-fou serveur est un point d extension **additif** dans QBuilder (delegue du type `QBuilder_OnCanAddInstance(BuilderID, DataID, ClientID) -> bool` consulte dans `QBuilder_ServerData_Actor_AddInstances`), sans renommage ni changement de signature.
+**Ce que la lecture B fait au perimetre.** Le coffre **est** le builder, et
+`Content/Systems/QBuilder/Actor/QBuilder_Builder_Actor_BP` porte deja toute la chaine :
+`InventoryComponent`, `PersistentDataComponent` binde sur `OnDataReady`,
+`OptimizedStateComponent`, `InteractServer` et `InteractClient` cables, et l ouverture de
+`PUW_VehicleStorage` par `PopUpDialogClass`. **Le cablage existe et on le garde tel quel.**
+
+Le perimetre de QStorage cote construit se reduit donc a une seule chose, et c est
+exactement le defaut demontre au 4.0 : **fournir l identite stable**. Concretement :
+
+1. substituer le `FGuid` serveur de QStorage au `BuilderID` comme cle de `SetIdAndGetData`,
+   avec l index segmente et les tombstones qui vont avec ;
+2. conserver le reste du cablage existant sans y toucher ;
+3. ajouter le gate structurel, qui ne coute presque rien en lecture B.
+
+**J6 devient marginal** : il n y a plus de nouvelle piece a faire entrer au catalogue, il y
+a une cle de persistance a remplacer. Les sections 2, 3 et 5 restent valables telles
+quelles pour le cas **coffre de niveau** (7.4 ne concerne que le cas construit), et le
+modele de donnees comme le modele reseau sont partages entre les deux poses, ce qui etait
+l objectif d origine.
+
+**Le garde-fou serveur reste un point d extension additif** dans QBuilder (delegue du type
+`QBuilder_OnCanAddInstance(BuilderID, DataID, ClientID) -> bool` consulte dans
+`QBuilder_ServerData_Actor_AddInstances`), sans renommage ni changement de signature.
+Nous n ajoutons rien d autre a QBuilder que des points d extension additifs : c est la
+condition pour ne casser aucun appelant Blueprint existant.
+
+**Precision mesuree en v3 (le chemin est deja instrumente, mais il n y a pas de gate).**
+Depuis le 2026-08-22, QBuilder depend deja de QModule et consulte le mur cyborg du joueur
+sur le chemin serveur de placement : `UQBuilder_SubSystem::QBuilder_ActingBuildStat`
+(`Private/QBuilder_SubSystem.cpp:2209`) lit `QMOD_GetStat` sur le PlayerState. Deux
+consequences, dont une corrige le commentaire du `Build.cs` de QBuilder :
+
+- ce hook n est **pas** un gate : ses deux seuls appelants sont
+  `QBuilder_Resource_Price_Compute` (`:2241`) et le remboursement (`:2298`), et il rend un
+  **multiplicateur** de prix, pas un booleen de refus. Le commentaire du `Build.cs`
+  ("checks the acting player's wall before accepting a placement") est imprecis : un prix
+  plus eleve peut faire echouer le paiement, ce n est pas la meme chose qu un refus.
+  La conclusion du 7.4 tient donc : **le gating n existe pas** ;
+- en revanche le point d ancrage, lui, existe deja, au bon endroit, avec le PlayerState
+  deja resolu et la dependance QModule deja declaree. Le gate additif s installe la, sans
+  nouvelle dependance de module et sans nouveau chemin de resolution.
 
 ### 7.5 Deplacement d un coffre
 
-Le V1 ecrivait "nous refuserons le deplacement d un coffre non vide cote serveur" alors qu **aucun point d extension serveur n est identifie** sur le chemin `QBuilder_BP_ChangeTransformInstance`. Corrige : c est une **demande** de point d extension additif, au meme titre que le gate de construction, et tant qu il n existe pas, le deplacement d un coffre reste possible et **casse son ancrage**. C est la question 3 a RzZz.
+Le V1 ecrivait "nous refuserons le deplacement d un coffre non vide cote serveur" alors qu **aucun point d extension serveur n est identifie** sur le chemin `QBuilder_BP_ChangeTransformInstance`. Le V2 en faisait une demande. **RzZz a accepte le point d extension additif**, donc la regle devient applicable :
+
+- **Destruction** : refusee tant que le coffre contient au moins une pile **resolue**. Le
+  joueur vide d abord. **Aucune restitution automatique au sol** : elle creerait un chemin
+  de duplication (des items au sol non repliques, plus un contenu encore en base si
+  l ecriture ne suit pas) et un pic d acteurs. Les piles `bUnresolved` (4.5) ne bloquent
+  pas la destruction, elles suivent le tombstone en quarantaine.
+- **Deplacement** : autorise **uniquement a vide**. Le `FGuid` est **conserve**, l ancre est
+  **recalculee**, et **les deux segments d index sont reecrits** (celui d origine et celui
+  de destination, qui peuvent differer puisque l index est segmente par secteur). Un
+  deplacement qui echoue a mi-chemin laisse le record dans le segment d origine : le
+  segment de destination n est valide qu apres confirmation, jamais l inverse.
+- **Les deux operations passent par le meme point d extension serveur** consulte dans
+  QBuilder, additif, sans renommage ni changement de signature : un refus remonte au client
+  par un code de refus lisible et localise, jamais par un echec muet.
+
+**Limite assumee** : tant que ce point d extension n est pas livre (J6), un coffre reste
+deplacable par le chemin QBuilder existant, ce qui **casse son ancrage**. Jusque-la, la
+resolution par ancre echoue proprement (le record devient orphelin, liste par
+`qstorage.Orphans`, jamais efface), elle ne rend pas le contenu d un autre coffre : c est la
+regle de refus de collision de bucket du 4.1 point 3 qui garantit ce comportement.
 
 ---
 
@@ -382,68 +762,206 @@ Chaque jalon se termine par une **compilation a froid** : les `UWorldSubsystem` 
 
 | Jalon | Perimetre | Critere de fin verifiable | Risque |
 |---|---|---|---|
-| **J0** | Trancher : lecture A ou B (7.4), branche A ou B de l UI (5.4), montage d inventaire complet (2.2). Lever les INCONNUS 1 a 6. | Reponses ecrites aux 6 points, plus arbitrage RzZz sur les questions 1 et 2 | nul |
-| **J1** | Socle : plugin, settings `Enabled=False`, structs, enums, log, subsystem vide. **Banc de mesure** de persistance. **Test QATS de gel du registre DA_AllRef.** Commandes `qstorage.Status` (dont taille du slot monde et nombre de DataObjects), `qstorage.Dump`, `qstorage.Orphans`. | Build a froid des 3 cibles ; `qstorage.Status` repond "0 container" et affiche la taille reelle du slot ; **courbe mesuree de `SaveGameToMemory` et de la taille du slot a 100 / 1000 / 5000 coffres synthetiques**, consignee. Si la courbe est deja a plusieurs ms a 1000, l architecture de stockage est revue **avant** d ecrire l acteur. | nul (systeme eteint) |
+| **J0** | **CLOS le 2026-08-22.** Tous les arbitrages de design sont rendus (0.1 et section 11). Il ne reste aucune question de design ouverte. | Les dix decisions sont ecrites en section 11 ; la lecture B et l option (b) sont actees ; INCONNU 11 ferme par une lecture au pont | nul |
+| **J1** | Socle : plugin, settings `Enabled=False`, structs, enums, log, subsystem vide. **Banc de mesure** de persistance (deux profils distincts, voir 7.3). **Test QATS de gel du registre DA_AllRef.** Commandes `qstorage.Status` (dont taille du slot monde, nombre de DataObjects, compteurs de pull), `qstorage.Dump`, `qstorage.Orphans`. | Build a froid des 3 cibles ; `qstorage.Status` repond "0 container" et affiche la taille reelle du slot ; **deux courbes consignees a 100 / 1000 / 5000 coffres synthetiques** : (1) `SaveGameToMemory` sur le chemin monde `AsyncSaveGameToSlot` du 4.2, (2) la **collecte** `QBuilder_SaveGame_GetData` sur le chemin QBuilder. Si la courbe (1) est deja a plusieurs ms a 1000, l architecture de stockage est revue **avant** d ecrire l acteur ; la courbe (2) decide du `QBuilder_SaveData` force du 7.3 et du toggle `bFlushAfterTransfer` du 4.3. | nul (systeme eteint) |
 | **J2** | Acteur, enregistrement au BeginPlay, attachement paresseux, ouverture solo, UI (branche A ou B). | En **dedie** avec 1 client : deposer, retirer, **arret complet du process serveur**, relance, contenu identique. Plus le meme test en **listen server**. | faible |
 | **J3** | Reseau : `OpenNearest` par proximite serveur, registre de sessions, snapshot fige et chunke, deltas en file, rebase, `PawnOwnsInstance`, rate limit, plafonds. | Dedie plus 2 clients : transfert croise sans duplication ; test QATS de concurrence ; **tentative d ouverture depuis une position sans coffre : refus** ; budget reseau par client mesure et consigne. | moyen |
-| **J4** | Persistance : segments d index, codec `QSTCRATE;v1`, echelle de migration, quarantaine amont, tombstones, `DeleteDataObject`, WAL d intention, plafonds durs. | Redemarrage serveur : contenu intact. Migration v1 vers v2 rejouee a froid sur chaine. **Cycle remplir / detruire / reconstruire au meme endroit : le contenu ne revient pas.** Index illisible : coffre en lecture seule et Error, pas de migration. | **eleve** : ecriture dans le slot monde partage |
+| **J4** | Persistance **voie (B)** (4.2bis) : fichier propre a QStorage, copie sur le game thread puis encodage **et** ecriture sur thread de fond, remplacement atomique plus une generation conservee, segmentation par port refaite, chargement paresseux par segment, codec `QSTCRATE;v1`, echelle de migration, quarantaine amont, tombstones, plafonds. **Remonte avant J2** : c est lui qui portait le risque. | Redemarrage serveur : contenu intact. **Le banc rejoue sur le nouveau chemin et montre un cout game thread reduit a la copie** (sinon (B) n a rien resolu). Migration v1 vers v2 rejouee a froid sur chaine. **Cycle remplir / detruire / reconstruire au meme endroit : le contenu ne revient pas.** Segment illisible : coffre en lecture seule et Error, jamais de migration. | moyen : le fichier n est plus partage, donc une erreur n abime plus les donnees des autres systemes |
 | **J5** | Cas QLevel : `FQST_FillSpec`, tirage paresseux pondere, hook `QLevel_LevelLoad`, tag `QL_ExcludeMerge`, regeneration de l optimise sur 1 niveau pilote. | `qstorage.ProbeAt` **sur le chemin streame reel** (jamais une lecture directe de l asset : precedent `qmoduleloot.SimulateLevel` qui affichait des succes pendant que le vrai chemin etait mort) : coffre present, pre-rempli, pille une seule fois. Verification before/after que le tag survit a la regeneration. | **eleve** : passe d optimisation destructrice |
-| **J6** | QBuilder : `QA_`, `QDD_`, inscription, `DB_Optimise`, gating selon A ou B, correction du crash latent `Builders.Find`. | Construire, redemarrer le process, retrouver le coffre et son contenu **apres que `IsOn` a respawne l acteur** ; puis test du cycle IsOn/IsOff avec UI ouverte (aucune perte, `Closed` recu). | moyen : touche le catalogue QBuilder |
+| **J6** | **Fortement reduit par la lecture B.** Substituer le `FGuid` QStorage au `BuilderID` comme cle de `SetIdAndGetData` sur `QBuilder_Builder_Actor_BP` (4.0), gate structurel, points d extension additifs `CanAddInstance` / `ChangeTransform` / destruction (7.5), rebranchement de l entree `QA_ICLAB_StorageBase` si elle reste utile (7.1), correction du crash latent `Builders.Find`. **Aucune nouvelle piece de catalogue.** | **Le test qui prouve la correction du bug 4.0** : poser deux zones, remplir la seconde, detruire la premiere, redemarrer le process, verifier que la seconde retrouve **son** contenu (avant le chantier, elle heritait de celui d une autre). Plus le cycle IsOn/IsOff avec UI ouverte (aucune perte, `Closed` recu). | moyen : touche une chaine **en production**, celle du builder. Sauvegarde des assets avant edition (le backup auto du pont est mort). |
 | **J7** | Durcissement : suite QATS complete, doc `Documentation/QSTORAGE_ARCHITECTURE.md`, activation. | Suite QATS verte ; bande passante par client et taille du slot monde documentees avant et apres activation. | nul |
 
 ---
 
-## 10. INCONNUS a verifier, avec la commande exacte
+## 9.1 Journal d avancement
 
-Rien de ce qui suit n a ete mesure. Les six premiers sont **bloquants pour J0 ou J1**.
+**J1 (socle) : ECRIT, COMPILATION NON VALIDEE.** 2026-08-22.
 
-1. **Identite du troisieme `Add Component by Class` de `VehiclePlayerOwner.BeginPlay`** (probablement `ORManagerComponent`), et son role dans le fait qu un `InventoryComponent` devienne pret hors PlayerState. Bloquant J2.
-   `get_detailed_blueprint_summary` sur `/Game/Systems/Vehicle/VehiclesOwned/VehiclePlayerOwner`.
-2. **Un `InventoryComponent` cote client peut-il devenir pret via `SetNotPersistentData` sans `GameDataManager`** (qui est gate `Is Server`) ? Decide la branche A ou B de l UI. Bloquant J0.
-   `get_detailed_blueprint_summary` sur `/Game/Systems/Item/InventoryComponent` (graphes `Event BeginPlay`, `ReplicateSaveInventory`) et sur `/DataManager/PersistentDataComponent` (`SetNotPersistentData`).
-3. **Double spawn en listen server** : l hote recoit-il l ordre `ToClients` pour un acteur `ActorAlwaysOnServer` ? Bloquant J6.
-   Test manuel en listen server plus `execute_python_script` : `len([a for a in unreal.EditorLevelLibrary.get_all_level_actors() if a.get_class().get_name().startswith('BP_QStorage')])` a la pose d une piece existante equivalente (`BP_Storage_ForBuild`).
-4. **Taille reelle d un slot monde sur une instance de prod peuplee** (64 Ko mesures en dev solo). Bloquant J1.
-   `ls -la Saved/SaveGames/Port*/` et `ls -la Saved/SaveGames/BACKUP_Port*/` sur une instance de prod.
-5. **Flags exacts des RPC `SV_*` de `InventoryComponent`** (Server/Reliable, appelables sur le composant d un autre joueur).
-   `execute_python_script` : charger la `BlueprintGeneratedClass` `/Game/Systems/Item/InventoryComponent.InventoryComponent_C` et lire `FUNC_Net / FUNC_NetServer / FUNC_NetReliable` sur les `UFunction` `SV_*`.
-6. **Comportement de diffusion du `RequesterOptimizedState` BP** : multicast comme le port C++ (`MC_Update`) ou RPC client cible ? Et le composant BP expose-t-il un equivalent de `bServerMulticast` et de `SetCustomLocationKey` ?
-   `get_detailed_blueprint_summary` sur `/Game/Systems/OptimizedState/RequesterOptimizedState` et `/Game/Systems/OptimizedState/OptimizedStateComponent` (asset de 1,25 Mo, le pont a deja repondu par intermittence : reessayer).
-7. **Generation et unicite du `DataId` d un vehicule possede** (`VehicleDataId`, `VehicleDataIdMap`), modele a imiter pour le GUID.
-   `trace_blueprint_flow` sur `SpawnPlayerOwnedVehicle` dans `/Game/Systems/Vehicle/VehiclesOwned/VehiclePlayerOwner`.
-8. **`PlayerOwnerOnlyAccessible`** sur `InventoryComponent` : verrou d acces deja prevu ou variable morte ?
-   `search_project_index` sur le nom, puis lecture des graphes consommateurs au pont.
-9. **`LootActorReloadRespawnTime`** : persiste vers `GameDataManager` ou memoire de session ?
-   `get_detailed_blueprint_summary` sur `/Game/Systems/Item/ItemsManagerGS` (graphes `SaveItemsPicked` et voisins).
-10. **Ordre de chargement** : quand `GameDataManager` est-il pret par rapport au `BeginPlay` du monde ? Faut-il enregistrer QStorage dans l ordre pilote par DataAsset de QGameManager ?
-    `get_detailed_blueprint_summary` sur `/Game/GameMode/QangaGameState` (EventGraph) plus lecture du DataAsset d ordre de QGameManager.
-11. **Lecture reelle des trois flags de `QA_ICLAB_StorageBase`** (`ActorIsReplicated` / `ActorAlwaysOnServer` / `ActorPersistantOnServer`), deduits de la table de proprietes serialisees, jamais lus.
-    `get_data_asset_details` sur `/Game/Systems/QBuilder/Data/ICLAB/Actor/Storage/QA_ICLAB_StorageBase`.
-12. **Qui appelle `QBuilder_SaveData_LoadFromFile_Async` au demarrage du monde**, et quand par rapport a l enregistrement du premier client sur un builder.
-    `get_detailed_blueprint_summary` sur `/Game/Systems/QBuilder/Manager/QBuilder_Manager`.
-13. **Le slot QBuilder n est pas segmente par port** : deux instances sur la meme machine partagent-elles `Saved/SaveGames/QBuilder_SaveGame_N.sav` ?
-    `ls -la Saved/SaveGames/` sur une machine hebergeant deux instances.
-14. **Couverture QATS existante du cycle save/load de QBuilder**, avant toute intervention sur son catalogue.
-    Inspection de `Plugins/QAutomatedTestSuite/` puis lancement du harnais QATS.
-15. **Le tag `QL_ExcludeMerge` survit-il a `DuplicateAsset`** lors de la regeneration de l optimise ? Par construction oui, non verifie.
-    Before/after par `execute_python_script` sur le niveau pilote au jalon J5.
-16. **Le backend HTTP `QangaDatabaseConnection`** (sidecar Node `API.exe` / `API`) est-il prevu pour la prod dediee ou abandonne ? Ses binaires sont absents du depot et `QangaGameState` ne le reference pas, mais s il revient il change le chemin de persistance de QStorage. Question a poser, pas a deduire.
-17. **Le procede de creation d une piece QBuilder (5 assets)** est marque SUPPOSE dans le dossier, deduit de `rg -a` sur des .uasset. A valider au pont avant J6 : `get_data_asset_details` sur `QDD_ICLAB_Storage` et sur `QBuilder_Qanga_ActorData`.
+Livre :
+
+- `Plugins/QStorage/` : `.uplugin` (Runtime, LoadingPhase Default, dependance QBuilder),
+  `QStorage.Build.cs`, module et categorie de log `LogQStorage` ;
+- `QStorage_Types.h/.cpp` : les quatre enums (`EQST_AnchorKind`, `EQST_AccessMode`,
+  `EQST_Refusal`, `EQST_MoveDirection`) et les quatre structs (`FQST_AnchorKey` avec sa
+  quantification 10 cm et son `GetTypeHash`, `FQST_ItemStack`, `FQST_ContainerRecord`,
+  `FQST_Tombstone`), plus `SchemaVersion` et le tag de codec ;
+- `QStorage_DevSettings.h/.cpp` et la section `[/Script/QStorage.QStorage_DevSettings]`
+  de `Config/DefaultGame.ini`, **`Enabled=False`**, avec les plafonds arbitres ;
+- `QStorage_World_SubSystem.h/.cpp` : registres, sequence monotone d instance, collecte
+  des orphelins, trois dumps. Inerte tant que le systeme est desactive ;
+- `QStorage_Bench.cpp` : `qstorage.Bench`, les **deux** profils separes ;
+- `QStorage_TestCommands.cpp` : `qstorage.Status`, `qstorage.Dump`, `qstorage.Orphans`,
+  `qstorage.Enable`, `qstorage.Disable` ;
+- `Plugins/QAutomatedTestSuite/.../QStorageRegistryTests.cpp` : deux tests QATS,
+  `QATS.QStorage.Registry.ItemKeyRegistryIntegrity` et `...ItemKeyRegistrySizeFrozen`.
+
+**Ecart au plan, assume** : le gel du registre ne duplique pas
+`QModuleItemRegistrationTests.cpp`, qui couvre deja "les items MODULE sont inscrits dans
+`DA_AllRef` et pointent un script". Les deux nouveaux tests couvrent ce que celui-la ne
+couvre pas et dont QStorage depend : l integrite de **tout** le registre (aucune cle None,
+aucune entree pointant dans le vide) et le fait qu il **ne retrecisse pas**.
+
+**Valide par la mesure, le 2026-08-22 au soir** :
+
+1. **Compilation, deux cibles sur trois.** `QangaEditor` : `UnrealEditor-QStorage.dll`
+   produite, les 7 objets compiles dont `QStorage_Bench.cpp.obj` (celui qui appelle
+   l API QBuilder, donc le lien inter-plugin est valide) et `QStorageRegistryTests.cpp.obj`
+   cote QATS. `QangaServer` : `Result: Succeeded`, 1218 actions, `QangaServer.exe` linke,
+   831 s. **`Qanga` (client) n a PAS ete compile** : c est la troisieme cible, restante.
+2. **Les deux tests QATS passent.** `Result={Success}` sur
+   `QATS.QStorage.Registry.ItemKeyRegistryIntegrity` et `...ItemKeyRegistrySizeFrozen`.
+   Note d outillage : l automation attend une framerate de 10 FPS avant de demarrer
+   (`FWaitForInteractiveFrameRate`), elle a attendu 600 s puis a renonce et a tourne quand
+   meme, parce qu un build tournait en parallele et tenait l editeur a 3 FPS. Ne pas lancer
+   de tests et de build en meme temps.
+3. **Registre mesure : 303 entrees, 0 valeur nulle** (lecture directe de
+   `DA_AllRef.ItemKey:DAItem` dans l editeur). Le plancher du test est **cale sur 303**,
+   et non sur les 301 herites du dossier d enquete.
 
 ---
 
-## 11. Questions a RzZz
+### La mesure qui compte : le banc, et ce qu il declenche
 
-1. **Lecture A ou lecture B de la regle "premier objet a construire" ?** Piece QBuilder gatee, ou objet d inventaire dont la pose cree la zone de construction ? En lecture B, le builder porte deja un `InventoryComponent` et un `PersistentDataComponent`, et QStorage se reduit peut-etre a une UI plus un gate. **A trancher avant J1**, pas avant J6.
-2. **Existence versus contenu** : accepte-t-on la fenetre de 10 a 40 minutes entre l autosave QBuilder et l ecriture du monde (avec reconciliation et recuperation admin), ou force-t-on un save QBuilder complet a chaque pose et destruction de coffre (cout d une ecriture Gzip de tous les builders, a mesurer) ?
-3. **Un coffre construit peut-il etre deplace ou detruit, et que devient son contenu ?** Refus si non vide, restitution au sol, ou transfert vers la banque du builder ? Et acceptes-tu d ajouter un point d extension serveur additif sur le chemin `ChangeTransform` ?
-4. **Qui a acces a un coffre construit ?** Proprietaire seul, groupe ou clan (`PlayerGroupComponent` existe sur le PlayerState), liste `Allowed_By_ID` du builder, ou libre ? Cela fixe `EQST_AccessMode`.
-5. **Synchronisation en direct entre deux joueurs devant le meme coffre**, ou rafraichissement a l ouverture suffisant ? C est la seule question qui justifie le cout du registre d abonnement, des deltas et du rebase.
-6. **Combien de coffres ouverts simultanement en pointe** sur un serveur a 500 joueurs, et combien de coffres persistes acceptes par monde ? Ces deux chiffres deviennent des plafonds durs dans les settings.
-7. **Cible du composant d etat** : on ecrit contre le composant BP `OptimizedStateComponent_C` (voie sure aujourd hui) ou contre le C++ `UOptimizedStateComponent` (voie propre demain, mais dormante) ? Le port C++ est-il abandonne ou en attente de bascule ?
-8. **`RollWeightedItem` / `HashWorldLocation`** : extraction en `Cy_*` (tache dediee, validee, avant J1) ou copie dans QStorage avec commentaire de provenance ?
-9. **Nom du set QBuilder d accueil** et du `QTS_` correspondant pour le coffre. "QANGA" n est pas un set existant.
-10. **Un coffre de niveau doit-il pouvoir se recharger** (`RestockSeconds`, en rechargement paresseux a la premiere ouverture posterieure a l echeance), ou une recompense de decouverte est-elle definitivement pillee, par serveur, pour tous ?
+`qstorage.Bench` (40 piles par coffre), profil 1, chemin monde, **game thread** :
+
+| Coffres | Encodage | `SaveGameToMemory` | Taille serialisee | **Cout reel d un flush** (slot + miroir `BACKUP_`) |
+|---|---|---|---|---|
+| 100 | 3,01 ms | 0,79 ms | 307 Ko | **1,58 ms** |
+| 1000 | 26,58 ms | 5,42 ms | 3,0 Mo | **10,83 ms** |
+| 5000 | 130,05 ms | 31,40 ms | 15,3 Mo | **62,80 ms** |
+
+**La clause de revision du jalon J1 est declenchee.** Le critere ecrit etait : "si le
+chiffre double est deja a plusieurs ms a 1000 conteneurs, l architecture de stockage est
+revue AVANT d ecrire l acteur". Il est a 10,83 ms, soit **65 pour cent d une frame a
+60 FPS**, pour la seule part QStorage, sur un slot qui porte deja tout le reste. Au
+plafond arbitre de 5000 coffres, c est 62,80 ms, presque quatre frames : un hoquet visible.
+
+Trois enseignements que seule la mesure donnait :
+
+- **la segmentation de l index ne resout que la moitie du probleme.** Elle borne le
+  **re-encodage** (un segment au lieu de tout), mais `SaveGameToMemory` s applique au
+  **slot entier** a chaque flush, quel que soit le decoupage. Ce poste croit avec le
+  nombre total de coffres persistes et rien dans le design actuel ne le borne ;
+- **l encodage domine la serialisation d un facteur quatre** (130 ms contre 31 ms a 5000).
+  Le poste le plus cher est notre propre codec, pas le moteur. Il est donc optimisable,
+  et il est deja borne par la segmentation ;
+- **le plafond `MaxPersistedContainersPerWorld = 5000` n est pas tenable** avec le slot
+  monde partage. Soit il descend, soit le contenu sort de ce slot.
+
+**Consequence : J2 (ecriture de l acteur) ne demarre pas avant cet arbitrage.** Deux voies,
+et c est une decision de RzZz :
+
+- **(A) baisser le plafond** et rester dans le slot monde partage. Simple, zero code
+  nouveau, mais le nombre de coffres devient un budget serre : environ 1000 coffres pour
+  rester sous les 11 ms, et ce budget est partage avec tout ce que le slot porte deja ;
+- **(B) sortir le contenu des coffres du slot monde** vers un fichier propre a QStorage,
+  ecrit hors game thread (patron `QBuilder_AsyncSave`, mesure a
+  `QBuilder_SubSystem.cpp:751-760` : `SaveGameToSlot` **entierement** dans un
+  `AsyncTask`, donc zero cout game thread pour la serialisation). Plus de travail, mais
+  cela retire le plafond et decouple QStorage de la croissance du slot partage.
+
+**Non mesure** : le profil 2 (chemin QBuilder) exige une session avec des zones
+construites. Le banc a repondu "no game world" hors PIE. A relancer en PIE sur une
+sauvegarde qui contient des builders, c est ce qui decide du `QBuilder_SaveData` force
+du 7.3.
+
+---
+
+## 10. Mesures restantes, avec la commande exacte
+
+**Aucun inconnu de design ne subsiste** : la section 11 les a tous tranches. Ce qui suit
+sont des **mesures**, replacees dans le jalon ou elles servent. Aucune ne bloque J1.
+
+L INCONNU 11 du V2 est **ferme** : `QA_ICLAB_StorageBase` a ete lu au pont par RzZz le
+2026-08-21 et porte `ActorIsReplicated = False`, `ActorAlwaysOnServer = True`,
+`ActorPersistantOnServer = False`, exactement la configuration du 7.2 (voir 7.1).
+
+| # | Mesure | Jalon | Comment |
+|---|---|---|---|
+| M1 | Identite du troisieme `Add Component by Class` de `VehiclePlayerOwner.BeginPlay` (probablement `ORManagerComponent`), et son role dans le fait qu un `InventoryComponent` devienne pret hors PlayerState. **Portee reduite** : ne concerne plus que le coffre de niveau, le coffre construit heritant d une chaine en production. | J2 | `get_detailed_blueprint_summary` sur `/Game/Systems/Vehicle/VehiclesOwned/VehiclePlayerOwner` |
+| M2 | Un `InventoryComponent` cote client peut-il devenir pret via `SetNotPersistentData` sans `GameDataManager` (gate `Is Server`) ? Decide la branche A ou B du panneau **du coffre de niveau** (5.4). | J2 | `get_detailed_blueprint_summary` sur `/Game/Systems/Item/InventoryComponent` (graphes `Event BeginPlay`, `ReplicateSaveInventory`) et sur `/DataManager/PersistentDataComponent` |
+| M3 | Double spawn en listen server : l hote recoit-il l ordre `ToClients` pour un acteur `ActorAlwaysOnServer` ? | J5 et J6 | Test en listen server plus comptage des acteurs a la pose d une piece existante equivalente |
+| M4 | Taille reelle d un slot monde sur une instance de prod peuplee (64 Ko mesures en dev solo). | **J1** | `ls -la Saved/SaveGames/Port*/` et `Saved/SaveGames/BACKUP_Port*/` sur une instance de prod |
+| M5 | Flags exacts des RPC `SV_*` de `InventoryComponent` (Server/Reliable, appelables sur le composant d un autre joueur). | J3 | `execute_python_script` : lire `FUNC_Net / FUNC_NetServer / FUNC_NetReliable` sur les `UFunction` `SV_*` de `InventoryComponent_C` |
+| M6 | Comportement de diffusion du `RequesterOptimizedState` **BP** (multicast comme le port C++ ou RPC cible ?), et exposition d un equivalent de `bServerMulticast` et de `SetCustomLocationKey`. Conditionne le repli du 2.4. | J3 | `get_detailed_blueprint_summary` sur `/Game/Systems/OptimizedState/RequesterOptimizedState` et `OptimizedStateComponent` (asset de 1,25 Mo, le pont repond par intermittence : reessayer) |
+| M7 | Generation et unicite du `DataId` d un vehicule possede (`VehicleDataId`), modele a imiter pour le GUID. | J4 | `trace_blueprint_flow` sur `SpawnPlayerOwnedVehicle` |
+| M8 | `PlayerOwnerOnlyAccessible` sur `InventoryComponent` : verrou d acces existant ou variable morte ? Touche directement `EQST_AccessMode = OwnerOnly`. | J3 | `search_project_index` puis lecture des graphes consommateurs au pont |
+| M9 | `LootActorReloadRespawnTime` : persiste vers `GameDataManager` ou memoire de session ? | J5 | `get_detailed_blueprint_summary` sur `/Game/Systems/Item/ItemsManagerGS` |
+| M10 | Ordre de chargement : quand `GameDataManager` est-il pret par rapport au `BeginPlay` du monde ? Faut-il enregistrer QStorage dans l ordre pilote par DataAsset de QGameManager ? | **J1** | `get_detailed_blueprint_summary` sur `/Game/GameMode/QangaGameState` plus lecture du DataAsset d ordre de QGameManager |
+| M11 | Qui appelle `QBuilder_SaveData_LoadFromFile_Async` au demarrage, et quand par rapport a l enregistrement du premier client sur un builder. | J6 | `get_detailed_blueprint_summary` sur `/Game/Systems/QBuilder/Manager/QBuilder_Manager` |
+| M12 | Le slot QBuilder n est pas segmente par port : deux instances sur la meme machine partagent-elles `QBuilder_SaveGame_N.sav` ? | J6 | `ls -la Saved/SaveGames/` sur une machine hebergeant deux instances |
+| M13 | Couverture QATS existante du cycle save/load de QBuilder, **avant** toute intervention sur sa chaine. | **avant J6** | Inspection de `Plugins/QAutomatedTestSuite/` puis lancement du harnais QATS |
+| M14 | Le tag `QL_ExcludeMerge` survit-il a `DuplicateAsset` lors de la regeneration de l optimise ? | J5 | Before/after par `execute_python_script` sur le niveau pilote |
+| M15 | Le backend HTTP `QangaDatabaseConnection` (sidecar Node) est-il prevu pour la prod dediee ou abandonne ? S il revient, il change le chemin de persistance. | question ouverte a RzZz, non bloquante | a poser, pas a deduire |
+| M16 | Validation au pont de la procedure de catalogue QBuilder (marquee SUPPOSE), pour les etapes non encore exercees. | J6 | `get_data_asset_details` sur `QDD_ICLAB_Storage` et `QBuilder_Qanga_ActorData` |
+
+---
+
+## 11. Decisions arbitrees par RzZz (2026-08-22)
+
+Les dix questions du V2 sont tranchees. Elles sont conservees ici avec leur reponse et son
+motif, parce qu une decision sans motif se redecide au premier obstacle.
+
+1. **Lecture A ou B de la regle "premier objet a construire" ?**
+   **Lecture B, definitif.** La chaine coffre-via-builder est deja cablee, UI comprise : le
+   coffre cree la zone, le gate devient structurel. Le perimetre de QStorage cote construit
+   se reduit a fournir l identite stable (`FGuid` serveur, index segmente, tombstones) a la
+   place du `BuilderID`, et a garder le cablage existant. **Cela reduit J6 a presque rien et
+   corrige au passage le bug du 4.0.**
+
+2. **Existence contre contenu.**
+   **Option (b)** : fenetre assumee, reconciliation, recuperation admin (7.3). L autosave
+   600 s avec rotation est verifie. Le banc J1 mesure un `QBuilder_SaveData` force ; s il
+   passe, il est adopte sur les deux seuls evenements rares, pose et destruction, **jamais**
+   sur un mouvement.
+
+3. **Deplacement et destruction d un coffre construit.**
+   **Point d extension additif accepte** sur `ChangeTransform`. Destruction refusee si des
+   piles resolues subsistent, on vide d abord, **jamais de restitution automatique au sol**.
+   Deplacement autorise a vide uniquement, `FGuid` conserve, ancre recalculee, les deux
+   segments d index reecrits (7.5).
+
+4. **Acces a un coffre construit.**
+   **`OwnerOnly` par defaut**, partage via `Allowed_By_ID` du builder
+   (`Plugins/QBuilder/Source/QBuilder/Public/QBuilder_Client.h:47`). `Public` reserve aux
+   coffres de niveau. `GroupOnly` plus tard via `PlayerGroupComponent`
+   (`Content/Systems/Group/`). **L enum reste inchange.**
+
+5. **Synchronisation live entre deux joueurs devant le meme coffre.**
+   **Oui.** Deux joueurs qui pillent le meme coffre arrivera, et un snapshot perime genere
+   des signalements de duplication. Les deltas, le snapshot fige et le rebase sont conserves
+   tels quels. **Plan B explicite** : rafraichissement a l ouverture si le cout ne passe pas.
+
+6. **Plafonds initiaux**, tous en `.ini`, a revisiter avec la courbe J1 :
+   **128** sessions ouvertes simultanees (pic estime a environ 50 sur 500 joueurs),
+   **`MaxHotContainers` 256**, **5000** coffres persistes par monde,
+   **2000** entrees par segment d index.
+
+7. **Cible du composant d etat.**
+   **Composant BP pour la v1**, c est la voie deja en production (`OnServerMulticastEvent`
+   est consomme ainsi sur le builder). Le port C++ **n est pas abandonne, il est en attente
+   de bascule**. Le repli du 2.4 reste conditionne a la mesure M6.
+
+8. **`RollWeightedItem` et `HashWorldLocation`.**
+   **Extraction `Cy_*` dediee**, pas de copie : l en-tete de `QModuleLoot_Library` impose
+   deja le no-duplicates du tirage pondere entre ses trois consommateurs actuels, une copie
+   irait contre ce que le fichier declare lui-meme. Tache dediee, hors du chemin du socle,
+   a livrer avant J5.
+
+9. **Set QBuilder d accueil : ICLAB.**
+   Et l entree `QA_ICLAB_StorageBase` existe deja avec la bonne configuration (INCONNU 11
+   ferme). `BP_Storage_ForBuild` est en revanche une **coquille vide** sans
+   `InventoryComponent` : on **remplace ou rebranche** cette entree, on n en ajoute pas une
+   parallele. Nommage final apres application de la lecture B (7.1).
+
+10. **Rechargement des coffres de niveau.**
+    **Restock paresseux oui** pour le loot commun via `RestockSeconds`, a la premiere
+    ouverture posterieure a l echeance. Les `GuaranteedStacks` de salle de boss sont
+    **definitivement pilles**. Le comportement est **decide par `FillProfileTag`** (6).
+
+**Decision transverse : aucune migration des anciens contenus** keyes sur `BuilderID`
+numerique. Ils ne sont pas stables par construction, il n y a rien de sain a migrer, et
+`qstorage.Orphans` les ramasse comme le reste (4.0).
 
 ---
 
@@ -460,14 +978,18 @@ Rien de ce qui suit n a ete mesure. Les six premiers sont **bloquants pour J0 ou
 
 ### Changelog Discord (pret a coller)
 
-**🗄️ QStorage : le design du coffre local passe en v2**
+**🗄️ QStorage : le coffre local est valide, et il repare un bug qu on avait pas vu**
 
-**Ce que c est** : un vrai coffre a contenu local (chaque coffre a ses objets), constructible avec QBuilder ou posable a la main dans les interieurs, server-authoritative et persistant a travers les mises a jour.
+**Ce que c est** : un vrai coffre a contenu local (chaque coffre a ses objets), server-authoritative et persistant a travers les mises a jour. Deux usages : la zone de construction que vous posez, et des coffres poses a la main dans les interieurs, pre-remplis, en recompense de decouverte ou en salle de boss.
 
-**Ce qui a change apres la revue** : trois relecteurs ont demonte la v1, et ils avaient raison sur l essentiel.
-- **Cause** : le client fabriquait la cle du coffre qu il voulait ouvrir. **Fix** : le client ne dit plus que "j interagis", le serveur choisit le coffre le plus proche. Ca tue au passage la generation de loot infinie et le bug listen server.
-- **Cause** : la persistance heritee reecrit tout le fichier monde a chaque mouvement d objet, sur le thread de jeu. **Fix** : QStorage possede sa propre cadence, index segmente par secteur, ecriture a la fermeture du coffre. Et un banc de mesure obligatoire avant d ecrire l acteur.
-- **Cause** : detruire puis reconstruire un coffre au meme endroit rendait l ancien contenu. **Fix** : pierres tombales et vraie suppression en base.
-- **Cause** : un item dont l asset disparait etait efface de la base, en silence. **Fix** : quarantaine en amont, la pile n est jamais confiee au systeme qui la detruirait.
+**Le truc qu on a trouve en chemin** : la zone de construction stocke deja vos mineraux, mais elle s y retrouve grace a un numero **reattribue a chaque chargement du serveur**. Traduction : le contenu des zones construites ne survivait pas de facon fiable a un redemarrage. Personne l avait vu parce qu en solo continu les numeros retombent juste. C est exactement le trou que le nouveau systeme bouche, avec un identifiant qui, lui, ne bouge plus.
+- **Si vous avez deja eu un coffre de base vide apres un restart** : c etait ca.
 
-**Etat** : design a valider, zero ligne de code, zero fichier touche. 10 questions en attente d arbitrage.
+**Les autres decisions**
+- **Poser le coffre cree la zone de construction.** Plus besoin de gate artificiel : pas de coffre, pas de chantier.
+- **Un coffre plein ne peut pas etre detruit**, et un coffre ne se deplace qu a vide. Pas de restitution automatique au sol, ca ferait des objets dupliques.
+- **Prive par defaut**, partage avec la liste d autorisation deja existante de votre zone.
+- **Deux joueurs peuvent fouiller le meme coffre en meme temps** sans se marcher dessus.
+- **Les coffres de loot commun se rechargent**, les recompenses de boss se pillent **une seule fois, pour tout le serveur.**
+
+**Etat** : design valide, developpement demarre au socle. Le premier jalon est un banc de mesure : on mesure le cout d ecriture avant d ecrire la moindre ligne de gameplay.
