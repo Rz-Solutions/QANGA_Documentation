@@ -184,6 +184,14 @@ Un gate dedicated supplémentaire est ouvert : la politique meshless exclut `Sta
 
 **Gate restant à la reprise :** audit live des usages `CustomShape` et du volume Ninja, puis résolution server-safe du gate dedicated meshless. Le gate runtime de chargement, reinstancing et démarrage PIE est fermé ; J3 ne sera entièrement fermé qu'après la preuve dedicated.
 
+### J3 bis — HUD atmosphère et altitude — corrigé
+
+- `UQGravityAreaComponent::BeginPlay` force l'activation native après validation de l'owner. Les anciens templates Blueprint sérialisés inactifs reprennent donc leur tick `0,1 s` et actualisent leur zone pendant les déplacements, sans second scheduler ni appel manuel de refresh.
+- `W_ShipFrameHud` conserve son chemin authored : `GetHasAtmosphere` pilote l'état espace et l'altitude vient de la distance WorldScape réelle. Seul l'ancien nœud océan/sol orphelin a été supprimé ; aucun plafond, seuil ou fallback HUD n'a été ajouté.
+- Dans `L_Dev_Rz`, `Earth_LevelGravityArea` porte une marge atmosphérique authored de `7 070 016 cm`, soit environ `70,7 km` au-dessus du rayon WorldScape. La validation manuelle confirme une transition stable dans les deux sens et aucun état atmosphérique retenu à `110 km`.
+- `BP_Missile` consomme désormais `QLevelGravityArea` sur son cache `Last Valid Gravity Area`, ce qui supprime la rupture de type entre la sortie native et le pin enfant.
+- Les composants natifs sérialisés dans les niveaux sont restaurés par leur contrat `Transient + SkipSerialization` et `PostLoadSubobjects`; aucun niveau n'a été resauvegardé en masse. Le test de régression dédié exerce l'activation et les déplacements uniquement par ticks normaux.
+
 ### J4 — Application direction/échelle personnage — source compilée et testée, intégration authored en attente
 
 - brancher le consommateur natif sur ALS et AILean ;

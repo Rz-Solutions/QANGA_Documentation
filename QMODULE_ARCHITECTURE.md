@@ -2516,3 +2516,69 @@ sont curates a la main, un par un :
   est lue en direct, une sauvegarde existante voit immediatement les nouveaux articles.
 - `MarketDynamicRates = MDR_StaticPrice` : prix statique, le `GameShopPrice` de l item s applique tel
   quel. `SellPriceMultiplier = 0.5` ne concerne que le rachat au joueur.
+
+### 15.31 Drag and drop du Mur : installer, deplacer, echanger, desinstaller a la souris (2026-08-28)
+
+**Demande (RzZz)** : le geste 2-clics (choisir un module dans le stock PUIS cliquer une case) n est
+pas intuitif. Voulu : glisser librement les modules sur la grille, glisser depuis le stock pour
+installer, echanger deux modules en lachant l un sur l autre, et desinstaller en glissant hors de la
+grille. Surlignage en direct des cases legales pendant le geste. La regle 14.1 (rearrangement
+gratuit, "drag and drop, swap direct") le prevoyait depuis juillet ; ceci est son implementation.
+
+**Patron suivi** : celui de l inventaire (`DnD_ItemInstance`), transpose en C++ : l operation porte
+un payload PAR VALEUR (`UQModule_WallDragOperation` : ModuleTag, FromQ, FromR, bFromStock ; jamais un
+pointeur de widget, les cellules sont recyclees sous le geste), le visuel de drag est une COPIE
+(cellule hex neuve dans une SizeBox 72x78), la legalite est peinte UNE fois au debut du drag, et les
+deux signaux de fin de l operation (OnDrop natif + OnDragCancelled) sont bindes pour le nettoyage.
+
+**Serveur, la seule vraie nouveaute** : `SV_MoveModule(FromQ, FromR, ToQ, ToR)` -> `TryMoveOrSwap`.
+Deplacer ou echanger N EST PAS remove+install (qui rembourserait puis reconsommerait l item, ferait
+transiter les phases par le wallet en perdant leur composition au profit du tier le plus bas,
+pourrait s arreter a mi-chemin sur un sac plein, et buterait sur l unique PendingInstallTimer) :
+les sockets mutent EN PLACE, Q/R echanges, phases et ordre du tableau (= priorite d activation)
+intacts, un seul MarkRackDirty. Regles : module de base refuse aux deux bouts, anneau verrouille
+refuse pour la case d arrivee ET, en cas de swap, pour la case source (un module peut legitimement
+squatter un anneau reverrouille apres une baisse du noyau ; le module deplace vers lui doit etre
+refuse). Codes `Moved` et `Swapped` AJOUTES EN FIN d enum (contrat wire+BP), succes son-seulement
+(`WallInstallSound`), textes dans `QMOD_DescribeActionResult`.
+
+**Gestes cote client** (`QModule_WallWidgetBase` + `QModule_HexCellWidgetBase`) :
+- stock -> case vide : `SV_InstallModule`, le MEME funnel differe a 3 s (plaque, sons, cout d item) ;
+- case -> case vide : `SV_MoveModule` (gratuit, instantane) ; case -> case occupee : swap ;
+- case -> tuile de stock OU hors grille (drop non consomme par une cellule, rattrape par le
+  `NativeOnDrop` du mur) : `SV_RemoveModule` (le RPC existait depuis 15.16 sans AUCUN appelant ;
+  c est son premier). Remboursement d item, phases au wallet, refus BagFull : rien de nouveau ;
+- stock -> case occupee : refus CLIENT `Occupied` (toast + son deny), pas d aller-retour ;
+- module de base : draggable nulle part (refus a la source, `HandleCellBuildDrag` rend null).
+
+**Surlignage pendant le drag** : `QMOD_SetDragHighlight` sur la cellule (etat -1/0/+1 prioritaire
+sur selection/hover dans `ApplyBorderState`) ; legal = accent ambre (pleine intensite sous le
+curseur via NativeOnDragEnter/Leave), illegal = bordure eteinte, rouge au survol (le langage des
+cases verrouillees). Le jugement client (`JudgeDropTarget`) ne mire QUE ce que le client sait
+vraiment : anneau via `CachedCoreLevel`, occupation via les sockets repliques, base via le registre.
+Exclusivite et possession d item restent au serveur (verdict par `CL_ActionResult`, comme avant).
+Un rebuild de grille ou un refresh du stock en plein drag repeint les highlights (les cellules
+recyclees repartent a zero dans `QMOD_SetupCell`).
+
+**Le 2-clics VIT TOUJOURS, integralement** : c est le mode sans souris (aucune navigation manette
+n existe nulle part dans les menus QANGA, mesure 2026-08-28 : zero widget CommonUI dans Content/,
+zero focus/NativeOnKeyDown dans le plugin). Deux retouches au passage :
+- la selection d une tuile de stock se fait desormais EN PLACE (QMOD_SetSelected) au lieu de
+  reconstruire tout le panneau : le rebuild detruisait, pendant le mouse-down, la tuile meme que
+  Slate surveillait pour le seuil de drag ;
+- `DetectDrag` est arme dans le `NativeOnMouseButtonDown` de la cellule SANS toucher au contrat du
+  clic (il part toujours au down) ; opt-in par `bDragEnabled`, que seul le mur active : le dock de
+  gadgets, qui reutilise la meme cellule, ne change pas d un pixel.
+
+**Pieges rencontres/evites** : hover card supprimee pendant le drag (elle surgirait au timer) ;
+drop resolu par cellule (les carres des cellules se chevauchent, la resolution est la meme que
+celle du clic) ; le drop "hors grille" n existe pas dans l onglet (backdrop opaque plein ecran),
+c est le NativeOnDrop du MUR qui le materialise ; un drop pendant l install differe d un autre
+module est revalide par le serveur (Occupied/InstallBusy).
+
+**Etat de verification** : ecrit, UHT passe (9 fichiers generes), compilation froide en attente de
+fermeture de l editeur (Live Coding actif, et QModule ne se Live-Code jamais). PAS ENCORE VU EN
+JEU : a tester en PIE (informations dans le corps du present document : Test.GiveModuleItems,
+Test.OpenWall) puis par RzZz. Question ouverte tranchee par defaut : les modules de base ne sont
+ni deplacables ni echangeables (doc "non retirables, non echangeables") ; si RzZz veut les rendre
+deplacables, c est un booleen a inverser dans TryMoveOrSwap + HandleCellBuildDrag.
