@@ -209,12 +209,12 @@ Gates de release encore ouvertes, sans revendication prématurée :
 - `StarMap_Component` initialise les références capture/composant avant le widget minimap ; les six canvases distincts reçoivent leur propriétaire exact et la mise à jour minimap reste indépendante du chargement de la StarMap complète.
 - La validation manuelle finale dans `L_Dev_Rz` confirme les press répétés sur un même bouton et en alternance, l'annulation tap/hold partiel, la sortie véhicule après hold complet, la répétition du cycle et l'interaction immédiate après sortie. Le prompt reste projeté sur sa cible et les icônes minimap ne s'empilent plus en haut à gauche.
 - Deux QATS natifs couvrent désormais la cible input mémorisée ainsi que la séparation entre événements non-hold stateless et holds appariés.
-- La détection distingue maintenant la provenance de chaque candidat. Le véhicule actuellement contrôlé est refusé comme cible d'entrée ou socket de siège, et aucun focus synthétique n'est créé sur le véhicule piloté ; les boutons et interactables attachés restent éligibles.
-- La sortie véhicule appartient uniquement au chemin d'input : sans cible monde, le press sélectionne et mémorise explicitement le véhicule courant, tandis qu'une interaction embarquée ciblée garde la priorité. Le release retourne à cette cible exacte sans réactiver le prompt de focus.
+- La détection distingue maintenant la provenance de chaque candidat. Le véhicule courant est refusé comme cible d'entrée ou socket de siège et aucun focus synthétique n'est créé sur lui. Les interactables de sa hiérarchie restent disponibles pour un passager, mais sont refusés lorsque le pawn possédé est le véhicule lui-même.
+- La sortie véhicule appartient uniquement au chemin d'input : sans cible monde, le press sélectionne et mémorise explicitement le véhicule courant. Le release retourne à cette cible exacte sans réactiver le prompt de focus.
 - La visibilité est appliquée aux candidats de la trace primaire comme des sweeps. Une cible component n'accepte que le hit de son primitive exact : une coque, un mur ou un parent attaché reste donc un occluder même lorsqu'il appartient au même actor.
 - La requête serveur reconstruit la même éligibilité et la même visibilité que la détection locale avant de distribuer l'interaction ; aucun ancien fallback monde ne contourne ce funnel.
-- Les trois QATS `QATS.QSystem.PlayerInteraction.*` couvrent la cible input mémorisée, la priorité interaction embarquée/sortie véhicule, la disposition serveur et la matrice véhicule/occlusion.
-- La validation manuelle dans `L_Dev_Rz` confirme que le prompt du véhicule disparaît pendant la conduite, que le hold de sortie reste fonctionnel, que les interactions embarquées conservent leur priorité et qu'un bouton masqué par un mur ne peut plus être ciblé ni activé.
+- Les quatre QATS `QATS.QSystem.PlayerInteraction.*` couvrent la cible input mémorisée, la disposition serveur, l'hystérésis et la matrice pilote/passager/sortie/occlusion.
+- La validation manuelle dans `L_Dev_Rz` confirme que le prompt d'entrée du véhicule disparaît pendant la conduite, que le hold de sortie reste fonctionnel et qu'un bouton masqué par un mur ne peut plus être ciblé ni activé.
 
 ### J6 ter — Divergence du build Development — corrigée, validation packaged à rejouer
 
@@ -231,8 +231,17 @@ Gates de release encore ouvertes, sans revendication prématurée :
 - L'ancien tick Blueprint par frame masquait un contrat de présentation dépendant de la cadence : le tracker temporaire était réarmé et réattaché à chaque détection native à `30 Hz`, avec une expiration de `120 ms` susceptible de détruire le prompt pendant un hitch packaged.
 - La détection conserve sa cadence native à `30 Hz`, mais la présentation devient événementielle : une acquisition ou un remplacement de focus crée et attache une seule fois un tracker persistant ; un focus stable ne renvoie plus de heartbeat UI.
 - La perte ou le remplacement de cible détruit explicitement l'ancien tracker avant d'exposer le nouveau focus. Un tracker ne peut donc plus expirer, sauter ou survivre à sa cible selon l'espacement des polls.
+- La propriété de présentation est conservée jusqu'au cleanup même si l'ancien actor est déjà pending-kill. La réutilisation d'un tracker persistant transmet directement sa lifetime nulle et ne réintroduit plus la lease minimale de `100 ms` des trackers temporaires.
+- Le changement `Press` / `Hold` reconstruit immédiatement le texte visible avec la même source de touche et le même format que le tracker ; il ne dépend plus d'un événement d'input ultérieur et ne peut plus conserver le libellé de la cible précédente.
 - La position écran reste calculée par le système tracker après chaque tick monde. Le mouvement visuel suit donc la caméra à la cadence d'affichage et n'est plus quantifié par la fréquence de détection.
 - Les transitions acquisition, focus stable, mise à jour du payload, remplacement et perte sont couvertes par le test natif de présentation. Le build Development doit encore être régénéré et vérifié visuellement par le propriétaire du build.
+
+### J6 quinquies — Focus embarqué pendant le pilotage — corrigé, validation manuelle à rejouer
+
+- L'éligibilité savait identifier le véhicule courant mais ne connaissait pas l'autorité de possession. Un composant ou actor attaché restait donc ciblable depuis certains angles, que le joueur pilote réellement le véhicule ou soit seulement présent à bord.
+- Le contexte candidat porte désormais l'état de pilotage dérivé de l'identité entre le pawn possédé et le véhicule courant. Toute cible appartenant à cette hiérarchie est refusée pendant le pilotage actif, sans nom d'asset, tag ou exception locale.
+- La sortie explicite reste autorisée par son chemin d'input dédié. Les mêmes interactables restent disponibles pour un passager ou après avoir quitté le poste de pilotage, et une interaction monde sans lien avec le véhicule n'est pas masquée.
+- La détection locale, la rétention du focus et la revalidation serveur consomment toutes la même décision. La QATS d'éligibilité couvre le pilote, le passager, la sortie explicite et une interaction monde indépendante.
 
 ## 4. Critères de sortie
 
