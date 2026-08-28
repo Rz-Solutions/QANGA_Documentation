@@ -226,6 +226,14 @@ Gates de release encore ouvertes, sans revendication prématurée :
 - Un changement de pawn ou de véhicule, une occlusion, une sortie du véhicule ou la disparition du composant source expire immédiatement le focus. Une interaction issue d'un composant ne peut pas être rétrogradée silencieusement vers son acteur.
 - Les tests de décision couvrent les transitions press/release, l'indisponibilité runtime, la grâce de présentation, son expiration, l'occlusion et les changements de contexte. Le build packaged doit encore être régénéré puis rejoué pour confirmer le comportement avec son timing réel.
 
+### J6 quater — Fluidité du prompt en build Development — corrigée, validation packaged à rejouer
+
+- L'ancien tick Blueprint par frame masquait un contrat de présentation dépendant de la cadence : le tracker temporaire était réarmé et réattaché à chaque détection native à `30 Hz`, avec une expiration de `120 ms` susceptible de détruire le prompt pendant un hitch packaged.
+- La détection conserve sa cadence native à `30 Hz`, mais la présentation devient événementielle : une acquisition ou un remplacement de focus crée et attache une seule fois un tracker persistant ; un focus stable ne renvoie plus de heartbeat UI.
+- La perte ou le remplacement de cible détruit explicitement l'ancien tracker avant d'exposer le nouveau focus. Un tracker ne peut donc plus expirer, sauter ou survivre à sa cible selon l'espacement des polls.
+- La position écran reste calculée par le système tracker après chaque tick monde. Le mouvement visuel suit donc la caméra à la cadence d'affichage et n'est plus quantifié par la fréquence de détection.
+- Les transitions acquisition, focus stable, mise à jour du payload, remplacement et perte sont couvertes par le test natif de présentation. Le build Development doit encore être régénéré et vérifié visuellement par le propriétaire du build.
+
 ## 4. Critères de sortie
 
 Le chantier est terminé uniquement si :
