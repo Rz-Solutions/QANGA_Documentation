@@ -2582,3 +2582,95 @@ JEU : a tester en PIE (informations dans le corps du present document : Test.Giv
 Test.OpenWall) puis par RzZz. Question ouverte tranchee par defaut : les modules de base ne sont
 ni deplacables ni echangeables (doc "non retirables, non echangeables") ; si RzZz veut les rendre
 deplacables, c est un booleen a inverser dans TryMoveOrSwap + HandleCellBuildDrag.
+
+### 15.32 Passe UX du Mur, lots A-D : lisibilite, bilan, catalogue, zoom (2026-08-29)
+
+**Origine** : retours joueurs pre-live sur le menu Modules ("le bordel une fois plein", "trop petit",
+"aucune vision sur ce qui existe a looter", "descriptions mal integrees"). Diagnostic mesure sur
+capture (le tapis de ~90 triangles de phase identiques etait l element le plus bruyant de l ecran ;
+le panneau droit affichait du vide ; rien ne distinguait un gadget d un passif ; rien ne montrait
+les modules non possedes). Maquette HTML validee par RzZz avant toute ligne de code ("on va partir
+sur ca"). TOUT est additif : le 2-clics, le drag and drop (15.31) et le dock gadgets sont intacts.
+
+**Cellule (lot A)** : nouveaux reglages sur `UQModule_HexCellWidgetBase`, TOUS a defaut legacy pour
+que le dock gadgets (meme classe) ne bouge pas d un pixel : `ActiveFillStrength` (0.55 ; le mur pose
+0.16), `InactiveFillStrength` (0.18 ; mur 0.10), `bUseLevelNotches` (false ; mur true : le niveau =
+3 encoches LED couleur famille dans `Panel_Pips`, plus AUCUN triangle de tier), et
+`QMOD_SetGadgetFraming` (contour interieur ambre `#FF9319` a l echelle 0.86, meme recette que
+`Image_BaseOutline`, pour distinguer un module ACTIF declenchable d un passif PAR LA SURFACE).
+La source de verite gadget est `UQModule_GadgetDockWidget::QMOD_IsGadgetModule` (nouveau static
+expose sur la liste `GadgetTags[]` existante, une seule liste). Le mur applique tout via
+`ApplyWallCellStyle` (grille + stock + ghost de drag + tuiles catalogue).
+
+**Plaque PHASES (lot A)** : `Box_PhaseStock` demenage du panneau droit vers une plaque HUD (cadre
+ambre fin) en bas a gauche de la grille (`Box_PhasePlate`), remontee au-dessus de la grille par le
+meme remove+re-add que la hover layer (RaiseHoverLayer la traite AVANT la couche de survol).
+`RefreshPhaseStock` inchange.
+
+**BILAN CYBORG (lot A/D)** : la place liberee affiche la somme des effets ACTIFS du mur,
+calculee par LE MEME code que le rack (`QModuleAggregation::BuildStatAggregates` sur les sockets
+repliques) : l affichage ne peut pas deriver de l applique. Libelles par table
+`StatLabelForTag` (sources EN, localisables, fallback = leaf du tag prettifie). Overrides "= X",
+Add "+X", Multiply "+X %", clamps globaux tus. Les valeurs de BASE du cyborg (vie totale etc.)
+restent hors perimetre : elles vivent dans les stats legacy BP, chantier separe si voulu.
+
+**Legende cliquable (lot A)** : chaque famille du mur = une ligne cliquable avec COMPTEUR ;
+clic = lentille (`ToggleFamilyLens` : familles non ciblees a 13 pour cent d opacite, cases vides a 35,
+noyau toujours plein), re-clic = tout montrer. `UButton::OnClicked` ne porte aucun payload : un
+`UQModule_WallLegendHandler` (micro UObject relais) par ligne. La lentille survit au rebuild
+(reappliquee en fin de `QMOD_RebuildGrid`) et se coupe seule si la famille quitte le mur.
+NOTE : un module est desormais compte dans sa PREMIERE famille `Module.Family.*` (la meme regle
+que la couleur et la fiche) ; l ancienne legende listait un module multi-tag dans chaque famille.
+
+**Fiche (lot A/D)** : ligne ACTIVE/PASSIVE sous la famille, et les niveaux SANS description
+authored synthetisent leur ligne depuis les StatMods ("Sprint speed +15 %") : un module qui fait
+quelque chose n a plus jamais un niveau muet, et les vraies coquilles restent muettes (honnete).
+
+**Catalogue (lot C)** : teaser "CATALOGUE X / Y - Z left to discover" sous le stock (compte
+domaine Cyborg, decouvert = installe OU en sac, recompte a chaque refresh du stock) ; clic =
+overlay sur la ZONE GRILLE seulement (le panneau reste vivant), groupe par famille, tuile =
+vraie cellule hex pour un module decouvert, silhouette "?" pour un inconnu (choix par defaut
+"mystere", regle 14.2 ; RzZz peut demander le mode en clair : c est le branchement bKnown de
+`BuildCatalogueList`). Reconstruit a CHAQUE ouverture (la decouverte bouge entre deux).
+
+**Zoom + pan (lot B)** : molette au-dessus de la grille = zoom x1..x2.6 (RenderTransform sur
+`Box_GridScaler`, pivot 0.5) ; en zoom, cliquer-glisser le FOND de la grille = pan (le mur ne
+recoit ce mouse-down que si aucune cellule ne l a mange : zero conflit avec le drag and drop),
+clamp pour ne jamais perdre la grille, retour a x1 = recentrage. La hover card et la resolution
+de drop passent deja par l espace ABSOLU (qui accumule les render transforms) : elles survivent.
+Limite connue : le pan ne se prend que sur le fond (les cellules mangent le clic gauche) ; si
+RzZz veut un pan partout, ce sera le bouton droit ou molette-pressee, decision a part.
+
+**Etat de verification** : build froid `Succeeded` (17 s), QATS unitaires lances en headless
+(verdict au moment de la redaction : en cours). PAS VU EN JEU : la passe est visuelle par nature,
+la validation finale est l oeil de RzZz en PIE (ouvrir le mur, verifier cellules, plaque, bilan,
+legende-lentille, catalogue, zoom, ET la non-regression du 2-clics + drag and drop + dock gadgets).
+
+**Retouches post-test en jeu (2026-08-29, RzZz : "tout fonctionne tres bien" + 2 defauts)** :
+(1) la section MODULES EN STOCK se faisait ecraser a ~40 px par les sections auto de la colonne
+(bilan + fiche) : elle vit desormais dans une SizeBox a hauteur FIXE 176 px (deux rangees de
+tuiles, ascenseur au-dela), inecrasable par construction ; (2) FAMILLES SUR LE MUR passait a une
+famille par ligne : repasse en UUniformGridPanel a DEUX colonnes compactes (police 8). Corps de
+fonctions uniquement (QMOD_BuildChrome, RefreshLegend) : patch applique par RzZz en Live Coding
+(cas autorise : aucun header, aucune reinstanciation ; la regle "jamais de Live Coding QModule"
+vise les changements de classes), PIE a relancer apres patch car le chrome se construit une fois
+par widget et l onglet est cache par le hub.
+
+**Retouche zoom (2026-08-29, video RzZz : la grille zoomee recouvrait tout l ecran)** : une
+RenderTransform IGNORE les bornes de layout et Slate ne clippe RIEN par defaut. Fix : la transform
+descend sur `Box_GridSizer` (l interieur) et `Box_GridScaler` (la zone cadree) passe en
+`SetClipping(ClipToBounds)` : le debordement du zoom est decoupe aux bords de la zone grille.
+La conversion pixel-ecran -> pan et le clamp passent sur la geometrie du sizer (meme espace que la
+translation). Corps de fonctions seulement ; le clip s applique a la CREATION du scaler, donc
+relance du PIE obligatoire apres le patch. Regle generale a retenir pour tout zoom UMG :
+transform sur l ENFANT, clip sur le PARENT qui definit la fenetre.
+
+**Retouches 2 (2026-08-29, meme session)** : (1) zoom ANCRE AU CURSEUR (le pivot centre ne
+permettait pas d aller voir un bord du mur) : Pan2 = R - (R - Pan1) x Z2/Z1 avec R = curseur
+exprime depuis le centre de zone en unites du sizer ; (2) la colonne du panneau droit debordait
+sous le cadre (la legende sortait de la fenetre, capture RzZz) : SidePanel en ClipToBounds + la
+colonne dans un ScrollBox a barre masquee (elle defile au lieu de deborder), bilan ramene a 8
+lignes ; (3) overlay catalogue clippe aussi (audit : les autres surfaces sont bornees par
+construction) ; (4) VOCABULAIRE JOUEUR : la section s appelle "TYPES SUR LE MUR" et le hint dit
+"type" (RzZz : "c est des types, pas des familles") ; "famille" reste un mot de CODE interne
+(tags Module.Family.*, FamilyColorsByTagName), ne pas renommer les identifiants.

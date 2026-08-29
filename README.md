@@ -52,6 +52,7 @@ Documentation d'architecture des plugins first-party de QANGA (UE5.7, plugins C+
 | FlyVehicleMovement | [FlyVehicleMovement_ARCHITECTURE](FlyVehicleMovement_ARCHITECTURE.md) | Mouvement de véhicule volant |
 | QTrain | [QTrain_ARCHITECTURE](QTrain_ARCHITECTURE.md) | Trains (sièges, handoff, spline) |
 | QBuilder | [QBuilder_ARCHITECTURE](QBuilder_ARCHITECTURE.md) | Système de construction/placement |
+| QModule | [Architecture](QMODULE_ARCHITECTURE.md) · [Catalogue](QMODULE_CATALOGUE.md) · [Loot](QMODULE_LOOT_ARCHITECTURE.md) · [Activation](QMODULE_ACTIVATION_ALIGNMENT.md) | Modules de construction (placement, activation, loot) |
 | QElevator | [QElevator_ARCHITECTURE](QElevator_ARCHITECTURE.md) | Ascenseur sur spline (état via QNetState) |
 | QCableConnector | [QCableConnector_ARCHITECTURE](QCableConnector_ARCHITECTURE.md) | Câbles physiques (solveur PBD) + connecteurs/sockets |
 | QTriggerZone | [QTriggerZone_ARCHITECTURE](QTriggerZone_ARCHITECTURE.md) | Zones de déclenchement (son/téléport/custom) |
@@ -63,7 +64,7 @@ Documentation d'architecture des plugins first-party de QANGA (UE5.7, plugins C+
 | Plugin | Doc | Résumé |
 |---|---|---|
 | QAmbientAudio | [QAmbientAudio_ARCHITECTURE](QAmbientAudio_ARCHITECTURE.md) | Ambiance audio réseau (pile de priorités, MetaSound, horloge serveur) |
-| QRadio | [QRADIO_ARCHITECTURE](QRADIO_ARCHITECTURE.md) · [Guide](QRADIO_GUIDE.md) | Stations radio locales par position |
+| QRadio | [Architecture](QRADIO_ARCHITECTURE.md) · [Guide](QRADIO_GUIDE.md) · [ICNews antenne](QRADIO_ICNEWS_ANTENNE.md) | Stations radio locales par position |
 | QMusic | [QMUSIC_ARCHITECTURE](QMUSIC_ARCHITECTURE.md) | Système de musique |
 
 ## UI & feedback
@@ -88,3 +89,26 @@ Documentation d'architecture des plugins first-party de QANGA (UE5.7, plugins C+
 | Doc | Résumé |
 |---|---|
 | [ModernCPP_UE57_RzZz_Guide](ModernCPP_UE57_RzZz_Guide.md) | Conventions C++ moderne UE5.7 |
+
+## Propositions & design
+
+| Doc | Résumé |
+|---|---|
+| [QSTORAGE_DESIGN_PROPOSAL](QSTORAGE_DESIGN_PROPOSAL.md) | Proposition de stockage persistant (containers, registry, autorisations) |
+| [QSTORAGE_TRANSFER_SCREEN](QSTORAGE_TRANSFER_SCREEN.md) | UI de transfert inter-storages |
+| [QSPACETRAFFIC_DESIGN_PROPOSAL](QSPACETRAFFIC_DESIGN_PROPOSAL.md) | Proposition de trafic spatial (routes interplanétaires) |
+
+## Documents de travail (audits, playtests, recherche, migrations)
+
+| Doc | Résumé |
+|---|---|
+| [BlueprintToCppMigration — Plan](BlueprintToCppMigration/BLUEPRINT_TO_CPP_MIGRATION_PLAN.md) | Plan global de migration Blueprint→C++ |
+| [— Weapon target acquisition](BlueprintToCppMigration/01_WEAPON_TARGET_ACQUISITION_MIGRATION.md) | Migration du ciblage d'armes |
+| [— Player interaction](BlueprintToCppMigration/02_PLAYER_INTERACTION_MIGRATION.md) | Migration des interactions joueur |
+| [— Character gravity](BlueprintToCppMigration/03_CHARACTER_GRAVITY_MIGRATION.md) | Migration de la gravité personnage |
+| [AUDIT_Warnings_Build_2026-07-24](AUDIT_Warnings_Build_2026-07-24.md) | Snapshot de l'audit des warnings de build (2026-07-24) |
+| [Todo: PlanetScape repair](Todo_prompts/PLANETSCAPE_REPAIR_TODO_PROMPT.md) | Brief de réparation PlanetScape |
+| [Playtest — Terpen prelive 2026-08-25](RetoursJoueurs/2026-08-25_Terpen_prelive.md) | Retours joueurs session Terpen |
+| [DreamerV3 — Brake collapse (recherche)](Rz_DreamerV3_Research/Rz_DreamerV3_Brake_Collapse_Research.md) | Notes de recherche sur l'effondrement du frein |
+| [DreamerV3 — Brake collapse (suite)](Rz_DreamerV3_Research/Rz_DreamerV3_Brake_Collapse_Research_2.md) | Suite de la recherche |
+| [DreamerV3 — Prompt de recherche adversariale](Rz_DreamerV3_Research/Prompts/QANGA_DreamerV3_Brake_Collapse_Adversarial_Research_Prompt.md) | Brief de recherche adversariale |
