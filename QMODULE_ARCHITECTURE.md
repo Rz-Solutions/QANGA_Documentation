@@ -2674,3 +2674,54 @@ lignes ; (3) overlay catalogue clippe aussi (audit : les autres surfaces sont bo
 construction) ; (4) VOCABULAIRE JOUEUR : la section s appelle "TYPES SUR LE MUR" et le hint dit
 "type" (RzZz : "c est des types, pas des familles") ; "famille" reste un mot de CODE interne
 (tags Module.Family.*, FamilyColorsByTagName), ne pas renommer les identifiants.
+
+**Cloture (2026-08-29 soir)** : zoom net (echelle de layout), NIV retire des cellules, types,
+clips et panneau defilant VALIDES EN JEU par RzZz ("c'est good"). La passe UX lots A-D est close.
+
+**Extension roue de gadgets (2026-08-29 soir, demande RzZz : "trop simpliste, pas alignee")** :
+les cellules de la roue (QModule_GadgetHUD.cpp, l unique site de creation dans RebuildWheel)
+adoptent la langue du mur : encoches LED (plus de triangle ni de NIV), remplissage famille calme
+(0.30 actif / 0.12 inactif, VOLONTAIREMENT plus soutenu que le 0.16 du mur : la roue flotte sur
+le monde 3D, pas sur un fond de menu), et le double cadre ambre signature des modules
+declenchables. L identite HUD validee 2026-08-13 est conservee telle quelle : contours orange
+GadgetHudCellColor, selection verte, decompte de cooldown (TextBlock dedie, pas Text_Sub).
+Build froid Succeeded. A valider a l oeil en jeu (roue ouverte + mode compact).
+
+**Roue de gadgets, passe 2 (2026-08-29 soir, retours captures RzZz)** : (1) BUG MESURE et corrige :
+le NativeTick des cooldowns ecrivait SetRenderOpacity(1.0) sur toute cellule prete A CHAQUE FRAME,
+ecrasant le grise de selection de SetHighlight ; c est LA raison du "tous la meme opacite tout le
+temps". Desormais l opacite est COMPOSEE (HighlightOpacity x cooldown), plus jamais ecrasee.
+(2) Logos BLANCS comme le mur (bTintIcon false) ; le grise general (non-selectionnes a 0.45) les
+rend gris naturellement. (3) NOUVELLE API cellule : QMOD_SetTopLed / QMOD_SetTopLedLit +
+TopLedColor : une LED (barre arrondie 16x4.5, halo par outline) dans la bande VIDE en haut de
+l hexagone ; ALLUMEE (vert GadgetHudSelectedColor plein + halo) sur la cellule selectionnee,
+la MEME LED eteinte (teinte a 16 pour cent, presence visible) sur les autres ; construite a la
+demande, le mur ne l active pas. (4) Panneau de feedback deja passe en recette HUD (cadre ambre
+alpha, sur-titre Medium 10 tracking 220 CAPITALES, corps Book #B5C5D4 ; "Regular" n existait pas
+dans la police et retombait en silence). Header cellule modifie -> build froid obligatoire.
+
+**Cloture roue (2026-08-30)** : LED de selection, logos blancs, grise 0.45, panneau DA et fix
+d opacite du tick VALIDES EN JEU par RzZz ("c'est nickel"). L alignement roue-mur est clos.
+
+### 15.33 Le message ZONE SURE (et tout message transitoire du reticule) etait devenu invisible (2026-08-31)
+
+**Symptome (RzZz + joueurs pre-live)** : en zone sure, un module actif refuse joue son BLIP mais
+n affiche plus "ZONE SURE" au reticule. **Fausse piste eliminee par mesure** : la detection de
+zone allait bien (la repro de RzZz etait dans L_Dev_Claude qui n a AUCUN volume ; les maps de dev
+avec zones : L_Dev_Start, L_ItemTest, L_TurretsTest, L_Dev_AI_ARENA).
+**Cause mesuree** (QModule_SReticle.cpp) : le fondu du COMMIT verrouillait le peintre. PlayCommit
+pose bCommitting=true et CommitAlpha decroit jusqu a 0... et y reste : seul PlayArm remettait
+bCommitting a false. ResolveToneColor multiplie l alpha par CommitAlpha quand bCommitting, et
+OnPaint sort a alpha nul. Donc DES LE PREMIER lancer de balise de la session, tous les messages
+transitoires suivants (ZONE SURE, RECHARGE, AUCUN MODULE ARME...) poussaient leur texte dans un
+reticule invisible, pendant que le blip (dans ShowTransientReticleMessage) jouait. Se "reparait"
+au prochain armement de designation, d ou le cote insaisissable.
+**Fix** : SetTone reveille un reticule dont le fondu est TERMINE (bCommitting && CommitAlpha~0
+-> bCommitting=false) ; un fondu en cours continue de fondre (le depart de balise garde sa
+gueule). Une poussee d etat = une intention d affichage.
+**Verifie aussi au passage** : verrou bBlockActiveModulesInSafeZone effectif (defaut true, zero
+override), perimetre des 8 modules OK, piege du pont confirme (ResolveGameWorld prend le monde
+SERVEUR en PIE dedie ; la mesure client passe par la console in-game). NOTE : les lignes
+volumes=/selfTest= de qmodule.Test.SafeZone decrites dans les notes du 20/08 n existent pas dans
+le source actuel. RESTE : valider le fix en jeu (lancer une balise PUIS provoquer un refus en
+zone : le message doit s afficher), et mesurer les zones des relais de l UNIVERS (streaming).

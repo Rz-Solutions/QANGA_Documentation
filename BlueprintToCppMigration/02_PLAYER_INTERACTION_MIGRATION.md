@@ -74,7 +74,7 @@ Elles ne refont ni trace, ni tri, ni occlusion, ni politique ALS/véhicule, ni m
 
 ### 2.4 État et autorité
 
-Le composant natif possède `PlayerController`, `PawnCache`, `ActiveInteractActor`, l'objet exact `ActiveInteractionTarget` ayant accepté `HasInteraction`, `InteractCustomTarget`, `DistanceDetection`, le résultat sit, le hit item et les valeurs hold. Un seul funnel compare ancien/nouveau focus, appelle `InteractLost` une fois sur chaque ancien actor/component/custom target distinct, remplace l'état puis notifie la façade de présentation. `GetInteractionDispatchTarget()` fournit à l'input l'unique cible à transmettre au RPC : custom target valide, sinon objet exact ayant accepté l'interaction.
+Le composant natif possède `PlayerController`, `PawnCache`, `ActiveInteractActor`, l'objet exact `ActiveInteractionTarget` ayant accepté `HasInteraction`, `InteractCustomTarget`, `DistanceDetection`, le résultat sit, le hit item et les valeurs hold. Un seul funnel compare ancien/nouveau focus, appelle `InteractLost` une fois sur chaque ancien actor/component/custom target distinct, remplace l'état puis notifie la façade de présentation. `GetInteractionDispatchTarget()` fournit à l'input l'unique cible à transmettre au RPC : custom target valide, sinon objet exact ayant accepté l'interaction, uniquement tant que cette cible exacte et son éventuel composant source obligatoire restent valides. Il ne retombe jamais sur l'actor de focus.
 
 `SV_Interact` conserve exactement son nom et ses paramètres pour les callers existants. Sur le serveur il :
 
@@ -242,6 +242,16 @@ Gates de release encore ouvertes, sans revendication prématurée :
 - Le contexte candidat porte désormais l'état de pilotage dérivé de l'identité entre le pawn possédé et le véhicule courant. Toute cible appartenant à cette hiérarchie est refusée pendant le pilotage actif, sans nom d'asset, tag ou exception locale.
 - La sortie explicite reste autorisée par son chemin d'input dédié. Les mêmes interactables restent disponibles pour un passager ou après avoir quitté le poste de pilotage, et une interaction monde sans lien avec le véhicule n'est pas masquée.
 - La détection locale, la rétention du focus et la revalidation serveur consomment toutes la même décision. La QATS d'éligibilité couvre le pilote, le passager, la sortie explicite et une interaction monde indépendante.
+
+### J6 sexies — Audit de parité packaged — défaut natif réparé, validation packaged ouverte
+
+- L'audit statique a trouvé une fenêtre de rétrogradation encore active dans `GetInteractionDispatchTarget()` : si l'objet exact ayant accepté l'interaction devenait invalide avant le poll natif suivant, le getter renvoyait `ActiveInteractActor`. Un sit socket pouvait aussi conserver l'actor alors que son composant source obligatoire avait disparu.
+- Le dispatch exige désormais que l'objet exact et, lorsque le candidat l'impose, son composant source physique soient encore valides. La cible custom ne gagne la priorité qu'après cette validation et aucun actor de focus n'est utilisé comme fallback. La QATS de résolution couvre la priorité custom, la cible exacte, la perte de l'objet exact et la perte du composant source obligatoire.
+- La source actuelle conserve un seul propriétaire de détection/focus et un seul funnel serveur : cadence de détection `30 Hz`, refresh ignore `1 Hz`, présentation événementielle, logs d'échec limités à `1 Hz`, tick uniquement sur le controller local, requête serveur reconstruite avec la même sélection, éligibilité et occlusion.
+- Le dernier exécutable Development disponible dans l'installation Steam date du `2026-08-28 18:58:38`. Son log confirme `Build Configuration: Development`, mais cet exécutable précède les commits tracker/prompt `90f0ba1e4` (`19:55:22`) et filtre pilote `0d57d4dc8` (`23:14:42`) : il ne peut pas valider ces corrections.
+- Ce log Development montre, entre `17:39:05.456` et `17:39:08.518`, un `W_TrackerElem` qui continue `WarpOcclusionUpdate` avec un `TrackerComponent` pending-kill. Le log ne contient pas l'identité métier du tracker ; cette trace prouve un défaut de cycle de vie dans cet ancien build, pas qu'il s'agit du prompt d'interaction actuel. Le même build signale aussi `FloorComponent` nul dans `BP_Elevator.SetInteractionEnabled`, hors du propriétaire natif interaction.
+- Le log Development Editor du `2026-08-26` contient les anciens refus `Driver` / `MiddleDoor` répétés et une release sans paire autorisée. Il précède les correctifs interaction concernés et sert uniquement de preuve historique du mécanisme. Les logs Editor du `2026-08-30` et le dernier log client local, Shipping du `2026-08-27`, ne contiennent pas d'événement `LogQPlayerInteraction`; leur silence ne prouve aucun scénario.
+- Un rebuild Development frais, puis les replays Editor et packaged de la matrice interaction restent obligatoires. Aucun build, test runtime, PIE, cook ou package n'a été exécuté pendant cet audit.
 
 ## 4. Critères de sortie
 
