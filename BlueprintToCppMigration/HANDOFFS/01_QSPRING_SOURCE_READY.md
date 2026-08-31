@@ -4,7 +4,7 @@ OWNED FILES CHANGED:
 - `Plugins/QSystem/Source/QSystem/Private/Component/QSpringArmComponent.cpp`
 - `Plugins/QAutomatedTestSuite/Source/QAutomatedTestSuite/Private/QSpringArmAutomationTests.cpp`
 - `Documentation/BlueprintToCppMigration/05_SPRING_ARM_MIGRATION.md`
-- `C:\Users\Rz\Desktop\QANGA_BP_CPP_PARALLEL\HANDOFFS\01_QSPRING_SOURCE_READY.md`
+- `Documentation/BlueprintToCppMigration/HANDOFFS/01_QSPRING_SOURCE_READY.md`
 EVIDENCE:
 - Inspection live read-only confirmée avant fermeture de l'Editor : `/Game/Systems/QSpringArm/QSpringArm_Component` reste un `SceneComponent` de `41` variables, `9` fonctions et `340` nœuds ; `Update` possède `117` nœuds ; `Whiskers_Update` produit `8 + 4x4` sweeps de moustaches et `3` pre-probes ; `Out_Location` garde exactement `FVector Location`, `bool ToNear`, `double NearAlpha`, `FRotator CameraRotation`.
 - Le chemin live distingue `Process_Z_Compensator`, qui tourne l'épaule avec le yaw local pawn, de `Whiskers_Update`, dont les pre-probes et la cible latérale consomment le right vector monde du composant. L'île pawn-local de `Whiskers_Update` et sa sortie Select sont déconnectées ; le natif ne les transcrit plus.

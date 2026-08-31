@@ -4,7 +4,7 @@ STATE: AUDIT_READY_WITH_ONE_SOURCE_GATE
 
 OWNED FILES CHANGED:
 
-- `C:\Users\Rz\Desktop\QANGA_BP_CPP_PARALLEL\HANDOFFS\02_CAMERA_SPRING_INTEGRATION_AUDIT.md`
+- `Documentation/BlueprintToCppMigration/HANDOFFS/02_CAMERA_SPRING_INTEGRATION_AUDIT.md`
 - No repository file, config, Build.cs, handoff owned by another worker, or Unreal asset was edited or saved.
 
 EVIDENCE:

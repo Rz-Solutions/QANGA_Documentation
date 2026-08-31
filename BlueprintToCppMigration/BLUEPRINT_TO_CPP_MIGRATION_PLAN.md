@@ -189,3 +189,35 @@ Le core `QWeapon` possède la cadence, les transactions ammo/reload, le transfor
 `QCombat` compile et sa suite source est verte à `6/6`, mais `/Game/Systems/Combat/CombatComponent` demeure l'autorité sérialisée partagée. Aucun adapter production ni reparent massif n'est revendiqué. Les heuristiques de compatibilité du sous-système balle restent donc nécessaires jusqu'à la reclassification transactionnelle des familles Combat ; elles seront supprimées avec l'ancien owner, pas avant.
 
 Le checkpoint froid courant compile aussi Win64 Shipping et Linux Shipping. Les Blueprints intégrés caméra, spring arm, nage, gravité et interaction recompilent sans diagnostic, et un smoke PIE `L_Dev_Rz` se ferme avec un Message Log à zéro warning/erreur. Les wrappers supprimés caméra, spring arm et nage, ainsi que `SM_CylinderCollision`, sont absents après cold load et ne figurent plus dans la seed EasyCook. Cela ferme le checkpoint d'intégration existant sans prétendre fermer les matrices réseau, restart ou package encore listées dans les documents système.
+
+## 13. Outillage RzDirectMCP livré avec la migration
+
+Les opérations d'authoring nécessaires à cette migration ont été corrigées à la source dans
+RzDirectMCP. Elles ne reposent plus sur des manipulations manuelles ou des états partiels :
+
+- `find_in_blueprints` décode maintenant les données FiB sur une file asynchrone bornée et retourne
+  explicitement un résultat paginé en attente ou une saturation, sans bloquer l'Editor dans une
+  conversion synchrone non interruptible ;
+- le reclassage d'un composant SCS conserve son identité, son template et sa hiérarchie, refuse les
+  sélecteurs ambigus ou incompatibles, compile avant sauvegarde et vérifie l'undo exact en cas
+  d'échec ; les batches de graphes appliquent le même contrat atomique pour la suppression de
+  fonctions et variables remplacées ;
+- les redirects générés par un reparent ne sont émis que si le membre natif cible existe réellement,
+  et l'ajout d'un `ClassRedirect` préserve strictement l'encodage UTF-16LE et tous les octets existants
+  du fichier de configuration ;
+- les acteurs placés dont la construction a conservé un ancien composant peuvent être reconstruits
+  dans une transaction bornée à la map demandée, avec validation des classes exactes, absence de
+  restes live et rollback avant toute sauvegarde ;
+- la seed EasyCook peut retirer une entrée de tableau par chemin de champ et valeur exacte avec un
+  contrat de cardinalité, sans matérialiser toute la seed en JSON ni lancer de rescan ;
+- les probes runtime exposent des propriétés réfléchies bornées et ne confondent plus `IsHiddenEd()`
+  avec l'état caché d'un actor dans un game world ; les recherches de chaînes GC sont filtrables et
+  paginées pour les audits de suppression ;
+- `compile_project` remonte explicitement les réinstanciations de types réfléchis qui imposent un
+  redémarrage avant PIE, `play_in_editor` refuse un Blueprint déjà en erreur avant de compiler les
+  autres packages dirty, et `save_asset` retourne la cause exacte lorsqu'une sauvegarde est demandée
+  pendant PIE/SIE.
+
+La lecture du Message Log, son retour automatique par `stop_pie` et la fermeture propre par
+`QUIT_EDITOR` étaient déjà intégrés dans RzDirectMCP avant ce checkpoint ; ils restent les primitives
+de validation et de redémarrage utilisées par les documents système ci-dessus.

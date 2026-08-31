@@ -36,7 +36,7 @@ The audit read:
 - every document under `Documentation/BlueprintToCppMigration`, including the central plan and documents 01 through 10;
 - the current dirty status and diffs;
 - recent migration-related commits, including `3bd272b02`, `49c84e75a`, `976971f95`, `495d08110`, `10d984fdc`, `90f0ba1e4`, `0d57d4dc8`, and `dc587c453`;
-- the ten root prompt files under `C:/Users/Rz/Desktop/QANGA_BP_CPP_PARALLEL`.
+- the ten parallel-worker reports now archived under `Documentation/BlueprintToCppMigration/HANDOFFS`.
 
 Other workers' handoff results were not used as audit evidence and this worker did not wait for them.
 

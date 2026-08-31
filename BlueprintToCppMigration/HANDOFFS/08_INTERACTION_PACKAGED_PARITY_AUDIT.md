@@ -5,7 +5,7 @@ OWNED FILES CHANGED:
 - `Plugins/QSystem/Source/QSystem/Private/Component/QPlayerControllerInteractComponent.cpp`
 - `Plugins/QAutomatedTestSuite/Source/QAutomatedTestSuite/Private/QPlayerControllerInteractionTests.cpp`
 - `Documentation/BlueprintToCppMigration/02_PLAYER_INTERACTION_MIGRATION.md`
-- `C:\Users\Rz\Desktop\QANGA_BP_CPP_PARALLEL\HANDOFFS\08_INTERACTION_PACKAGED_PARITY_AUDIT.md`
+- `Documentation/BlueprintToCppMigration/HANDOFFS/08_INTERACTION_PACKAGED_PARITY_AUDIT.md`
 
 EVIDENCE:
 - Latest installed packaged Development evidence is `C:\Program Files (x86)\Steam\steamapps\common\Qanga\Qanga\Saved\Logs\QANGA.log`. It identifies `Build Configuration: Development` and the installed binary; `Qanga.exe` is dated `2026-08-28 18:58:38`.
