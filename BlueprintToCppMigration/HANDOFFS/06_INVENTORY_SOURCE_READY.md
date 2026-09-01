@@ -1,10 +1,24 @@
-STATE: SOURCE_READY
+STATE: SOURCE_VERIFIED_INTEGRATION_NOT_STARTED
 
 # Inventory source handoff
 
 ## Delivered boundary
 
-`QInventory` is now the neutral native gameplay Inventory core. It is deliberately disabled by default until Prompt 09 adds the project/dependency integration. It depends only on `Core` and `CoreUObject`; there is no QStorage, QModule, DynamicQuestSystem, DataManager, QBuilder, QWeapon, UI, or presentation dependency.
+`QInventory` is the neutral native gameplay Inventory core. The production `InventoryComponent_C` still owns live gameplay; this checkpoint intentionally stops before the first adapter/reparent so the tree contains no half-wired Inventory path. The core remains independent from QStorage, QModule, DynamicQuestSystem, DataManager, QBuilder, QWeapon, UI, and presentation modules.
+
+## Current checkpoint delta
+
+- Endpoint reconciliation is a strict locked compare-and-swap with explicit expected content version, exact metadata/identity validation, one-way read-only state, single version/generation increment on change, no-op preservation, overflow rejection, and byte-semantic state preservation on every failure.
+- `Capacity` means bag slots only. Bag records use a concrete unique `[0, Capacity)` slot and no equipment key; equipped records use `SlotIndex == -1` plus a unique non-empty equipment key. Equipped records do not consume bag capacity, while total root records remain bounded to the schema-v1 limit of `4096`.
+- Moving an equipped source record clears its equipment assignment and installs the same complete record into the target bag slot.
+- The neutral durability journal and QStorage generation/drain integration remain source-only from the production Inventory point of view.
+- DataManager now owns the bounded synchronous TempDB row capture/write/flush/raw-reload/readback/rollback primitive. Offline Tutorial consumes it and no longer carries a second reflection/save implementation.
+- Live signatures captured for the next adapter are `TryMoveItemToAnotherInventory(Source, Target, Item, WorldContext) -> bool` plus reliable server events `SV_MoveItemToVault(ItemId)`, `SV_MoveItemToInventory(ItemId)`, `SV_InventoryToVehicle(ItemId, VehicleInventory)`, and `SV_VehicleToInventory(ItemId, VehicleInventory)`.
+- Cold Editor build is green. QATS are green at Inventory `35/35`, QStorage `11/11`, DataManager `4/4`, Offline Tutorial `5/5`, and Combat `16/16`.
+
+## Exact next resume boundary
+
+Create the first live Inventory integration owner around one stable endpoint per `InventoryComponent_C`. Materialize bag and equipment from their distinct authoritative legacy maps, reconcile through the strict endpoint CAS, resolve both endpoints and access server-side, and route only the four transfer RPCs through the typed transaction/journal boundary. Do not start another Inventory writer in parallel. Delete the old remove/recreate graph only after the same-instance transfer, rollback, network-race, restart, and packaged gates pass.
 
 Implemented source behavior:
 
@@ -19,7 +33,7 @@ Implemented source behavior:
 - any begin/remove/add/finalize/postcondition failure invokes adapter rollback and restores both native endpoint snapshots under the same locks. Rollback failure is a distinct terminal result;
 - no logging, reflection, fallback path, dead implementation, asset dependency, or presentation behavior in the core.
 
-The codec and transaction do not claim live persistence or Blueprint integration. Durable two-endpoint journaling remains an adapter/coordinator requirement below.
+The codec, reconciliation, transaction, durability coordinator, QStorage seam, and DataManager durable-row primitive do not claim live Inventory Blueprint integration. The production adapter and its runtime/network/restart gates remain below.
 
 ## Exact owned files
 
@@ -44,7 +58,9 @@ No other source, module, config, asset, plan, or consumer file was edited by thi
 
 ## QATS source coverage
 
-The isolated source declares:
+The current suite declares 35 `QATS.QInventory.*` tests, including the original transfer/codec cases plus strict reconciliation, bag/equipment semantics, and the durability journal. The focused checkpoint also covers 11 QStorage tests, 4 DataManager tests, and 5 Offline Tutorial contract tests.
+
+The original source list included:
 
 - `QATS.QInventory.Transfer.SuccessPreservesCompleteRecord`
 - `QATS.QInventory.Transfer.AuthorityAndReadOnlyBoundaries`
@@ -58,7 +74,7 @@ The isolated source declares:
 - `QATS.QInventory.Persistence.DeterministicRoundTrip`
 - `QATS.QInventory.Persistence.MalformedRecordsFailClosed`
 
-The failure backend deliberately mutates source/target state before returning false, and the test checks exact snapshot restoration plus adapter rollback invocation. Tests are source only and were not run.
+The failure backend deliberately mutates source/target state before returning false, and the tests check exact snapshot restoration plus adapter rollback invocation. All current focused suites listed above were run from the cold-built Editor.
 
 ## Exact Prompt 09 integration requests
 
@@ -127,10 +143,9 @@ The failure backend deliberately mutates source/target state before returning fa
 
 ## Verification state
 
-- No compile, UHT, QATS, Editor/PIE command, asset mutation, cook, package, EasyCook rescan, stage, or commit was performed by this lane.
-- An independently launched parallel `QangaEditor` build discovered the new plugin twice while this lane was active. Its generated plugin artifacts were not used as validation and were moved recoverably to `Saved/Prompt06Generated/QInventory-*-20260830` and `Saved/Prompt06Generated/QInventory-*-20260830-2306-external`; `Plugins/QInventory` is source-only again.
-- Static review used the current UE headers for critical-section/scope-lock, UTF conversion, CRC, container, and automation APIs.
-- Focused whitespace checks cover every owned source/document/handoff file.
-- While the Editor was still open, an independent parallel build detected the newly created plugin and produced generated `Binaries/Intermediate` output. Those outputs were not treated as validation, the plugin was set `EnabledByDefault=false`, and the generated directories were moved recoverably to `Saved/Prompt06Generated/` so only source remains in the owned plugin tree.
+- Full cold `QangaEditor Win64 Development` build completed successfully after UHT processed the new reflected contracts.
+- `QATS.QInventory.*` `35/35`, `QATS.QStorage.*` `11/11`, `QATS.DataManager.*` `4/4`, `QATS.Quest.OfflineTutorial*` `5/5`, and `QATS.QCombat.*` `16/16` completed with zero failure.
+- Both independent static reviews of endpoint reconciliation and bag/equipment semantics reported no finding.
+- No Inventory asset was reparented, stripped, or saved; no PIE, cook, package, or EasyCook rescan was run.
 
-This is source-ready only. It does not claim live adapter integration, Blueprint parity, network parity, or durable persistence parity.
+This is a verified source checkpoint. It does not claim live Inventory adapter integration, network parity, process-restart parity, or packaged parity.

@@ -1,6 +1,29 @@
-STATE: SOURCE_READY
+STATE: INTEGRATED_STANDALONE_VALIDATED
 
-# Combat source handoff
+# Combat integration handoff
+
+## Current checkpoint
+
+- `/Game/Systems/Combat/CombatComponent` is reparented to `UQCombatComponent`; the native component is the sole owner of life, alive/dead, faction, mode, target and damage provenance.
+- Superseded Blueprint state and mutation logic is removed. The wrapper keeps only presentation, reward, drop and downstream notification seams.
+- The directly affected character, static-NPC, match and QAI-spawn-zone consumers compile against the native type. The QAI death map and delegate signature use `UQCombatComponent`.
+- The wrapper CDO authors `PvEAndPvP` and a valid server-kill damage type. A cold restart proved inherited component templates receive those defaults without repairing every level or character asset.
+- The infected animation Blueprint was refreshed and saved so its Combat-state delegate binding cold-loads cleanly.
+- `QATS.QCombat.*` passes `16/16`. The complete `/Game` Blueprint sweep passes `4706/4706` with zero compile warnings, errors or load failures.
+- Standalone `L_Dev_Rz` proved authoritative non-lethal mutation/reset and lethal server-kill/revive against production components. PIE ended with zero Message Log warnings or errors.
+- Listen-server, dedicated-server, packaged Development and packaged Shipping parity remain open. No claim in this handoff closes those gates.
+
+## Reparent contract retry2 corrections
+
+The retry2 pass corrected the reparent contract on `QCombatComponent.h/.cpp` and `QCombat.Build.cs` only:
+
+- Removed the unproven stat-driven alternate owner (`FQCombatStatProjection`, `ProjectStatLife`, `ClearStatDriven`, `IsStatDriven`, `bStatDriven`, AnyDamage early return). `FQCombatReplicatedState` remains the sole life owner and `OnTakeAnyDamage` the only mutation entry.
+- Removed the unproven `EQCombatDamageClassification` enum, `ClassifyDamage` function, and `Classification` field. Obituary classification stays an adapter concern.
+- Replaced the Combat-only `ReceiveTargetedByChanged` notification with the real QWeapon owner. `DispatchCommittedState` calls `RemoveTargetedBy(Owner)` on the old target's `UQWeaponTargetingComponent` and `NotifyTargetedBy(Owner)` on the new target's component on authority, before `ReceiveTargetChangedBookkeeping`.
+- Authority `EndPlay` removes the owner from its current target's `UQWeaponTargetingComponent` targeted-by set before unregistering.
+- `QCombat.Build.cs` adds `GameplayTags` as a public dependency for `FGameplayTag` usage in the component header.
+- No build/test/RzMCP/Editor/PIE/assets/stage/commit performed.
+- `git diff --check` clean (normal Windows CRLF warnings only).
 
 ## Delivered source boundary
 
@@ -38,7 +61,7 @@ The source retains temporary Blueprint adapter names only. It does not reparent 
 
 The plugin-local `.gitignore` excludes only QCombat `Binaries/` and `Intermediate/`. A concurrently running Editor process generated/loaded a QCombat DLL while the source was being written; no generated output belongs in the handoff.
 
-## Prompt 09 integration requests
+## Production integration contract
 
 ### Dependency wiring, no cycles
 
@@ -94,7 +117,7 @@ The plugin-local `.gitignore` excludes only QCombat `Binaries/` and `Intermediat
 
 The file was added but not built or run in Prompt 07.
 
-## Exact Prompt 09 validation gates
+## Remaining production validation gates
 
 ### Static/build
 
@@ -131,4 +154,4 @@ The file was added but not built or run in Prompt 07.
 
 ## Verification status
 
-Prompt 07 performed source/API/include/non-unity inspection and focused whitespace review only. It did not compile, run automation, control PIE, mutate assets, cook, package or validate runtime/network parity.
+The source and Blueprint ownership transfer, cold asset defaults, full Blueprint compile, focused QATS and Standalone smoke behavior are verified at this checkpoint. The listen-server, dedicated-server and packaged matrices above remain required. Retained death/reward/drop/quest/presentation consumers also need explicit exactly-once gameplay observation during those matrices before Combat is declared fully migrated.

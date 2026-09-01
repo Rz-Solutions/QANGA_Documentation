@@ -2,7 +2,7 @@
 
 ## Status, scope and ownership
 
-This document freezes the audited Combat baseline and the source contract for Prompt 07. The first native vertical is deliberately limited to life, damage acceptance, the alive/dead transition, faction and combat permission, and immutable worker-safe publication.
+This document records the audited Combat baseline, native contract and current production-integration checkpoint. The native vertical owns life, damage acceptance, the alive/dead transition, faction and combat permission, and immutable worker-safe publication.
 
 - Native owner: a new runtime plugin, `QCombat`.
 - Runtime state owner: `UQCombatComponent`.
@@ -14,7 +14,17 @@ This document freezes the audited Combat baseline and the source contract for Pr
 - Drops, rewards, spawners, quest notifications, death FX, ragdolls, audio, obituary text and presentation remain downstream consumers.
 - Vehicle, turret and remaining legacy damage paths are P2 consumers. They are not modified in this lane.
 
-Phase 2 remains source-only in production ownership. The native module compiles and `QATS.QCombat.*` is green at `6/6`, but it does not reparent `CombatComponent_C`, edit its Blueprint graphs, integrate QAI/QPolice/QModule callers, or claim runtime parity.
+The production wrapper is now reparented to `UQCombatComponent`. Native life/faction/mode/target/provenance state and mutation are the live owner; the wrapper retains only presentation, reward, drop and downstream notification seams. The affected Blueprint consumers compile against the native component type, including the QAI death map. The wrapper-authored Combat mode and server-kill damage type are valid after a cold Editor restart.
+
+Current validation is deliberately bounded: `QATS.QCombat.*` passes `16/16`, the complete `/Game` Blueprint sweep passes `4706/4706` with no compile warning, error or load failure, and a Standalone `L_Dev_Rz` run proved authoritative non-lethal damage, reset, lethal server kill and revive with a clean PIE Message Log. Listen-server, dedicated-server and packaged Development/Shipping parity remain open and are not implied by this checkpoint.
+
+### Reparent contract corrections (retry2)
+
+The retry2 pass corrected the reparent contract to use the real QWeapon owner for targeted-by bookkeeping:
+
+- **Authority targeted-by routing through QWeapon**: `DispatchCommittedState` calls `RemoveTargetedBy(Owner)` on the old target's `UQWeaponTargetingComponent` and `NotifyTargetedBy(Owner)` on the new target's component when the replicated target changes on authority. This runs before `ReceiveTargetChangedBookkeeping` so deferred mutations do not publish premature side effects. No second targeted-by store or event is created in QCombat.
+- **Authority EndPlay teardown**: when the owner has authority and a valid `CurrentTarget`, `EndPlay` removes the owner from the target's `UQWeaponTargetingComponent` targeted-by set before unregistering the provider.
+- **Reentrancy preserved**: no targeted-by side effect fires before the state actually commits. The target transition is observed inside `DispatchCommittedState`, which runs only after `CommitComponentState` has written the new state.
 
 ## Evidence inspected
 
@@ -297,24 +307,23 @@ QGameManager     QWeapon
 
 ## Staged cleanup
 
-### P0 source boundary, this lane
+### P0 source boundary, completed
 
 - Add QCombat types, pure policy, atomic component, single damage funnel and immutable snapshot value model.
 - Add one isolated QATS Combat source.
 - Add this contract and Prompt 07 handoffs.
 - Do not modify any live consumer or shared build/config file.
 
-### P1 Prompt 09 integration
+### P1 production integration
 
-1. Add QCombat to the project/plugin dependency graph and add QCombat/QWeapon direct dependencies to QATS.
-2. Reparent `CombatComponent_C` to `UQCombatComponent` transactionally. Migrate authored max life, faction, mode, player ownership and inclusive tags.
-3. Remove the Blueprint runtime life/faction/mode/target/provenance variables and mutation graphs after each consumer is rewired. Never retain a parallel physical-stat current-life owner.
-4. Replace QWeapon transitional policy fall-throughs with the native provider verdict while preserving registry, targeting and bullet ownership.
-5. Add a narrow QWeapon roster-view contract exposing its existing stable IDs, topology generation and game-thread resolver without adding a new registry. Convert QAI pre/parallel/post processing to one immutable QCombat snapshot and QWeapon-owned game-thread ID resolution/target commit.
-6. Make QPolice push police/wanted/player-or-driver facts on the game thread and update them on wanted/possession/vehicle transitions. Keep wanted cooldown/points/decay in QPolice.
-7. Bind drops, rewards, QAI/spawner notifications, trackers, quest kills, ragdoll, obituary classification and presentation to the committed native transition. Preserve their current exactly-once side effects.
-8. Replace reflected health reads/writes in QAI/QModule/recruitment/medical-drone code with typed Combat APIs.
-9. Keep server AI on `ApplyPointDamage`; delete remaining `ClientRequestDamage` AI routing as each caller moves.
+- QCombat and its direct QATS/QWeapon dependencies are wired into the project/plugin graph.
+- `CombatComponent_C` is transactionally reparented to `UQCombatComponent`; authored max life, faction, mode, player ownership, inclusive tags and server-kill damage type are native defaults.
+- The superseded Blueprint runtime state and mutation graphs are removed. Retained Blueprint fields are limited to death presentation, rewards, drops and downstream payloads.
+- Character, static-NPC, match and QAI-spawn-zone consumers use the native component contract. The QAI death map and delegate parameter are typed as `UQCombatComponent`.
+- Production reads of life/alive use typed native functions; no writable mirrored health compatibility state was added.
+- The saved infected animation Blueprint was refreshed so its Combat-state delegate binding cold-loads without stale compiler errors.
+
+The remaining P1 proof is runtime rather than another ownership layer: exercise the retained death/reward/drop/quest consumers and the permission matrix on actual actors, then close the listen-server, dedicated-server and packaged gates below. Any consumer found outside the typed funnel must be migrated and its superseded path deleted before this phase is declared complete.
 
 ### P2 consumers
 
@@ -340,18 +349,17 @@ QGameManager     QWeapon
 - immutable old snapshot after new publication, monotonic version, topology generation, duplicate/invalid-record rejection;
 - QWeapon provider registration/unregistration and caller-owned Combat snapshot lifecycle in a scratch world.
 
-The test source requires direct `QCombat` and `QWeapon` dependencies in `QAutomatedTestSuite.Build.cs` and matching plugin entries. The central integration retains that wiring, compiles the module in Editor and both Shipping targets, and passes all six source-contract tests. This proves the dormant native core only, not Blueprint ownership transfer.
+The test source has direct `QCombat` and `QWeapon` dependencies in `QAutomatedTestSuite.Build.cs` and matching plugin entries. The integrated suite currently passes `16/16`, including the committed-state bridge and the authored wrapper-default contract. This proves the native state/policy/funnel and the Standalone asset bridge; it does not replace the remaining network and packaged gates.
 
 ## Prompt 09 hard gates
 
-The isolated source compile and QATS gates are closed. After adapter and asset integration, the remaining production gates are:
+The source, asset integration, full Blueprint compile, focused QATS and Standalone smoke gates are closed. The remaining production gates are:
 
 ### Static/build
 
-- non-unity Win64 Editor compile;
 - Linux server compile to preserve the meshless server boundary;
-- focused `QATS.QCombat.*` tests;
-- Blueprint compile/preflight after reparent with no duplicate native/Blueprint variables or functions.
+- packaged Development and Shipping compile/load validation;
+- cold-load Blueprint preflight after any further Combat asset edit, with no duplicate native/Blueprint variables or functions.
 
 ### Standalone
 
@@ -394,4 +402,4 @@ Prompt 07 owns only:
 - `Plugins/QAutomatedTestSuite/Source/QAutomatedTestSuite/Private/QCombatAutomationTests.cpp`;
 - this document and Prompt 07 handoffs.
 
-Everything else is an explicit Prompt 09 or P2 integration request.
+The current integration additionally owns the wrapper asset, its directly affected Blueprint consumers, the committed-state bridge tests and the dependency/config changes needed to make the native owner live. P2 consumers remain explicitly outside this checkpoint until their typed path and runtime proof are complete.

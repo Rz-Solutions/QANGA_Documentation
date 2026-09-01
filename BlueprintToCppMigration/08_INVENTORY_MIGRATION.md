@@ -2,13 +2,13 @@
 
 ## Status and scope
 
-This document freezes the Inventory audit baseline and the native contract that must exist before any Blueprint consumer is rewired. The first source vertical is deliberately narrow:
+This document freezes the Inventory audit baseline and the native contract that must exist before any Blueprint consumer is rewired. The current checkpoint closes the native source boundary without starting a partially wired production adapter:
 
-- `QInventory` owns the gameplay item record, semantic validation, versioned codec, endpoint state, and one atomic whole-record transfer funnel.
+- `QInventory` owns the gameplay item record, semantic validation, versioned codec, endpoint state, strict compare-and-swap reconciliation, one atomic whole-record transfer funnel, and the neutral two-endpoint durability journal.
 - `InventoryComponent_C` remains in production. It is adapted incrementally; it is not rewritten wholesale.
 - `QStorage` remains the persistence mechanism for local containers. It is not the gameplay Inventory authority.
-- `ItemsManagerGS_C` and the DataManager assets remain downstream identity/materialization and legacy persistence consumers until the native record and mutation contract are integrated and proven.
-- This phase does not edit Blueprint assets, QStorage, QModule, DynamicQuestSystem, QATS module dependencies, project configuration, or the migration plan.
+- `ItemsManagerGS_C` remains a downstream identity/materialization consumer. DataManager now exposes the bounded synchronous durable-row primitive used by the tutorial handoff, but remains a persistence consumer rather than an Inventory mutation owner.
+- `InventoryComponent_C` and its four reliable server RPCs were inspected live; no Inventory Blueprint asset was rewired in this checkpoint.
 
 The source phase is not integration parity. No existing gameplay caller reaches `QInventory` until the adapter work listed below is completed.
 
@@ -155,12 +155,12 @@ The validator rejects the complete state when any invariant fails:
 2. inventory, root item, and attachment GUIDs are valid;
 3. ItemData keys and owners are not `None`;
 4. stacks are positive and rarity is in `[0, 255]`;
-5. root inventory slots are in `[0, Capacity)` and unique; non-empty equipment-slot keys are also unique;
+5. bag records have an empty equipment key and a unique slot in `[0, Capacity)`; equipped records have a non-empty unique equipment key and `SlotIndex == -1`;
 6. attachment mount keys are non-empty;
 7. no root or attachment identity appears twice, and an item cannot attach itself;
 8. customization and extension keys are non-empty and remain within codec limits;
 9. capacity, content version, and persistence generation are valid and incrementable;
-10. the number of root records does not exceed capacity;
+10. bag record count does not exceed bag capacity; equipped records do not consume bag slots, while all root records remain bounded by the schema-v1 maximum of `4096`;
 11. `bValid` is true for every accepted item and attachment.
 
 Malformed or semantically invalid decoded data is never partially installed. The caller retains the last valid snapshot and marks the affected persistence segment/endpoint read-only. Mutation then returns an explicit read-only result.
@@ -224,7 +224,9 @@ The QStorage/DataManager adapter is a later integration owner and must obey thes
 - registration/unregistration must verify both stable identity and live actor/adapter identity;
 - enabled QStorage identity resolution must fail explicitly if the GUID cannot be created/resolved; it must not fall back to `BuilderID` or another ordinal.
 
-The QStorage integration source now adds complete `FQInventoryCodec` endpoint records, exact GUID/actor/adapter registration, expected content versions, persistence generations, ordered async ownership, shutdown draining and a neutral journal interface. It preserves the legacy crate path independently instead of projecting native records through `FQST_ItemStack`. Every queued endpoint generation, including generation zero, keeps its exact segment revision and serialized state until completion. Completion callbacks are resolved from detached records rather than while iterating their owning maps. Missing `Contents` for a live record freezes the whole segment read-only instead of writing an empty destructive replacement. Synchronous drain propagates failures, isolates failed segments, continues every ordered generation on healthy segments, and shutdown explicitly abandons prepares that never entered the writer. No production Inventory adapter calls this boundary yet, and the neutral two-endpoint coordinator is still absent.
+The QStorage integration source now adds complete `FQInventoryCodec` endpoint records, exact GUID/actor/adapter registration, expected content versions, persistence generations, ordered async ownership, shutdown draining and a neutral journal interface. It preserves the legacy crate path independently instead of projecting native records through `FQST_ItemStack`. Every queued endpoint generation, including generation zero, keeps its exact segment revision and serialized state until completion. Completion callbacks are resolved from detached records rather than while iterating their owning maps. Missing `Contents` for a live record freezes the whole segment read-only instead of writing an empty destructive replacement. Synchronous drain propagates failures, isolates failed segments, continues every ordered generation on healthy segments, and shutdown explicitly abandons prepares that never entered the writer. The neutral two-endpoint coordinator is implemented by `FQInventoryDurabilityCoordinator`; no production Inventory adapter calls it yet.
+
+DataManager now owns one native, game-thread-only durable row bridge for the existing TempDB save object. It validates the exact backend/context identity, bounds record and line counts plus aggregate text before allocation, distinguishes found/not-found/error reads, captures the exact in-memory rows, writes and synchronously flushes the save slot, reloads through the low-level save-game system, and accepts only an order-independent exact encoded-row readback. Any failure restores and verifies the original rows. The Offline Tutorial subsystem consumes this primitive and its duplicate reflection/save/readback implementation has been removed. Online or non-TempDB contexts are rejected explicitly; this bridge is not a second Inventory owner.
 
 ## Staged Blueprint and consumer cleanup
 
@@ -261,7 +263,7 @@ The QStorage integration source now adds complete `FQInventoryCodec` endpoint re
 
 ## Verification gates for integration owner
 
-The central integration now retains the direct QATS `QInventory` dependency. The cold Editor build passes, as do `12/12` `QATS.QInventory.*` and `11/11` `QATS.QStorage.*` with zero test failure. This validates the isolated record, codec, validation, locking, transaction and rollback core, synchronous re-entrant backend reads, exact endpoint generations, fail-closed incomplete snapshots, ordered multi-segment drain, shutdown failure propagation and prepare abandonment. It does not validate crash interruption during physical file rotation, the absent neutral two-endpoint coordinator, production adapters or process-restart recovery; every network/runtime and live restart gate below remains open.
+The central integration retains direct QATS dependencies on `QInventory`, `QStorage`, and DataManager. On 2026-09-01 the cold-built Editor executed `35/35` `QATS.QInventory.*`, `11/11` `QATS.QStorage.*`, `4/4` `QATS.DataManager.*`, and `5/5` `QATS.Quest.OfflineTutorial*` with zero failure. This validates the isolated record, bag/equipment separation, strict endpoint reconciliation, codec, locking, transaction and rollback core, synchronous re-entrant reads, durable journal coordinator, exact endpoint generations, fail-closed incomplete snapshots, ordered drain, shutdown failure propagation, bounded TempDB durable write/readback/rollback, and the tutorial consumer contract. It does not validate crash interruption during physical file rotation, a production Inventory adapter, network parity, or process-restart recovery; those gates remain open.
 
 ### Hard QATS
 
