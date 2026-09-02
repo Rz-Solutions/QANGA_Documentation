@@ -16,7 +16,7 @@ This document records the audited Combat baseline, native contract and current p
 
 The production wrapper is now reparented to `UQCombatComponent`. Native life/faction/mode/target/provenance state and mutation are the live owner; the wrapper retains only presentation, reward, drop and downstream notification seams. The affected Blueprint consumers compile against the native component type, including the QAI death map. The wrapper-authored Combat mode and server-kill damage type are valid after a cold Editor restart.
 
-Current validation is deliberately bounded: `QATS.QCombat.*` passes `16/16`, the complete `/Game` Blueprint sweep passes `4706/4706` with no compile warning, error or load failure, and a Standalone `L_Dev_Rz` run proved authoritative non-lethal damage, reset, lethal server kill and revive with a clean PIE Message Log. Listen-server, dedicated-server and packaged Development/Shipping parity remain open and are not implied by this checkpoint.
+Current validation is deliberately bounded: `QATS.QCombat.*` passes `22/22`, the complete `/Game` Blueprint sweep passes `4706/4706` with no compile warning, error or load failure, and a Standalone `L_Dev_Rz` run proved authoritative non-lethal damage, reset, lethal server kill and revive with a clean PIE Message Log. The later melee correction also passes a cold build and clean compilation of the character plus both animation Blueprints. Player-visible melee behavior, listen-server, dedicated-server and packaged Development/Shipping parity remain open and are not implied by this checkpoint.
 
 ### Reparent contract corrections (retry2)
 
@@ -226,6 +226,18 @@ The acceptance decision verifies game thread, authority, initialization, finite 
 
 `ApplyPointDamage` remains the common Unreal entry for QWeapon, QAI and direct gameplay during transition. The component does not call `Lib_Combat.ClientRequestDamage` and does not introduce a second RPC damage route.
 
+### Native melee spatial and damage path
+
+`UQMeleeTraceComponent` is the production melee owner on `ALS_Base_CharacterBP`. It polls only while a damage window is active, at exactly `20 Hz`. A poll sweeps one capsule fitted to the animated weapon's longest local axis, enlarged by `45 cm` radially and `40 cm` along its ends; the unarmed path fits the same shape contract to the right forearm/hand segment. Hidden interpolation substeps prevent tunnelling, while debug mode draws exactly one capsule per real poll. Aim pitch is resolved in the character's gravity-relative frame so upward and downward attacks move the physical check with the animation.
+
+The nine live melee montages emit their `Damage` notify at `0.10 s`. A montage-driven window opens at that notify, closes at montage end and can never exceed `1.0 s`; an expired window cannot perform a late poll. Montage asset plus engine montage-instance ID define one logical swing. Repeated notifies, explicit stop calls and duplicate start requests for that same playback cannot reopen the window, advance its sequence or clear its target set. The authority record independently refuses overlapping begin RPCs and keeps its own per-sequence target set, so one actor can receive at most one point-damage application per swing.
+
+Only registered blocking primitive contacts produce feedback or a damage submission. Their original `FHitResult` keeps the physical material used by the authored solid/glass impact feedback. Targets with QCombat pass through the native permission and damage funnel; actors without QCombat still receive the standard Unreal point-damage event required by grates and other destructibles. Trigger volumes and overlap-only helpers are not treated as melee impacts.
+
+Damage selection also follows the item presentation state. Only a valid active `WeaponScript` whose item is currently visible contributes its authored damage; a missing, hidden or non-weapon active item uses the unarmed base of `8` before QModule modifiers. This prevents a holstered melee weapon from leaking its damage into a punch while preserving the authored value as soon as that weapon is drawn.
+
+Statless actors now initialize alive at the full authored `LifeWhenNoStat` pool rather than a stale serialized `CurrentLife` placeholder. The explicit persisted-stat import remains the sole later override for saved current/max life, so a boss authored as `500` starts at `500/500` instead of `100/500`.
+
 ### Notifications and temporary Blueprint seams
 
 Native detailed delegates are emitted after a committed transition. Exact temporary Blueprint-facing dispatchers retain the existing `OnDamaged`, `OnDeath`, `OnAlive`, `OnFactionUpdate` and `CombatStateUpdate` names with the component parameter. They are post-commit adapter seams only; policy, damage decisions and worker reads contain no property-name lookup, `FindFunction` or manual `ProcessEvent`.
@@ -347,9 +359,11 @@ The remaining P1 proof is runtime rather than another ownership layer: exercise 
 - compound state validation/revision and rollback-by-no-commit;
 - public versus owner-only replication field decisions;
 - immutable old snapshot after new publication, monotonic version, topology generation, duplicate/invalid-record rejection;
-- QWeapon provider registration/unregistration and caller-owned Combat snapshot lifecycle in a scratch world.
+- QWeapon provider registration/unregistration and caller-owned Combat snapshot lifecycle in a scratch world;
+- melee capsule fitting, motion substeps, gravity-relative aim pitch, validation, montage-bounded windows and montage-instance identity;
+- statless world initialization at authored maximum life followed by an explicit persisted-stat override.
 
-The test source has direct `QCombat` and `QWeapon` dependencies in `QAutomatedTestSuite.Build.cs` and matching plugin entries. The integrated suite currently passes `16/16`, including the committed-state bridge and the authored wrapper-default contract. This proves the native state/policy/funnel and the Standalone asset bridge; it does not replace the remaining network and packaged gates.
+The test source has direct `QCombat` and `QWeapon` dependencies in `QAutomatedTestSuite.Build.cs` and matching plugin entries. The integrated suite currently passes `22/22`, including all five focused melee tests, statless initialization, the committed-state bridge and the authored wrapper-default contract. This proves the native state/policy/funnel and static melee invariants; it does not replace the remaining player-visible, network and packaged gates.
 
 ## Prompt 09 hard gates
 
@@ -368,6 +382,7 @@ The source, asset integration, full Blueprint compile, focused QATS and Standalo
 - reset/revive clears private provenance and emits one alive transition;
 - every faction/PvE/PvP/inclusive/safe-area/wanted/police case against actual Blueprint actors;
 - direct, radial and self ordnance paths; drops/rewards/quests/spawner reactions exactly once.
+- armed and unarmed melee against AI, bosses, grates and non-destructible solid/glass surfaces, including upward/downward aim, one-hit-per-swing and debug-draw/poll correspondence.
 
 ### Listen server plus one client
 
@@ -397,9 +412,11 @@ Prompt 07 owns only:
 - `Plugins/QCombat/Source/QCombat/Public/QCombatTypes.h`;
 - `Plugins/QCombat/Source/QCombat/Public/QCombatPolicy.h`;
 - `Plugins/QCombat/Source/QCombat/Public/QCombatComponent.h`;
+- `Plugins/QCombat/Source/QCombat/Public/QMeleeTraceComponent.h`;
 - `Plugins/QCombat/Source/QCombat/Public/QCombatSnapshot.h`;
 - matching private `.cpp` files;
 - `Plugins/QAutomatedTestSuite/Source/QAutomatedTestSuite/Private/QCombatAutomationTests.cpp`;
+- `Plugins/QAutomatedTestSuite/Source/QAutomatedTestSuite/Private/QMeleeTraceAutomationTests.cpp`;
 - this document and Prompt 07 handoffs.
 
 The current integration additionally owns the wrapper asset, its directly affected Blueprint consumers, the committed-state bridge tests and the dependency/config changes needed to make the native owner live. P2 consumers remain explicitly outside this checkpoint until their typed path and runtime proof are complete.
