@@ -1219,6 +1219,25 @@ dependance ne remonte jamais cote serveur dedie.
 `ProgressNotificationWidgetClass` du gestionnaire de notifications. **Attention, ce widget est
 PARTAGE** : c'est la barre de progression de tout QANGA (recolte, quetes DQS), pas une piece du Mur.
 
+**Retouche du 2026-09-03 (Benja : "la barre s'arrete, 0 %, 33 % puis 100 % d'un coup" et "pas alignee
+avec notre langage visuel").**
+- **Barre par a-coups, cause dans QNotification** (`QProgressNotificationWidget.cpp`, pas dans QModule) :
+  l'auto-progression tournait a 10 Hz avec un algorithme "chunky" (gel par phases, rafales aleatoires que
+  la randomness rendait PLUS petites, rattrapage a 2 %) puis sautait a 100 % a l'echeance et fermait la
+  plaque la meme frame. Remplace par une cible lineaire sur la duree, rafraichie a 1/60 s, retard borne
+  (8 % x randomness, efface sur la fin), valeur monotone, et un maintien de 0,45 s a 100 % avant l'auto-hide.
+  `CL_InstallStarted` n'a pas change (randomness 0,15 = 1,2 % de respiration au plus). Aucun RPC, toujours
+  aucun tick de widget : c'est le timer manager du monde.
+- **Plaque remise a l'echelle du HUD** dans l'asset `W_QProgressNotification_V2` : 300 px de large, hauteur
+  automatique, en-tete en motif "barre de section" (lavis ambre 14 %, cellule hexagonale de famille 18 px,
+  nom du module Bold 10 ambre en capitales, pourcentage Bold 10), barre 5 px a crans inchangee, pied
+  `ProgressValueText` + nouveau `SubText` (le contexte "Module wall" passe par ce BindWidgetOptional),
+  crochets d'angle 7 x 2. Le libelle `EN COURS` (texte en dur, jamais traduit) est retire de l'affichage
+  (widget conserve, Collapsed). Cote C++, `ProgressValueText` est masque quand `MaxProgress == 100` et que
+  le pourcentage est affiche ("37/100" a cote de "37 %" disait deux fois la meme chose) ; une recolte en
+  3/10 garde son compteur. Backup : `Saved/BPBackup/W_QProgressNotification_V2_20260903_hudpass.uasset`.
+  Maquette de reference : artifact "Plaque d'installation des modules" (variante A retenue).
+
 ## 16. Contrat audio central (2026-08-18)
 
 **Pourquoi.** Les 13 refs son du plugin partaient en `PlaySound2D` / `PlaySoundAtLocation`
@@ -2725,3 +2744,26 @@ SERVEUR en PIE dedie ; la mesure client passe par la console in-game). NOTE : le
 volumes=/selfTest= de qmodule.Test.SafeZone decrites dans les notes du 20/08 n existent pas dans
 le source actuel. RESTE : valider le fix en jeu (lancer une balise PUIS provoquer un refus en
 zone : le message doit s afficher), et mesurer les zones des relais de l UNIVERS (streaming).
+
+### 15.34 La rangee des modules passifs s affichait dans le lobby (2026-09-02, PAS ENCORE COMPILE)
+
+**Symptome (Benja)** : au menu principal (L_Lobby), 5 icones de modules en haut a droite du HUD,
+sans pawn ni partie. Ce sont les 5 modules de base du mur (`bBaseModule`), rendus par
+`W_HudModulePassives` (Content/Widget/HUD/Composition, parent C++ `UQModule_HudRackWidgetBase`).
+**Cause mesuree** : `W_HUD` reste construit au lobby et chaque brique se masque seule selon son
+contexte ; celle-ci n avait AUCUNE garde. Sa base C++ liait le rack du PlayerState local des
+NativeConstruct (retry 0,5 s pendant 60 s), et ce rack EXISTE au lobby : le WallManager est un
+WorldSubsystem actif dans tout monde et pose un rack avec les modules de base au PostLogin
+(log : "QModule wall manager active for world 'L_Lobby'" puis "Wall hosted on
+'QangaPlayerState_C_...' (5 base module(s))"). Les briques voisines (barres vitales, environnement)
+ne s affichent pas parce qu elles testent le pawn possede, et `Lobby_GM` n a pas de DefaultPawnClass.
+**Fix (C++ seul, aucun asset touche)** : garde pawn dans `UQModule_HudRackWidgetBase`.
+`TryBindLocalPlayerRack` exige `PlayerController->GetPawn()` ; sans pawn le rack reste delie et le
+widget se replie (Collapsed). La base s abonne a `OnPossessedPawnChanged` du controleur (possess,
+unpossess et OnRep client le tirent tous) et re-evalue a chaque changement : rack lie -> l enfant se
+re-affiche par `QMOD_OnResolvedRackChanged` ; pawn perdu -> Collapsed et rack delie ; pawn present
+sans rack (course de replication au join) -> ecouteurs de late-bind re-armes. Un echange de pawn a
+rack identique (pied <-> vehicule) ne change rien : comportement hors lobby inchange.
+Seul enfant a ce jour : `W_HudModulePassives` (recherche de chaine sur Content/, terminee).
+**RESTE** : cold build QModule editeur ferme (Benja), puis voir le lobby sans icones, et l Univers
+avec la rangee au premier spawn, apres une mort/respawn et apres un voyage.

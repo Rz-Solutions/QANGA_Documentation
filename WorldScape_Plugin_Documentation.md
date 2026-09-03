@@ -468,7 +468,7 @@ So first off in the Place Actor tab type in "WorldScape" and you will see "World
 
 Now placed in the scene, for this instance for a planet, make sure you set the generation type to **"planet"** and have **Generate** and **Generate Ocean** checked.
 
-You're immediately going to notice you don't see anything — that's because the planet's surface is way above. So you can just paste this coordinate for the transform of the planet:
+You're immediately going to notice you don't see anything: that's because the planet's surface is way above. So you can just paste this coordinate for the transform of the planet:
 ```
 (X=0.000000, Y=0.000000, Z=-637875790.000000)
 ```
@@ -845,17 +845,51 @@ depth 11, 24 m cells, where the clipmap draws 3 m). `Quadtree_MaxDepth` (16, up 
 
 ## Budgets
 
-- `ws.GPUTerrain.MaxVertexPoolMB` (768): ceiling of the vertex pool; the quadtree leaf caps are derived from it
-  (80 percent land, 20 percent ocean, scaled by 1 / LodResolution^2). Beyond the ceiling chunks are not meshed and a
+- `ws.GPUTerrain.MaxVertexPoolMB` (768): ceiling of the vertex pool (32 bytes per packed vertex, a 128 x 128 tile is
+  512 KB); the quadtree leaf caps are derived from it (80 percent land, 20 percent ocean, scaled by 1 / LodResolution^2). Beyond the ceiling chunks are not meshed and a
   throttled warning explains why.
-- `IndirectNoise_HeightfieldMemoryBudgetBytes` (0 = automatic: twice the leaf caps) and `IndirectNoise_TileResolution`
-  (0 = LodResolution).
+- `IndirectNoise_HeightfieldMemoryBudgetBytes` (0 = automatic: four times the leaf caps, clamped to 2 GB) and
+  `IndirectNoise_TileResolution` (0 = the largest of LodResolution, OceanLodResolution and IndirectNoise_MeshResolution).
+  The working set of the cache is the visible leaves, their parents (kept for the merge hysteresis) and the leaves just
+  outside the view; twice the caps saturated at ground level (log line `Using over-budget allowance` every second) and
+  a camera turn showed holes while the evicted tiles regenerated. A leaf drawn without a heightfield is requested as
+  urgent: generated first and beyond the adaptive per tick cap, and a node whose children are missing requests its own
+  tile before their prefetch.
+- `IndirectNoise_MeshResolution` (0 = LodResolution): vertices per side of a GPU tile, decoupled from the CPU clipmap so a
+  root can keep LodResolution 16 for the fallback and the dedicated server while the GPU mesh runs at 128.
 - `ws.GPUTerrain.Indirect.HeightfieldTickBudgetMs` (6.0): CPU submit budget of the heightfield generation per tick. The
   number of tiles generated per tick adapts between 4 and 64 (`MaxAdaptiveGenerationsPerTick`): it halves when the
   submit exceeds the budget, or when the frame time exceeds 1.5 x the idle frame time (never below 50 ms), and doubles
   while the frame stays within 1.25 x the idle frame time (never below 25 ms). The idle reference is the average
   frame time of the ticks that generated nothing, so a render bound editor (21 fps at LodResolution 128) still
   generates tiles at full speed. Tile textures are pooled per resolution (RHI creation was the dominant cost).
+
+## Instanced draws
+
+Tiles are drawn as instances: one draw per (stitch index buffer, material slot, winding, water) group, about ten on the
+ground instead of one per tile (300 to 450 before). The vertex factory (`FWSTerrainVertexFactory`) declares no vertex
+stream: it fetches the 32 byte packed vertex (float3 position, SNORM8 tangents, UNORM8 colour, half UV) from the pool
+with SV_VertexID, and the tile (vertex base, tile centre split in two floats, `FWSTerrainInstanceData`) from a per
+frame instance buffer with the GPU scene instance index (`InstanceId - InstanceSceneDataOffset`, so instance culling may
+reorder instances). `FDrawItem::FirstInstance` travels in `FMeshBatchElement::UserIndex`, the batch declares
+`NumInstances` identity instances through `FMeshBatchDynamicPrimitiveData`. The tile centre is computed once on the
+CPU in double (`WS_ComputeTileCenter`) and given to both the mesh compute and the instance, so both sides agree bit for
+bit. Tiles that are not renderable this frame get no instance at all. Statistics: `DrawItems=` (groups), `Instances=`,
+`Inst=` (instance buffer KB), `ProxyInst=` (the proxy saw the instance buffer).
+
+## Stitching between depths
+
+The quadtree keeps neighbours within one level at split time (`SplitDeniedNeighbor`), but the leaf cap and the merge
+hysteresis can leave a two level gap, so the stitch handles 2:1 and 4:1. For every leaf and edge the neighbour is looked
+up at the leaf's own depth (so an inner edge finds the sibling and never stitches, and cube face crossings resolve at
+the right depth), then its parent and grand parent: the first one that is a leaf gives the level. The mask carries the
+level per edge (2 bits each, W E S N) and the leaf's position inside its grand parent (X mod 4, Y mod 4). In
+`WSMeshGenerate.usf` an edge vertex whose index counted from the ancestor's corner is not a multiple of the coarse
+spacing (2 or 4 cells) is interpolated between the two enclosing coarse vertices, sampled from the tile's own heightfield
+and its 4 texel border, so it lies exactly on the coarse edge: no collapse, no degenerate triangle, and both children of
+a parent agree on their shared corner. The index must be ancestor relative because a child in the second half of its
+parent starts at (resolution - 1), odd for even resolutions such as 128. Exact when the heightfield resolution equals
+the mesh resolution (the default); gaps of more than two levels are not stitched.
 
 ## Checking parity
 
