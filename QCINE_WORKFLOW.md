@@ -44,13 +44,24 @@ Content/Python/qcine/            boite a outils Python (editeur)
     __init__.py                  import qcine ; qcine.reload()
     util.py                      log fichier, look-at, bornes d acteur, cadrage par focale
     stage.py                     niveaux de plateau, placement d acteurs, eclairage 3 points, post-process, materiau neutre
-    shots.py                     constructeurs de plans : orbit, dolly, crane, flyby, static, rail + animation + fondu
-    render.py                    Movie Render Queue (presets preview / hd / final / final_60), image fixe, mp4 + planche
+    shots.py                     plans : orbit, dolly, crane, flyby, static, rail, turntable, dolly_zoom, rack_focus,
+                                 pan (whip), follow (poursuite), camera_on ; Handheld ; capteurs ; animation ; fondu
+    motion.py                    acteurs en mouvement : fly (spline + inclinaison), walk (cycle ALS), hold, hide_components
+    edit.py                      sequence maitre (piste de shots), musique, describe
+    render.py                    Movie Render Queue : presets preview / hd / final / final_60 / trailer_hd / trailer_4k,
+                                 render, still, render_batch (plusieurs jobs, une session PIE), mp4 + planche
+    post.py                      ffmpeg (sans unreal) : cartons, assemble (xfade, letterbox, musique), frames_to_mp4
+    audio.py                     export .wav d un SoundWave, liste des musiques
 Content/QSequences/
     Stages/L_Stage_Studio        plateau studio (cyclo neutre, 3 RectLights, SkyLight, PostProcessVolume, GameModeBase)
+    Stages/L_Stage_Orbit         plateau orbital (look non resolu, voir section 5)
+    Stages/L_Stage_World         plateau monde cree depuis L_CAM_LEVEL (WeatherActor = look du jeu)
     Shots/SQ_*                   sequences generees (camera spawnable, cuts, focus, animation)
-    _Shared/M_QC_Neutral         materiau PBR neutre du cyclo
+    Trailers/SQ_Teaser_Master    sequence maitre du teaser (5 shots, musique, fondus)
+    _Shared/M_QC_Neutral|Floor   materiaux PBR neutres
 Saved/QCine/Renders/<job>/       images PNG, status.json, <job>.mp4, <job>_sheet.png
+Saved/QCine/Teaser/              cartons, corps, teaser assemble
+Saved/QCine/Audio/               musiques exportees en .wav
 Saved/QCine/Logs/                journaux des rendus
 ```
 
@@ -226,6 +237,64 @@ fonds lointains, sol dedie). `qcine.stage.open_or_create` le charge tel quel ; o
 construit les plans avec `qcine.shots`. Alternatives : `Content/Maps/LevelDev/L_EmptyScene.umap` (WeatherActor +
 SkyAtmosphere + gravite, presque rien d autre) ou `L_Dev_Claude`. Ne jamais modifier le WeatherActor ni ces niveaux
 d equipe : dupliquer d abord (`EditorAssetLibrary.duplicate_asset`) vers `Content/QSequences/Stages/`.
+
+## 5 bis. QCINE v2 : grammaire de trailer (ecrit le 2026-09-04 au soir, partiellement teste)
+
+Reponse a la demande de Benja ("il faut aller beaucoup plus loin qu un tour a 180 degres") :
+
+- **Caméra de cinéma** (`qcine.shots`) : `dolly_zoom` (Vertigo : recul + zoom, sujet a taille constante),
+  `rack_focus` (bascule de point entre deux sujets), `pan` (panoramique ou whip pan selon `whip_duration`),
+  `follow` (camera de poursuite d un sujet en mouvement, avec retard `lag` et anticipation `look_ahead`),
+  `camera_on` (camera cuite sur une sequence existante), classe `Handheld` (camera portee procedurale :
+  trois sinus incommensurables par axe, amplitude en cm et degres, frequence en Hz), capteurs nommes
+  (`anamorphic` = cadrage 2.39:1, `s35`, `full`, `imax`), roll animable, pre-roll de 32 images sur toutes les pistes.
+- **Sujets en mouvement** (`qcine.motion`) : `fly` (vol le long d une spline Catmull-Rom, nez dans la vitesse,
+  inclinaison proportionnelle au taux de virage, rend la fonction de trajectoire pour la camera), `walk` (deplacement
+  rectiligne + cycle de marche ALS sur le SkeletalMeshComponent, `WALK_F` / `RUN_F`), `hold` (fige un acteur),
+  `hide_components` (piste de visibilite sur les maillages de gameplay : plasma, cone de Mach, HUD 3D, une piste
+  Sequencer bat le script de construction qui se rejoue en PIE).
+- **Montage** (`qcine.edit`) : `master` (sequence maitre avec `MovieSceneCinematicShotTrack`, entrees/sorties par plan,
+  offset en resolution de tick du sous-plan, musique en piste audio maitre, fondus), `add_music`, `describe`.
+- **Post-production** (`qcine.post`, sans dependance `unreal`, utilisable depuis un Python de shell) : `title_card`
+  (carton texte + sous-titre, police Bahnschrift, fondu), `assemble` (fondus enchaines `xfade`, letterbox 2.39 a
+  hauteur paire, lit musical avec fondu de sortie), `frames_to_mp4`, `contact_sheet`. **Teste** : un montage de
+  4 clips (2 cartons + 2 rendus) en 2.39 est sorti correct.
+- **Musique** (`qcine.audio`) : `export_sound` (SoundWave vers .wav par `AssetExportTask`), `list_music`.
+  Non teste.
+- **Presets** : `trailer_hd` (1080p, 6 echantillons temporels), `trailer_4k` (2160p, 8).
+- **Job de teaser pret** (`scratchpad/job_teaser_build.py`) : plateau monde cree par `new_level_from_template` depuis
+  `L_CAM_LEVEL` (look WeatherActor), Velkara pose + cyborg au sol, cinq plans : grue de revelation du vaisseau,
+  marche vers camera avec bascule de point, passage d un second vaisseau en vol avec camera de poursuite, dolly zoom
+  sur le visage, whip pan du heros au vaisseau ; sequence maitre avec `15_-_Dusk_Mastered`, export .wav pour ffmpeg.
+  EXECUTE a 22:38 (editeur relance apres la fin de l autre session) : plateau `L_Stage_World` cree, 5 plans construits,
+  `Trailers/SQ_Teaser_Master` = 660 images (22 s) avec piste de shots, piste audio et fondu, musique exportee en
+  `Saved/QCine/Audio/15_-_Dusk_Mastered.wav`. Pieges 5.7 rencontres : `PlayRate` d une section d animation est un
+  `MovieSceneTimeWarpVariant` (helper `shots.set_play_rate`), une section de shot n a pas `get_range`
+  (`get_start_frame` / `get_end_frame`).
+
+**Crash a ne pas reproduire (22:18)** : `duplicate_asset` d une map puis `load_level` du duplicata dans le meme script
+= `Fatal error: World Memory Leaks` dans `Map_Load`. Un plateau derive d un niveau modele se cree avec
+`LevelEditorSubsystem.new_level_from_template(dst, src)`.
+
+### Resultat : teaser v1 (2026-09-04, 22:47)
+`Saved/QCine/Teaser/QANGA_teaser_v1.mp4` : 30 s, 1080p, 2.39:1, musique `Dusk` avec fondu, deux cartons.
+Chaine complete mesuree : construction des 5 plans + maitre 4 s, rendu maitre 660 images 1080p a 6 echantillons
+temporels 205 s (environ 3,2 images par seconde), assemblage ffmpeg 40 s. Le rendu du jeu (WeatherActor : soleil, ciel,
+exposition auto, ombres) sort tel quel, aucun reglage manuel de lumiere n a ete necessaire sur le plateau monde.
+Corrections faites entre v1 et v2 : zones d atterrissage (`ShippingLandingArea*`, contours roses) et volumes audio
+spawnes par les vaisseaux caches en jeu ; camera de poursuite reculee (offset (-2600, 1100, 420) dans le repere du
+vaisseau, focale 28) ; les meshes ALS regardent +Y a yaw 0 (`motion.MESH_FORWARD_YAW`) ; train d atterrissage cache
+en vol (`motion.FLIGHT_HIDE_KEYS`). Reste visible : visage blanc du cyborg (skin de customisation), sol uniforme
+(tarmac sombre) : le vrai decor viendra du plateau `L_Persistent_Universe_DEV_2` ou des sous-niveaux de l Univers.
+
+### Angle d obturation (erreurs vues par Benja pendant le rendu v2)
+`MoviePipelinePIEExecutor: Error: Too many temporal samples for the given shutter angle/tick rate combination
+... Shutter Angle: 0.000000` et `SetCachedFrameTiming called with zero delta time, falling back to 1/24` : la
+camera n avait aucun flou de mouvement (les post-process du niveau et du WeatherActor le mettent a 0), donc les
+echantillons temporels etaient tous pris au meme instant (aucun flou, temps de rendu multiplie pour rien) et MRQ
+evaluait le monde avec un delta fictif. Depuis la v3, chaque camera de plan porte son propre reglage de
+post-process (`motion_blur_amount` 0.5 = 180 degres, `motion_blur_max` 5), ce qui prime sur les volumes du niveau
+sans toucher au projet. Les erreurs disparaissent et le passage du vaisseau et le whip pan ont un vrai flou.
 
 ## 6. Ce qu il reste a faire
 
