@@ -272,6 +272,10 @@ The shared target registry now snapshots registration identities before invoking
 
 Static review checked the current UE 5.7.3 `UActorComponent` owner-role/replication signatures, `DOREPLIFETIME_CONDITION(..., COND_OwnerOnly)`, unreliable multicast syntax, transform/quaternion validation APIs, and the live `UQWeaponBulletSubsystem` signature/return behavior. The central pass subsequently compiled/loaded this source and ran `QWeapon.FireControl` green at `3/3`. No production asset mutation or gameplay/runtime parity is claimed.
 
+## Dedicated simulated-proxy presentation repair
+
+The two-client dedicated log exposed remote weapon animation instances calling the Blueprint aimpoint mutation and consequently attempting the owner-only `SV_WeaponValues` RPC without an owning connection. `QWeaponAnimInstance` now refreshes local-control state before its per-update consumers and invokes `UpdateCurrentAimpointPosition` only for the locally controlled pawn. Simulated proxies still read and interpolate the replicated weapon values, so remote visuals are retained while their invalid mutation/RPC producer is removed. The source compiles through Live Coding; a fresh dedicated build with two clients remains required to prove both zero ownerless aimpoint RPCs and unchanged remote ADS presentation.
+
 ## Prompt 09 build, network, and runtime gates
 
 The isolated native source/QATS gate is green. The integration owner must still run all of the following after adapters and the reference asset are integrated:
