@@ -848,13 +848,14 @@ depth 11, 24 m cells, where the clipmap draws 3 m). `Quadtree_MaxDepth` (16, up 
 - `ws.GPUTerrain.MaxVertexPoolMB` (768): ceiling of the vertex pool (32 bytes per packed vertex, a 128 x 128 tile is
   512 KB); the quadtree leaf caps are derived from it (80 percent land, 20 percent ocean, scaled by 1 / LodResolution^2). Beyond the ceiling chunks are not meshed and a
   throttled warning explains why.
-- `IndirectNoise_HeightfieldMemoryBudgetBytes` (0 = automatic: four times the leaf caps, clamped to 2 GB) and
+- `IndirectNoise_HeightfieldMemoryBudgetBytes` (0 = automatic: three times the leaf caps, clamped to 2 GB) and
   `IndirectNoise_TileResolution` (0 = the largest of LodResolution, OceanLodResolution and IndirectNoise_MeshResolution).
   The working set of the cache is the visible leaves, their parents (kept for the merge hysteresis) and the leaves just
   outside the view; twice the caps saturated at ground level (log line `Using over-budget allowance` every second) and
   a camera turn showed holes while the evicted tiles regenerated. A leaf drawn without a heightfield is requested as
-  urgent: generated first and beyond the adaptive per tick cap, and a node whose children are missing requests its own
-  tile before their prefetch.
+  urgent: generated first and beyond the adaptive per tick cap (at most 8 urgent tiles per tick on top of it: a 64 tile
+  burst on a loaded frame was a GPU timeout on the Steam dev build), and a node whose children are missing requests its
+  own tile before their prefetch. `stat gpu` shows `WSHeightfieldGenerate` and `WSGPUTerrainMesh`.
 - `IndirectNoise_MeshResolution` (0 = LodResolution): vertices per side of a GPU tile, decoupled from the CPU clipmap so a
   root can keep LodResolution 16 for the fallback and the dedicated server while the GPU mesh runs at 128.
 - `ws.GPUTerrain.Indirect.HeightfieldTickBudgetMs` (6.0): CPU submit budget of the heightfield generation per tick. The
@@ -876,6 +877,10 @@ reorder instances). `FDrawItem::FirstInstance` travels in `FMeshBatchElement::Us
 CPU in double (`WS_ComputeTileCenter`) and given to both the mesh compute and the instance, so both sides agree bit for
 bit. Tiles that are not renderable this frame get no instance at all. Statistics: `DrawItems=` (groups), `Instances=`,
 `Inst=` (instance buffer KB), `ProxyInst=` (the proxy saw the instance buffer).
+Every instance carries its own local bounds (`WS_ComputeTileLocalBounds`: the tile's 3 x 3 grid lifted to the sphere,
+plus the height margin and the sphere sagitta), passed through `FMeshBatchDynamicPrimitiveData::InstanceLocalBounds`, so
+GPU scene culls tiles individually (frustum, HZB occlusion, virtual shadow map pages, local light shadow views). Without
+them an instance inherits the primitive bounds, the whole planet, and is drawn into every shadow page and light view.
 
 ## Stitching between depths
 
@@ -890,6 +895,16 @@ and its 4 texel border, so it lies exactly on the coarse edge: no collapse, no d
 a parent agree on their shared corner. The index must be ancestor relative because a child in the second half of its
 parent starts at (resolution - 1), odd for even resolutions such as 128. Exact when the heightfield resolution equals
 the mesh resolution (the default); gaps of more than two levels are not stitched.
+
+## Kernel permutations
+
+`WSHeightfieldGenerateCS` is compiled once per noise type (`WS_NOISE_TYPE`, the `EGPUNoiseType` id) and with or without
+terrain volumes (`WS_WITH_VOLUMES`); `CalculateNoiseCS` and `CalculateNoiseHeightOnlyCS` once per noise type. A single
+binary used to carry every noise class and the volumes behind runtime `if (NoiseType == ...)` branches: 4 MB of DXIL
+(Aftermath dump of the Steam dev build), a driver PSO compile above 100 s that blocked the render thread until the
+120 s watchdog, and a GPU timeout when several tiles were generated together. The dispatch sites pick the permutation
+from the request's noise type and volume counts; the `.usf` files keep a default (`NOISE_TYPE_QANGA`, volumes on) for a
+compile outside the permutation system.
 
 ## Checking parity
 
