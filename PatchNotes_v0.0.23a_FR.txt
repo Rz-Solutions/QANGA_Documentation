@@ -1,0 +1,341 @@
+QANGA - Mise a jour consolidee
+(couvre tout depuis le v0.0.22a, publie le 10 juillet 2026)
+
+
+NOUVEAUTES
+
+  Modules cyborg 2.0 - les modules deviennent des objets
+  Un module n'est plus une ligne dans un menu : il se trouve dans le monde, se ramasse, se pose au sol, s'echange entre joueurs et se revend. Vous le gardez dans votre sac et vous decidez quand et ou le poser sur votre mur.
+  - Un panneau de stock s'affiche a cote du mur : vous cliquez un module, puis une case libre, il s'installe et sort de votre sac. Vous le retirez, il revient dans le sac et toutes ses phases retournent dans votre reserve - reamenager reste gratuit.
+  - Sept modules sortent du placard : Chasseur de primes, Fleau des machines, Brouilleur de signature, Masque pheromonal, Contre-mesures Voss, Decodeur QPD et Antenne longue portee etaient termines depuis des semaines mais impossibles a obtenir. Ils ont maintenant leur objet.
+  - Distribution dans le monde : les modules apparaissent dans les batiments de l'univers (bunkers, relais IC Lab, ruines, marches warp, sites industriels), avec un tirage deterministe - le meme module au meme endroit pour tout le monde. Respawn lent partage par le serveur et persistant aux redemarrages.
+  - La police transporte du materiel : certaines unites (drones, autonomes) peuvent lacher un module passif a leur mort, rarement, et un module actif tres rarement.
+  - Les modules de base sont offerts en phase 1 (coeur plus les quatre modules), sans toucher a votre portefeuille de phases. Un rattrapage apres restauration repare les comptes qui les avaient perdus, sans manipulation.
+  - Installation en 3 secondes, une a la fois, avec sa barre de progression et ses sons. Plus de 70 pictogrammes dedies sur les definitions et les items de module.
+
+  Modules actifs - on ne fait plus apparaitre, on designe
+  Maintenez la touche du module pour viser, clic gauche pour lancer. Vous ne faites plus apparaitre un effet : vous lancez une vraie balise physique, elle se plante, elle pulse de plus en plus vite, et c'est la que ca tombe. Tout le monde la voit. Frappe orbitale, largage de ravitaillement et renforts par vaisseau passent par le meme geste.
+  - Balise de frappe : declenche un barrage orbital, jusqu'a 22 missiles sur 18 metres au niveau maximum.
+  - Largage de ravitaillement : une caisse de munitions et de soins tombe sur le point vise a moins de 200 m. 3 fournitures en phase 1, 6 en phase 2. Trainee pendant la chute, poussiere a l'impact, fumigene au sol, porte qui s'ouvre, et un marqueur pour celui qui l'a appelee.
+  - Renforts par les airs : un Lavrik arrive de 1,5 km, moteurs allumes, vous le suivez a l'ecran pendant toute son approche, il se stabilise, ouvre sa rampe arriere, l'escouade saute, puis il repart jusqu'a sortir du champ. Sous un plafond, l'appel est refuse et vous le dit.
+  - Arme en main, le cyborg la range le temps de la designation et la ressort automatiquement apres : impossible de tirer par accident en appelant une frappe.
+  - Le cyborg pointe du doigt le point d'impact exact, visible par tous les joueurs.
+
+  Arsenal dorsal
+  - Nid de guepes : une salve de micro-missiles a tete chercheuse jaillit de votre dos et traque votre cible. Courte portee, impact sec. Au niveau max, l'essaim ne pardonne plus - 4 missiles, 4 touches.
+  - Nid de frelons : la version lance-grenades. Jusqu'a 4 grenades lobees en cloche sur la zone visee, avec la vraie balistique - ca rebondit, ca roule, ca punit.
+  - Verrouillage dorsal : jusqu'a 6 cibles verrouillees en meme temps. Une cible verrouillee le reste tant qu'elle ne meurt pas, ne sort pas de portee et n'est pas vraiment hors de vue. Une salve de 2 missiles sur 5 cibles part d'abord sur ce que vous regardez.
+  - Grenades collantes dorsales : elles partent du dos en cloche, se collent a ce qu'elles touchent y compris a ce qui bouge, et detonent l'une apres l'autre pour dessiner une ligne d'explosions qui roule vers l'avant.
+
+  Matrice de construction - construire devient un module
+  N'importe qui pouvait batir des la premiere minute dans l'Univers persistant. C'est fini : construire demande maintenant un module installe sur votre mur.
+  - Le module apparait dans la roue de gadgets avec les autres modules actifs. Vous le selectionnez, le builder et son menu se levent devant vous ; vous selectionnez autre chose, ils se retirent, y compris le fantome pas encore pose. La touche B continue de fonctionner, mais seulement si vous avez le module.
+  - Phase 1 : l'acces a la construction. Phase 2 : minerais -10 %, portee +25 %, recyclage +15 %. Phase 3 : minerais -20 %, portee +50 %, recyclage +30 %.
+
+  Nouvelle suite principale - Q028 a Q031
+  Quatre nouvelles quetes principales prolongent l'histoire apres Q026, avec leurs textes localises, leurs items et leur enchainement complet.
+  - Q028 : recuperer la Matrice de construction pres du cyborg mort au nid de Sanglines, fuir a 300 m, installer le module, l'alimenter par phase, deployer le Builder, puis construire le sol, trois murs, le cadre de porte, la porte, le plafond et le neon. La collecte suit exactement 42 Stone, 4 Steel et 2 Copper.
+  - Q029 : le relais Sangline, cinq Sanglines, le site Voss, cinq Voss, puis le premier fragment du protocole de flotte.
+  - Q030 : la station lunaire abandonnee, le second fragment, puis la ferme de regolithe.
+  - Q031 : la station martienne et la zone infectee, avec la recuperation et l'installation du module Rappel de flotte.
+
+  Ghost Signal - la premiere chasse au signal radio
+  Une quete secondaire donnee par Tona apres le premier cycle. Un signal fantome emet quelque part autour de la tour : prenez une radio de vehicule, balayez les stations jusqu'au bip, et suivez-le - plus le signal est propre, plus vous etes proche de la source. Un module vous attend au bout des ondes.
+  - QRadio sait maintenant gerer des stations ephemeres creees et eteintes par les quetes elles-memes, via une action de quete 100 % data-driven : toutes les futures quetes radio se montent sans une ligne de code.
+  - La mission fait aussi office de tutoriel masque du gameplay radio.
+
+
+MODULES CYBORG - CATALOGUE BRANCHE SUR LE GAMEPLAY
+
+  - Servomoteurs de jambes : le sprint accelere reellement de 8 / 16 / 25 % selon le niveau, sans toucher marche ni course.
+  - Amortisseurs cinetiques : degats de chute reduits de 30 / 60 / 100 % - au niveau 3, plus aucun degat.
+  - Nano-Regenerateur : regeneration hors combat a 2 / 3 / 4 PV par seconde.
+  - Sac digitique etendu : inventaire agrandi.
+  - Negociateur : meilleurs prix de vente partout.
+  - Nano-Reparateur et Blindage de drone : drone plus rapide a revenir, plus dur a abattre.
+  - Verins de saut : saut jusqu'a 50 % plus haut.
+  - Decodeur QPD : votre niveau de recherche retombe jusqu'a 75 % plus vite.
+  - Geologue : jusqu'a moitie plus de minerai par gisement.
+  - Chasseur de primes : +30 % de degats contre les recherches et les hors-la-loi.
+  - Fleau des machines : +30 % contre les drones et les robots.
+  - Propulseur orbital : en apesanteur, votre jetpack pousse jusqu'a 3 fois plus fort au niveau max. En atmosphere, rien ne change - c'est un moteur d'espace, pas un turbo de plaine.
+  - Brouilleur de signature : votre position connue par la traque QPD est brouillee, les vagues de renforts se deploient jusqu'a 300 m a cote de vous. Attention, le brouilleur trompe le dispatch, pas les yeux : une patrouille qui vous croise vous reconnait toujours.
+  - Surcouche de bouclier : une seconde barre au-dessus de la vie (50 / 100 / 150 points) qui absorbe les degats en premier et se regenere toute seule hors combat. Le systeme de bouclier dormait complet dans le jeu depuis des mois.
+  - Caisson hermetique : 33 / 66 / 100 % de votre sac conserve a la mort selon la phase. Au max, plus aucune perte - le loot des ennemis n'est pas affecte.
+  - Protocole de meneur : debloque le recrutement de cyborgs civils, et chaque phase agrandit votre escouade (1, 2 puis 3 compagnons). Un bouton sur la fiche du module fait debarquer vos cyborgs autour de vous, armes et prets : plus besoin de croiser des civils. Un compagnon tombe verrouille sa place 5 minutes.
+  - Reseau de recruteur : recruter coute jusqu'a 50 % de moins et la negociation devient quasi instantanee. Le recrutement a l'ancienne reste possible.
+  - Antenne longue portee : radio integree au cyborg, sans radio portable. C'est un implant, vous seul l'entendez. Phases 2 et 3 : portee de reception x1,5 puis x2. Controle a la roue - valider allume ou coupe, tir passe a la station suivante.
+  - Drone medical : drone d'epaule qui soigne en pulses le porteur et les allies proches (3 / 5 / 8 PV par seconde dans 6 / 9 / 12 m). Le soin consomme votre matiere, jamais de gaspillage sur une cible pleine. Deploiement de 45 secondes, recharge de 20 secondes. Il tire un faisceau vers ce qu'il soigne, sa lumiere respire au repos et il lance un lien de diagnostic vers vous toutes les 4 secondes.
+  - Rappel de flotte : appelez un vehicule de votre garage depuis la roue, il est livre hors de votre vue et vous attend a proximite, tracker HUD inclus, l'ancien est range automatiquement. Rechargement de 4 a 2 minutes selon la phase. Livraison longue distance (orbite, univers, trajet sur carte) en v2.
+  - Transpondeur de transit : l'onglet Assistance est masque sans le module actif. Le transpondeur ouvre la StarMap sur Assistance, et le serveur refuse les demandes sans lui.
+
+
+MUR DE MODULES, RETICULE ET ROUE
+
+  - Le reticule IRIS : un iris fin de 32 px, quatre coins chanfreines qui claquent en place quand vous maintenez la touche, se resserrent quand la balise a un point de chute valide, s'ouvrent et rougissent quand elle n'en a pas. Le pixel vise reste libre. Le nom du module part sur une plaque a droite, avec son icone et la distance, lisible meme en plein soleil sur le sable. Il remplace un gros hexagone plein de 54 px qui recouvrait le point qu'il servait a viser.
+  - Recharge et refus ne se ressemblent plus : la recharge est grise et affiche le temps restant ("PRET DANS 42 S"), le refus reste rouge.
+  - Vingt situations de refus sont expliquees au reticule : module en recharge, module inactif, aucune cible, hors de portee. Avant, le serveur refusait en silence et vous restiez a vous demander si la touche etait cassee.
+  - Le module arme reste a l'ecran en discret, avec son decompte de recharge, et pulse brievement quand il est pret. Il s'efface quand vous montez en vehicule et revient quand vous en descendez.
+  - L'arc de lancer et le marquage au sol : la trajectoire devient un ruban continu, large a l'arrivee et fin pres de la main, au lieu d'une file de tirets de 8 cm invisibles a 40 m. Un octogone se pose sur le point de chute exact, l'anneau de zone est trois fois plus epais, et tout grandit avec la distance.
+  - La colonne d'ordonnance : la balise plantee tend un faisceau vers le ciel dont les impulsions accelerent a mesure que la frappe approche, puis une colonne descend et se resserre sur la zone jusqu'a l'arrivee des missiles, avec l'empreinte exacte au sol visible par tous et une secousse camera a chaque impact. Chaque type d'appel a sa couleur - frappe orange, ravitaillement bleu, renforts ambre.
+  - Roue d'atouts : 8 emplacements deviennent 14 sur deux anneaux, en nid d'abeille compact a droite de l'ecran, hors du HUD. La selection a ete reecrite avec un curseur virtuel persistant qui s'ouvre sur votre module actuel et reste exactement ou votre geste le pousse - fini le reajustement permanent. Le module survole ressort, les autres s'estompent, et un panneau lisible affiche son nom et la description du niveau.
+  - Fiches au survol : passez la souris sur un module du mur ou du stock, une carte s'ouvre avec son nom, sa famille, son niveau et ce qu'il fait. Huit modules affichent leurs vrais chiffres, et la regle est claire - on ne decrit un module que si son effet existe vraiment.
+  - Les phases ont un visage : chaque tier affiche son logo a la couleur du tier, grise quand la reserve est vide, et une ligne d'aide dit enfin a quoi servent les phases. Inserer ou retirer une phase donne une confirmation sonore fiable, meme en multi.
+  - Le mur a une voix : ouverture du menu, selection d'une cellule, installation d'un module, insertion et retrait de phase, refus - chaque geste a son retour sonore, et un refus s'entend distinctement en meme temps que le message rouge qui l'explique.
+  - Couleurs alignees sur le HUD : les cellules de module portent l'orange officiel des icones du HUD et le module selectionne passe au vert, on sait toujours d'un coup d'oeil lequel est arme. L'ecran de gestion garde ses couleurs de familles.
+  - Grille reorganisee, plus libre et plus lisible, et le dock des modules ne passe plus devant les interfaces ouvertes.
+
+  Fiche cyborg (onglet Statistiques)
+  L'onglet Statistiques devient une vraie fiche de personnage : niveau et barre d'XP, portefeuille de phases, cellules, modules installes et credits en tete.
+  - 40 caracteristiques regroupees par zone du cyborg (tete, torse, bras, coeur, dos, soute, jambes). Chaque ligne montre la valeur reellement appliquee par le jeu, et un ecart colore quand un module la modifie.
+  - Cliquer une ligne ouvre la decomposition : valeur de base, contribution de chaque module et de chaque malus, total, et le prochain palier si vous montez le module d'un niveau.
+  - Cliquer une zone liste les modules qui l'equipent, avec un raccourci vers le mur de modules.
+  - Le mur affiche un bloc IMPACT SUR TA FICHE sous chaque module : la valeur maintenant, la valeur au niveau suivant, et un bouton pour aller voir dans la fiche.
+  - Le cyborg au centre de la fiche est votre vrai personnage rendu en 3D, de face, avec des reperes hexagonaux par zone.
+
+
+QUETES ET TUTORIEL
+
+  - Le tutoriel passe aux modules V2 : les quatre modules de base (Reparation, Drone, Scanner, Jetpack) s'installent directement sur le mur neural en phase 1 au moment ou vous les recuperez, et Tona vous ouvre votre mur pour vous expliquer ou vivent vos modules.
+  - Nouvelle etape du tutoriel, choisissez votre premier module de combat : trois prototypes, un seul emporte (Nid de guepes, Nid de frelons ou Surcouche de bouclier). Visez un module pour lire sa fiche, ramassez celui que vous voulez, il s'installe directement sur votre mur. Trois trackers montrent leurs positions exactes, les modules sont surlignes pendant le choix, et les deux autres se ferment definitivement - vous les retrouverez dans l'Univers. Le hangar infeste juste derriere sert de terrain d'essai.
+  - Trois nouvelles voix de Tona accompagnent la decouverte du mur neural, le choix du prototype et l'insertion de la premiere phase.
+  - Transition tutoriel vers univers : l'inventaire, le vault, l'equipement, les donnees d'items, l'argent, l'XP, le niveau, la matiere, le mur de modules et les slots equipes sont maintenant transferes vers l'univers. Le handoff n'est supprime qu'apres confirmation de la sauvegarde disque, et un travel qui echoue apres le fondu est retente au lieu de rester bloque.
+  - Corrections du tutoriel : zones de detection deplacees et redimensionnees (le conduit du debut, le test du jetpack, le grand couloir apres la coupure de courant) pour ne plus avoir a revenir en arriere quand on va vite. Decompte des kills des infectes du hangar fiabilise. La batte ne respawn plus apres le pickup, et un pickup deja possede ou equipe valide l'objectif.
+  - Sons de quete : accepter et terminer une quete ne produisait aucun son sur 26 des 27 quetes du jeu. Le son de fin etait joue cote serveur, donc sur une machine sans sortie audio : il partait dans le vide et personne ne l'entendait. Deux sons ont ete crees - un accuse de reception court et mecanique a l'acceptation, une resolution plus large et harmonique a la fin - et le son de fin passe desormais par le client.
+  - Achats de munitions et objectifs de boutique : les objectifs actifs se rebranchent des que le joueur recupere un pawn avec inventaire, donc les achats sont de nouveau comptes apres la reprise d'une partie solo (probleme remonte de nombreuses fois sur la Q008).
+  - Correction de l'animation du logo dans la cinematique d'intro de la Q008 : elle allait du noir vers le blanc, et ce blanc etait invisible sur le ciel apres le mouvement de camera. Elle est inversee.
+  - Les zones de declenchement remontent de nouveau leurs evenements au systeme de quetes, et la signature de la fonction cible est validee pin par pin.
+  - Les pickups sont verrouilles sur l'acteur exact lie a l'objectif : un acteur similaire pose a cote ne peut plus consommer l'interaction.
+  - Les evenements de progression ne touchent plus que les objectifs reellement actifs, pas ceux d'avant ni d'apres.
+  - Les objectifs de localisation conservent leur etat actif a travers les reprises, les reconnexions et les changements de possession ; les objectifs de fuite reconnaissent une sortie apres reprise tout en exigeant une vraie entree prealable dans la zone.
+  - Les sauvegardes de construction vides sont de nouveau valides au lieu d'etre rejetees comme corrompues.
+
+
+ENNEMIS ET IA
+
+  - Spawn de surface, fin des embuscades gratuites : les ennemis pouvaient naitre a 30 m de vous, derriere un rocher, alors que leur portee de detection est de 80 a 150 m - ils etaient donc deja en train de vous chasser a leur premiere image d'existence. La distance minimale d'apparition est maintenant calculee par espece, a 1,3 fois leur portee de detection : 120 m pour les creatures, 160 m pour les cyborgs et la police, 200 m pour les volants.
+  - Le test "hors de vue" qui valide un point d'apparition se faisait a hauteur de genou, il se fait maintenant a hauteur d'oeil : un caillou ne suffit plus. La distance de replication des creatures passe de 150 a 350 m, donc vous les voyez arriver au lieu de les voir apparaitre.
+  - Les ennemis n'apparaissent plus dans les rochers : un filtre rejette les points d'apparition tombant dans un rocher, etale sur plusieurs images pour ne pas couter une image entiere.
+  - Zones sures enfin respectees : les IA hostiles ne peuvent plus apparaitre dans une zone sure ni en dessous, ne peuvent plus acquerir ni conserver un joueur protege comme cible, et leurs tirs, attaques, gaz, explosions, nanites et missiles ne l'atteignent plus. Toute IA non controlee par un joueur fuit la zone puis recoit des degats letaux apres 10 secondes continues a l'interieur.
+  - La melee de la faune devient serieuse : crocodiles, chiens, renards, loups, lions, hippopotames et rhinoceros utilisent le meme pipeline de melee autoritaire cote serveur. L'impact est retarde jusqu'au bon moment de l'animation puis la portee est revalidee, donc plus de degats si la cible s'est ecartee entre-temps.
+  - Les montages d'attaque manquants sont branches, les predateurs utilisent leur vraie vitesse de course pendant la poursuite, et les crocodiles attaquent le joueur au lieu de fuir apres avoir pris des degats.
+  - L'elephant utilise enfin son vrai maillage comme corps principal et comme physique, donc les tirs touchent toute sa silhouette et plus seulement un collider herite a ses pieds. Il a aussi ses propres animations, son ragdoll et son impostor.
+  - La fuite passe par un vrai etat Flee avec une destination de navigation coherente, au lieu d'un bricolage sur l'etat de patrouille.
+  - La predation entre animaux est autorisee meme quand ils partagent la faction Animal, sans ouvrir le friendly fire general.
+  - Les civils reviennent dans les tours de relais : une redirection globale les remplacait par des cyborgs armes. Ils reapparaissent desarmes avant recrutement, gardent leur patrouille permanente et peuvent etre recrutes comme compagnons.
+  - Melee des cyborgs : la detection utilise une capsule dynamique alignee sur l'arme ou le poing, qui suit l'animation, au lieu d'une simple sphere statique au niveau du bassin, avec une visee verticale relative a la gravite et des traces a 20 Hz pendant la fenetre active. Fenetre de degats entre 10 et 70 % du montage, un seul coup accepte par cible et par swing, et les combos remplacent proprement l'attaque precedente.
+  - Les degats de melee sur les destructibles fonctionnent de nouveau en build packagee, et une arme rangee ne transmet plus ses degats aux coups a mains nues.
+  - Les IA ignorent les vehicules vides des l'acquisition et les abandonnent s'ils se garent pendant le combat. Les vehicules pilotes et les agents du trafic restent ciblables.
+  - Les unites a distance ne tirent plus a travers les murs : leur ligne de vue prend en compte la gravite, le terrain, les murs et les cibles basses.
+  - Navigation : les flow fields adaptent leur couverture et leur resolution, tournent sur des instantanes immuables et gerent plusieurs surfaces dans la meme colonne - etages superposes, escaliers, transitions verticales, le tout dans le meme graphe. Les corridors et diagonales traversant des murs sont bloques a partir de leur collision reelle.
+  - Les IA dormantes rattrapent maintenant les images sautees au lieu de deriver, et une rotation sans deplacement n'est plus ignoree.
+  - Les hovercrafts de l'IA conservent leur flow field pendant les reconstructions, precalculent le segment suivant, et un hovercraft renverse est redresse avant l'entree ou apres une ejection.
+  - Les impostors d'IA ne s'empilent plus quand ils sont trop proches les uns des autres, se depenetrent et glissent le long des murs au lieu de rester bloques sur leur premiere collision.
+
+
+ARMES ET COMBAT
+
+  - Le combat a un proprietaire unique : un composant natif possede desormais la vie, les boucliers, les factions, les permissions de degats et le ciblage. Les decisions IA travaillent sur des instantanes immuables et sont rejetees si leur etat a change avant application.
+  - Le rechargement manipule maintenant le vrai composant de chargeur sur toutes les armes ou il existe separement : la main gauche vient au contact avant l'extraction, maintient le chargeur entre les doigts puis le ramene exactement sur le logement. Une interruption ou un changement d'arme restaure l'ancien sans doublon.
+  - Les hitmarkers sont de nouveau affiches sur les pawns touches par les tirs hitscan du joueur local.
+  - Le montage d'attaque prend la priorite sur les poses procedurales d'arme et l'inverse kinematics : les swings ne sont plus coupes visuellement en packagee, et les montages courts conservent leur fin avant le retour a la locomotion.
+  - Le ciblage des armes passe par un registre spatial unique par monde, qui remplace l'ancien scan global par utilisateur et une tache async qui s'executait en realite sur le Game Thread. Acquisition, retention, classement, cycle et validation des cibles sont centralises, et les demandes de changement de cible sont recalculees cote serveur avant toute mutation.
+  - Les acteurs sans composant de stats demarrent avec leur reserve de vie configuree.
+
+
+AUDIO
+
+  - Toute l'interface a ete resonorisee : le son de clic des menus durait 437 ms, donc en enchainant les boutons les queues se recouvraient et s'additionnaient dans les aigus - c'est ce cumul qui piquait les oreilles. Clic, validation, retour et bascule sont refaits dans une signature commune, courte et mate, avec une direction selon l'action : le clic tombe, la validation monte, le retour redescend. Entre trois et quatre fois plus courts, et trois fois plus legers en memoire.
+  - Le survol existe enfin : survoler un bouton ne faisait absolument aucun bruit dans tout le jeu. Il y a maintenant un retour discret sur les boutons, les onglets, les listes, la carte stellaire, le menu de construction, le mur de modules, les statistiques, l'inventaire, la boutique et les missions.
+  - Les curseurs et les listes deroulantes sortent du silence : aucun des sept curseurs du menu audio ne reagissait, ni la sensibilite de la souris, ni la creation de personnage. Ils ont maintenant un cran, distinct du clic des boutons.
+  - Le curseur "Interface" sert enfin a quelque chose : les sons de menu etaient ranges dans la categorie "Effets", celle des tirs. Baisser les effets rendait donc les menus muets, pendant que le curseur "Interface" ne pilotait rien. Les deux faisaient l'inverse de ce que leur nom promet.
+  - Deux clics d'affilee ne sonnent plus pareil : chaque son part avec une variation de hauteur minuscule, et un verrou empeche la mitraillette quand on balaie une grille ou qu'on glisse un curseur.
+  - Un bang supersonique entierement synthetise : un claquement sec, son echo 55 millisecondes plus tard (le vrai double bang d'un appareil qui passe le mur), puis un grondement qui roule pendant deux secondes. Etouffe en cockpit, franc quand ca vous passe au-dessus de la tete.
+  - Audio spatialise pour les caisses de ravitaillement, le drone medical, les bombes collantes, la balise et les missiles d'epaule.
+  - Sons muets en build corriges : les sons de la designation et du mur n'etaient designes que par une ligne de texte dans le code, que le processus de build ne sait pas suivre, donc les fichiers ne partaient jamais dans le jeu et le jeu jouait le silence sans meme signaler d'erreur. Le dossier est maintenant marque comme obligatoire, et le code signale desormais un son manquant dans le log au lieu de faire semblant.
+  - Le tutoriel ne charge plus de profil musical situationnel : les radios restent utilisables mais sortent uniquement de la friture, sans modifier leur comportement dans le persistant.
+  - Les cinematiques suspendent la musique a leur demarrage effectif, et elle reprend sur le mood courant, en milieu de piste, apres la derniere sequence quand plusieurs se chevauchent - y compris sur l'intro Q008.
+
+
+INTERFACE ET HUD
+
+  L'ecran ne montre plus que ce qui compte. Une information apparait quand elle a quelque chose a vous dire, puis s'efface en douceur. Rien n'a ete supprime : votre vie reapparait instantanement des que vous prenez un coup et reste visible tant que vous n'etes pas soigne, la matiere revient des que vous minez ou construisez. En exploration tranquille, le coin de l'ecran est vide. Au moment de rejoindre le monde, tout s'affiche quelques secondes pour que vous ayez votre etat complet, puis l'ecran s'epure.
+  - Vie, bouclier et matiere ont enfin chacun leur barre : les trois jauges se partageaient une seule barre de quelques pixels, avec des valeurs superposees. C'etait la remontee la plus frequente, personne ne savait quelle barre correspondait a quoi. Chaque grandeur a maintenant sa ligne, son pictogramme, sa couleur et ses chiffres lisibles.
+  - Le bouclier etait invisible : son compteur etait masque dans l'interface depuis toujours, impossible de savoir combien il vous en restait. Il a maintenant sa ligne et son chiffre, et il ne s'affiche que si vous en avez reellement un, c'est-a-dire avec un gilet ou le module de bouclier.
+  - Vos modules actifs sont listes : une rangee d'hexagones sous les barres montre les modules qui travaillent pour vous en ce moment. Seuls les modules phases apparaissent, pour que la liste dise la verite sur ce qui agit.
+  - Les aides de touches a la demande : fini le mur de raccourcis affiche en permanence. Une seule ligne discrete en bas a droite vous rappelle la touche, maintenez F1 (ou "?") et l'ensemble se deplie, a pied comme en vehicule. Les raccourcis affichent maintenant le nom de l'action, plus lisible que les anciennes icones.
+  - Minimap au format ecran : elle etait carree, elle passe en 16:9 et descend en bas a gauche. Son cadre, son fond et ses infos ont ete realignes, et le rendu coute meme un peu moins cher qu'avant.
+  - Coin haut gauche nettoye : l'avatar et le pseudo quittent le HUD, ils restent la ou ils servent - social, clan et groupe. La barre d'XP et les credits ne s'affichent plus qu'au moment ou ils bougent, sauf chez un marchand ou pendant un echange ou les credits restent affiches en continu. Les cinq etoiles de recherche ne s'affichent plus en gris quand personne ne vous cherche.
+  - Le chat rentre dans le rang : il avait un contour blanc et un fond floute qui n'existaient nulle part ailleurs dans le jeu. Il reprend maintenant le cadre ambre de la minimap, juste au-dessus de laquelle il vit, et une largeur fixe au lieu de s'etirer avec son contenu. Le code couleur des canaux est conserve, et le nom du canal prend enfin la couleur du canal.
+  - Retire : les deux horloges du HUD. Elles n'etaient pas utilisees et affichaient une heure fausse. Elles reviendront quand elles seront justes.
+  - La temperature, l'humidite et l'altitude suivent la meme logique, elles apparaissent quand la valeur bouge. Les delais d'affichage sont ajustables si vous preferez l'ancien comportement sur certains elements.
+  - Inventaire : les deux zones a droite n'apparaissaient qu'une fois qu'on avait commence a trainer un objet, donc rien n'indiquait qu'on pouvait lacher ou recycler quoi que ce soit. Elles sont maintenant affichees en permanence, avec les memes logos que les boutons du menu d'objet. Pendant le glisser, seule la zone qui accepte l'objet s'allume - un objet sans valeur de matiere n'allume pas le recyclage.
+  - Menu Social reconstruit : banniere avec les infos serveur et les joueurs en ligne en direct, Mon Groupe et Mon Clan remis en scene, liste des joueurs du serveur avec actualisation manuelle, pagination et marqueur (VOUS) pensee pour 500 joueurs, et Mon Escouade avec vos cyborgs recrutes et le rappel d'escouade. L'ancien onglet etait un assemblage en chantier, liste jamais branchee et bandeau DEV.
+  - Lobby V2 et panneau roadmap dans le lobby : la roadmap publique est consultable depuis le menu principal. Elle est aussi passee en trois langues (anglais, francais, espagnol) et compte 143 chantiers au lieu de 78.
+  - Plaque de chargement refaite a la direction artistique du jeu : plaque sombre a filets fins, crochets ambre aux quatre angles, titre a la typo maison et vraie barre de progression graduee, a la place d'un cadre gris-bleu delave avec une bande blanche qui ressemblait a un bug d'affichage.
+  - Ecran de chargement : statut sur l'unique ligne orange, un seul embleme au ratio verrouille qui pulse sans tourner, astuces sous la barre.
+  - Passe visuelle d'icones sur le HUD, le scanner, la construction, la minimap, le social, les trackers, la StarMap, les quetes, les alertes, les menus et la personnalisation, avec des pictogrammes dedies pour les items et les actions bloquees.
+  - Les notifications d'alerte passent maintenant devant les menus persistants, notamment les menus d'achat des PNJ.
+  - Touches manquantes dans le menu des controles : soin, inventaire, gadget (tir et roue), drift vehicule, radio (allumage, station suivante et precedente) et menu des missions n'apparaissaient pas et sont de nouveau listes.
+  - Curseurs de souris : les fichiers .cur etaient references dans les reglages mais seuls les .png existaient, donc le jeu retombait sur le curseur par defaut de Windows.
+  - Selection du cyborg feminin reactivee, avec son modele qui charge correctement et les animations d'arme reglees pour elle.
+  - Personnalisation du cyborg : teintes independantes par zone (tete, torse, bras, jambes), conservees au changement de sexe et jusqu'au personnage en jeu. La tete reste visible pendant la personnalisation.
+  - Les listes deroulantes des reglages restent ouvertes pendant leur rafraichissement au lieu de se fermer juste apres le clic.
+  - Les trackers appliquent leurs changements apres l'actor tick, hors du tick Slate : l'arbre de widgets n'est plus modifie pendant son propre parcours.
+
+
+STARMAP
+
+  - Refonte du dock : 13 icones a la direction artistique du jeu, libelles permanents sous chaque bouton, info-bulles, et quatre sections claires (NAVIGATION, REPERES, RESEAU, SYSTEME). Fini les logos aux metaphores trompeuses - la fusee qui voulait dire "colis", l'epingle qui voulait dire "lieu de mort" - et les boutons de developpement sont masques.
+  - Trois fonctionnalites qui existaient mais etaient invisibles sont maintenant exposees dans le dock : GROUPE, DETAILS et REGLAGES.
+  - Nouvelle legende CALQUES en haut a gauche : cle de couleur des 7 calques de la carte (joueurs, groupe, points d'interet, zones, trains, constructions) avec leur etat.
+  - Les calques deviennent cliquables : un clic allume, un clic eteint, et le libelle comme l'intensite du losange de couleur suivent l'etat reel. La legende et le panneau du dock sont synchronises dans les deux sens.
+  - Aides souris en bas a droite : glisser pour deplacer, clic droit pour orbiter, molette pour zoomer, clic pour selectionner.
+  - La carte tourne dans son propre monde : la vue 3D a maintenant sa propre camera, son streaming et ses traces. Le rendu de l'univers est suspendu pendant son ouverture puis restaure a la fermeture, donc un seul monde est rendu a la fois. Les tours et les stations de ravitaillement sont completes, et les planetes retrouvent leur echelle correcte dans les vues planete et systeme solaire.
+  - Capture adaptative : pleine frequence pendant le mouvement camera, frequence limitee au repos, coupee hors affichage, avec un rafraichissement immediat si la vue ou le contenu change.
+  - Icones stabilisees : reprojection native par lots avec une zone morte de 0,25 px, donc plus de tremblement pendant le deplacement, l'orbite et le zoom. Les icones derriere les planetes sont masquees et ne captent plus les clics.
+
+
+CONSTRUCTION
+
+  - Construire demande maintenant la Matrice de construction (voir Nouveautes).
+  - Le mode de placement par defaut passe de "snap uniquement" a "libre plus snap".
+  - Tous les eclairages restent placables en mode libre independamment du snap, et les pieces configurees en mode libre uniquement restent accessibles quand le snap est actif.
+  - Nouvelle tourelle mitrailleuse (categorie Defense) : 1500 PV, cout 20 Steel et 10 Copper, remboursement a 75 %, portee 500 m, 25 degats et 125 contre les vaisseaux, cadence de 0,5 s, rafales de 2 s, hitscan serveur, hostiles uniquement.
+  - Le Steel est ajoute aux spawns de minerai WorldScape, au scanner et aux trackers de ressources, et plusieurs gisements de Stone sont ajoutes dans certaines caves.
+  - Coffres locaux : un stockage a poser chez vous.
+
+
+VEHICULES ET VAISSEAUX
+
+  - Le mur du son est de retour : le cone de vapeur au passage de Mach 1 avait tout simplement perdu son maillage, et le plasma de rentree etait regle pour se declencher a 4000 km/h alors qu'un vaisseau plafonne a 3200, ou 6400 en boost - le calcul renvoyait zero en permanence, sans aucune erreur ni log. Le plasma s'allume maintenant a 2500 km/h et culmine plein boost, et le cone est remis en service sur les 13 vaisseaux avec une vraie progression : la vapeur se forme vers 1050 km/h, eclate au passage de Mach 1, puis se dechire et se dissipe vers 1500.
+  - Les frictions atmospheriques reviennent d'entre les morts : elles se declenchaient au-dessus de 8000 km/h, un seuil jamais franchi, donc le systeme etait mort depuis des mois. Recalibrees sur l'echelle de vitesse reelle, et la courbe de degats a ete remise a l'endroit - elle montait a 50 % des 10 % de la plage, ce qui rendait n'importe quel seuil mortel en une seconde, elle suit maintenant une loi cubique comme l'echauffement par frottement.
+  - En vol : croisiere a 3200 km/h sans aucun degat avec une marge confortable jusqu'a 3400, boost de 10 secondes environ 12 % de coque, 30 secondes environ 35 %, plein boost en continu coque detruite en 86 secondes. Le son et l'animation d'alerte du HUD etaient deja cables, ils se reveillent avec.
+  - Le feedback de degats atmospheriques commence maintenant a 7000 km/h et atteint sa pleine intensite a 8000 (avant 3400 et 7000).
+  - Hovercrafts : un hovercraft retourne ou coince sur le cote plus de 2 secondes ejecte ses occupants, et le joueur peut ensuite le retourner manuellement avec F, par la physique et en gardant la gravite locale. Les murs et les facades ne sont plus traites comme des surfaces de sustentation magnetiques, les vraies pentes restent franchissables jusqu'a 75 degres.
+  - Les vaisseaux ne forcent plus l'ejection du pilote pendant une montee ou une forte inclinaison : le retournement automatique et manuel est limite aux hovercrafts.
+  - Armes de vaisseau : les eclairs de bouche des miniguns sont attaches aux bouches de tir sur chaque client, le depart des traceurs utilise la position reellement affichee du vaisseau (fini le decalage pendant les deplacements), et la mitrailleuse montee passe en hitscan autoritaire cote serveur. Un vaisseau ne bloque plus ses propres tirs.
+  - Alertes cockpit : les trackers et alarmes sonores sont reserves aux acteurs identifies comme missiles, un simple verrou IA ne les declenche plus, et la disparition d'une menace retire son tracker.
+  - Trafic aerien : les epaves des vaisseaux detruits sont repliquees aux clients, restent jusqu'a l'impact et disparaissent 5 secondes apres, avec un nettoyage de securite a 60 secondes. Le trafic ambiant demarre maintenant directement sous forme d'imposteurs dormants, au lieu de simuler une seconde de physique complete a chaque apparition.
+  - Entrer et sortir d'un vehicule : les controles supplementaires de distance, d'angle et de point de sortie qui refusaient une entree malgre l'invite ont ete supprimes, les maintiens a duree nulle ne bloquent plus la sortie des vaisseaux, et les gels de realignement en montant ou descendant du toit d'un vehicule sont corriges.
+  - Sous un vehicule retourne en atmosphere, le personnage conserve le bas planetaire.
+  - Les HUD 3D des vehicules sont crees uniquement a leur activation, et leur desactivation libere les widgets et coupe leur tick.
+  - Pendant le pilotage d'un vaisseau, les interactions du vehicule sont masquees sauf la sortie dediee. Les passagers et les interactions independantes restent disponibles.
+  - Jetpack : la jauge s'initialise avec le carburant et la capacite reels des l'equipement, et le HUD suit la consommation jusqu'a l'epuisement sans modifier son equilibrage. La propulsion et l'inertie sont retablies en apesanteur, et le vol spatial automatique depend maintenant d'une gravite nulle, ce qui retablit le comportement au sol sur la Lune et les autres planetes sans atmosphere.
+  - Degats de chute : vous voliez vite au jetpack, vous vous posiez, vous perdiez de la vie sans raison. Le jeu mesurait votre vitesse totale et non votre vitesse de chute, donc votre vitesse horizontale comptait autant qu'une chute - plus vous voliez vite, moins vous aviez besoin de tomber de haut pour etre blesse. Seule la vitesse de descente reelle est prise en compte maintenant, mesuree selon la gravite locale. Les vraies chutes font toujours exactement aussi mal, rien n'a ete adouci.
+  - Navigation spatiale : les trackers etaient casses dans l'espace. Leur visibilite se base maintenant sur la presence d'atmosphere, les trackers de warp, de planetes et de stations reapparaissent immediatement, et les destinations de warp restent accessibles au milieu de l'espace.
+  - Retour de degat : une zone rouge directionnelle en espace camera, large au bord et resserree au centre, coupee quand la provenance n'est pas exploitable ou en cas d'auto-degats.
+
+
+MONDE ET CONTENU
+
+  - Sky Refuel Tower : l'interieur complet est livre pour Yanbu, Agadez et les autres tours, et la tour principale ne disparait plus pendant la regeneration des niveaux optimises.
+  - Les terminaux rangent votre arme a l'ouverture (boutiques, stockages, coffres locaux, machines de contrats, terminaux vehicules) et ne ressortent que celle qui etait reellement sortie.
+  - Le chapeau de capitaine Voss ne traverse plus le sol et reste ramassable.
+  - AtmoScape, 18 atmospheres pre-reglees physiquement calibrees, couvrant tous les corps du systeme solaire ou une atmosphere est detectee : Venus, Mars, Jupiter, Saturne, Titan, Uranus, Neptune, Pluton, Triton, Io, puis Mercure, la Lune, Europe, Ganymede, Callisto, Encelade, Rhea et Dione. Les valeurs derivent de la physique reelle - densites, compositions des gaz, echelles de hauteur NASA.
+  - Les exospheres tenues jouent la carte du realisme : aurores d'oxygene sur Europe et Ganymede, panache de glace d'Encelade, lueur d'horizon poussiereuse sur la Lune, sodium de Mercure. La couleur d'Uranus et de Neptune vient de l'absorption du rouge par le methane, le ciel martien est fait de poussiere et non de diffusion Rayleigh, et Pluton a son halo bleu de brume. Les corps sans atmosphere detectee n'ont volontairement pas de preset.
+  - Les planetes du jeu n'etant pas a l'echelle reelle, le systeme conserve le rayon de la planete en jeu et adapte automatiquement les hauteurs d'atmosphere : le look reste fidele au vrai corps celeste quelle que soit l'echelle.
+
+
+RENDU ET ECLAIRAGE
+
+  - Le terrain GPU retrouve ses biomes : sur le maillage GPU, la surface n'etait correcte qu'au sommet de la Terre - sur les flancs, roche et strates partout, desert et plages absents. La vertex factory GPU oubliait de remplir le bloc de grandes coordonnees du vertex shader, donc le materiau calculait ses pentes et ses altitudes par rapport a un centre de planete faux. En bonus, la couleur de vertex n'etait pas encodee comme sur le CPU et la texture de climat etait en demi-precision. Rendu CPU et GPU alignes, verifie au sol sur une base et depuis l'orbite.
+  - Le terrain ne disparait plus au sol sur les flancs des planetes : le test de visibilite du quadtree ne jugeait chaque noeud que par 9 points d'echantillon, donc debout sur une face du cube-sphere, loin de ses coins et milieux d'arete, tous ces points etaient sous l'horizon et la racine etait rejetee avec le terrain entier. Chaque noeud est maintenant aussi teste par son point le plus proche de la camera, et l'horizon utilise est celui du sol reel sous la camera.
+  - Fin des tuiles en escalier en profondeur : au-dela de la profondeur 14, le sol se degradait en blocs, jusqu'a devenir un escalier de cubes a la profondeur 22. Le point de reference de chaque tuile etait son centre sur la face du cube et non sur la sphere, donc a des centaines de kilometres du sol sur les flancs. Precision mesuree apres correctif : 0,005 cm a toute profondeur.
+  - Eclairage planetaire : la direction du haut local est maintenant publiee aux materiaux, qui peuvent enfin savoir ou est le haut sur une planete au lieu de se fier au Z du monde. La SkyLight ne remplace plus son hemisphere bas par un gris fixe - ce reglage est verrouille sur l'axe Z du monde cote moteur, il coupait donc toujours le meme demi-ciel quelle que soit votre position sur le globe.
+  - Eclairage souterrain : l'etat "sous terre" depend uniquement de la camera dans le volume actif, plus de changement a cause d'un rocher, d'une collision ou de la distance parcourue. L'entree et la sortie se fondent sur 6 secondes mais la cible reste binaire, donc l'eclairage ne varie plus une fois dans la cave.
+  - Dans les caves naturelles, l'illumination indirecte et la skylight tombent tres bas pendant que le ciel visible, le soleil, les lumieres directes et la lampe restent intacts. Des volumes sont poses dans les camps souterrains humains et sanglines, la grotte de pierre, le complexe IcLabs, la chambre du labo et le tutoriel.
+  - Interieurs souterrains eclaires (bunkers, labos) : chaque lumiere qui projette des ombres recoit une lumiere d'appoint sans ombre au meme endroit, qui reprend sa couleur, sa temperature et son rayon. Les neons eclairent enfin la piece au lieu de laisser juste un point blanc dessous.
+  - La lampe du drone devient une vraie lumiere directionnelle avec un profil circulaire : centre lisible, bords definis, chute naturelle, 65 m de portee. Plus de billboard ni de faux cone, et sa puissance ne change plus avec l'exposition souterraine.
+  - Illumination globale et reflets : un seul proprietaire applique le mode choisi (Off, SSGI ou Lumen). Les anciens reglages qui reprenaient la main sur les options graphiques sont supprimes, les reflets Lumen passent en calcul asynchrone, l'intensite des rayons reflechis est limitee pour supprimer les points brillants parasites, et le budget du cache de radiance monte a 800 sondes par image, donc beaucoup moins de zones noires apres une rotation rapide.
+  - Nuages volumetriques : le niveau de qualite que vous choisissez s'applique vraiment, au lieu d'etre ecrase par le preset du moteur.
+  - Presets graphiques : Ultra Low et Low utilisent des shadow maps classiques, Medium a Cinematic gardent les Virtual Shadow Maps. La resolution dynamique reste active jusqu'a Medium. Low et Medium appliquent enfin leur vrai niveau d'eclairage au lieu de reutiliser High, et le budget de textures de chaque preset est reellement applique (400, 600, 800, 1000 et 3000 Mo), ce qui n'etait pas le cas du tout avant.
+  - Reflets : la passe de reflets en espace ecran coute 0,076 ms au lieu d'environ 1,00 ms sur une trace a camera fixe. Les reflets metalliques ne changent plus selon l'upscaler actif.
+  - Ombres des lumieres locales mobiles : contours plus nets et beaucoup moins de bruit dans les zones de reflets et les ombres en mouvement.
+  - DLSS Balanced ne retombe plus silencieusement en Quality et applique bien ses 61 % de resolution de rendu.
+
+
+PERFORMANCES
+
+  - 52 a 83 FPS : la trace de reference du 24 juillet donnait 52 FPS de moyenne dans les memes conditions de test, et la trace suivante atteint 83 FPS.
+  - Le HUD passe en evenementiel et ne se met plus a jour en permanence. Les parties qui bougent ne forcent plus le redessin des parties fixes deja en cache, le graphe FPS se redessine a 10 Hz, les trackers et le retour de vitesse s'arretent completement quand il ne se passe rien, et les animations de l'ecran de chargement s'arretent quand le chargement est fini.
+  - Le graphe FPS est reecrit en natif : 120 echantillons en historique circulaire, un seul element de dessin pour toute la courbe.
+  - La minimap retrouve son canvas complet et son rendu normal, se redessine par invalidation ciblee sans reconstruire toute sa mise en page, et la projection de tous les marqueurs reutilise une seule matrice camera par lot.
+  - WorldScape regroupe les sections principales et les deux patchs de chaque niveau de detail dans une seule passe : un seul recalcul des limites, au plus une mise a jour de collision et une seule commande de rendu par maillage au lieu de trois. Les collisions de terrain sont mises en cache par requete, et la regeneration du feuillage d'une zone deja calculee n'est plus relancee tant que rien n'a bouge.
+  - Le client package peut utiliser jusqu'a 6 workers de premier plan au lieu d'etre bloque a 2.
+  - QLevel regroupe les prechargements, repartit la finalisation sur plusieurs images et elimine les conflits de streaming concurrents : ca charge plus vite et c'est plus stable.
+  - Les flow fields sont decoupes en phases reprenables qui tiennent dans le budget de l'image, et la rasterisation des obstacles repartit ses tests de triangles, primitives et couches sur plusieurs images en conservant son avancement.
+  - Les IA a corps skeletal limitent leur evaluation de pose au rendu, avec interpolation des images sautees et une evaluation sur 8 hors ecran.
+  - Les PNJ statiques ne recalculent plus leurs chevauchements apres chaque animation, et leurs maillages visuels attaches (casque, cheveux) ne generent plus d'evenements de chevauchement.
+  - Memoire GPU : le tas de descripteurs D3D12 monte a 1 million, ce qui elimine les debordements en serie, les petites lectures Nanite passent par le pool au lieu de creer une ressource dediee a chaque image, et le chargement initial n'attend plus que les PSO critiques.
+  - Le cache PSO du joueur est enfin conserve d'une session a l'autre : plus de saccades de compilation aux sessions suivantes. Le widget de chargement compte separement les shaders qui compilent et les PSO qui se precompilent, donc la barre ne repart plus en arriere.
+  - Le train ne reconstruit plus sa hierarchie, ne recalcule plus ses chevauchements sans raison et ne propage plus les transformations inchangees a toute sa hierarchie.
+  - Le service police passe d'un tick a 0,1 s a 0,5 s, et la limite d'images par seconde par defaut est deverrouillee.
+
+
+SUCCES STEAM
+
+  - 99 cles sur 99 sont raccordees : les 53 identifiants encore connectes a rien ont ete branches, apres un premier lot de 10 puis de 7.
+  - Les succes progressifs utilisent les statistiques persistantes avec mise a jour immediate des seuils. Les compteurs distinguent les boss infectes, les drones, les drones lourds, les gardes de police et les citoyens.
+  - Contrats, contrats de groupe, quantites vendues et destructions reelles passent par leurs chemins serveur. Les ventes se reconnectent au bon inventaire apres un changement de personnage.
+  - Les points d'interet, les six Warp de la Terre, l'AeroTram, les scans Terre / Lune / Mars / Venus / station, et les paliers souterrains a 5, 50 et 100 km sont raccordes, avec le noyau terrestre et le fond oceanique autour de 10 km.
+  - L'attribution cote serveur credite le bon joueur sur serveur dedie comme sur serveur d'ecoute, clients distants compris. Les evenements uniques sont dedupliques et rejoues si les statistiques persistantes ne sont pas encore pretes.
+
+
+MULTIJOUEUR ET SERVEURS DEDIES
+
+  - Les quetes ne fuient plus entre joueurs : sur serveur dedie, deux joueurs sur la meme quete principale se marchaient dessus - un objectif valide par l'un creditait l'autre, qui recevait la suite et le dialogue, et un abandon ou une completion chez l'un faisait disparaitre la quete du tracker de l'autre. La fonction qui termine un objectif cherchait le premier joueur du serveur ayant cette quete au lieu du proprietaire de l'objectif, et les evenements globaux etaient diffuses sans identifiant de joueur. L'objectif se resout maintenant par son propre joueur avec verification d'identite, et les evenements portent un contexte joueur que chaque ecouteur verifie.
+  - Progression de quete, fin des kills fantomes : chaque mort d'IA dans le monde envoyait un evenement de kill a tous les joueurs dont l'etat de quete etait charge sur le serveur, sans verifier qui avait tue ni a quelle distance, donc deux factions qui se battaient a un kilometre faisaient monter les compteurs de joueurs qui n'avaient rien vu. Consequence assumee : si vous affaiblissez un ennemi et qu'une IA l'acheve, le kill ne compte plus pour vous.
+  - Le menu Modules etait vide en multijoueur : sur serveur dedie, l'onglet restait completement vide pendant toute la session alors que les modules eux-memes fonctionnaient en jeu. L'ecran ne s'accrochait qu'une seule fois, trop tot, avant que le mur, votre profil joueur et le lien entre les deux soient arrives. Il surveille maintenant l'arrivee du mur et s'accroche des qu'il est la.
+  - QModule passe en multijoueur : le vaisseau de renfort devient un decor purement local spawne sur chaque machine, les visuels d'artillerie ont un filtre de distance a l'arrivee, la caisse de ravitaillement passe au modele deterministe au lieu d'un flux de position pour une ligne droite, et les horodatages de vol passent en double precision (un serveur qui tourne 11 jours faisait saccader les arcs).
+  - Mesure en session a deux joueurs : balise plantee a la position identique au millimetre des deux cotes, vaisseau suivi depuis 1686 m cote client, grenades repliquees, caisse livree 6 sur 6, escouade larguee, zero erreur.
+  - Bande passante : SteamSockets et IpNetDriver sont plafonnes a 200 Ko/s par client.
+  - Les animations des joueurs distants sont retablies sur serveur dedie apres application de leur mouvement replique, et les proxies distants ne produisent plus d'appels reseau parasites tout en conservant leur rendu d'arme.
+  - Les sauvegardes concurrentes de progression sont serialisees pour eviter les pertes intermittentes.
+  - Le serveur dedie n'initialise plus l'input UI quand Slate est absent.
+
+
+STABILITE
+
+  - Correction d'un crash au changement de niveau ou a la fermeture du monde (ramasse-miettes en build Shipping) : les calculs asynchrones travaillent maintenant sur un instantane local et les resultats ne sont appliques que sur le fil de jeu.
+  - Correction d'un crash en Shipping pendant la generation du portrait d'un compagnon : l'arme et sa lunette se referencaient l'une l'autre, donc le parcours des acteurs attaches partait en boucle infinie.
+  - Correction d'un crash a l'ouverture de la roadmap, avec le rendu web accelere conserve.
+  - Correction d'une Access Violation pendant le passage du preset High a Balanced en Shipping : la passe experimentale de joignabilite incrementale du ramasse-miettes est desactivee.
+  - Correction d'un warning de CVar non enregistree sur les presets camera, et le niveau ZoneGraph se charge de nouveau sans dependance manquante.
+  - Fausses alertes au chargement : deux panneaux se plaignaient de ne pas trouver le joueur au chargement d'une carte. Aucun bug reel, mais le message etait emis en niveau Error et polluait les rapports d'erreurs de session, qui ne remontent que les Error et Fatal et plafonnent a 200 messages. Passe en Log.
+  - Items et persistance : le loadout initial n'est genere que quand un nouvel inventaire recoit son identifiant (une sauvegarde de developpement avait accumule 30 paires d'armes de depart et 118 enregistrements incomplets ou orphelins). Les items ajoutes a un inventaire persistant gardent maintenant toutes leurs donnees entre les sessions, et un item sans donnee valide est rejete au chargement puis nettoye.
+  - Messages de mort : le type de degat arrive maintenant jusqu'au choix du message, donc les degats environnementaux, chute comprise, utilisent la table decor et gravite avec ses 18 variantes.
+  - Ascenseurs : activation, direction, chronologie, portes, boutons et plateforme mobile passent par des contrats natifs repliques.
+  - Localisation reparee, et audit des warnings de build (4 warnings de cook elimines, plus les warnings de mobilite des maillages).
+
+
+---
+NON CONFIRME EN JEU  (a tester ou a retirer avant publication)
+
+  Code et compile, mais jamais valide manette en main. Etat "check" dans la roadmap.
+  - Reticule IRIS et onde de scan IRIS
+  - Regles de zone sure cote modules
+  - StarMap : calques cliquables et capitale holographique
+  - Zones de depot d'inventaire
+  - Coffre local
+  - Balises radio de mission
+  - Fiche cyborg (onglet Statistiques) - ses libelles sont aussi encore en francais en dur, une passe de localisation est necessaire avant publication
+  - Etabli de modules : trouvable dans le monde ou constructible dans votre base, installer consomme l'item et retirer le rembourse
+
+
+---
+BUGS CONNUS  (a trancher : publier en Known Issues, ou corriger d'abord)
+
+  - Points de phase perdus : un cyborg de niveau 14 arrive avec un solde de phases a zero. Deux stocks de points coexistent sans passerelle et l'ancien solde n'est plus lu par le nouvel ecran. Les points sont vraisemblablement toujours en base, pas detruits. Remonte le 25 aout sur le serveur prelive.
+  - Armes des PNJ trop fortes et aucun etouffement en interieur : le passe-bas de distance a ses deux bornes a 20 kHz donc il ne filtre rien, et l'etat "interieur" est cable en dur a faux.
+  - Rebind des axes HOTAS : la detection d'axe ne scrute qu'une seule source, ne demarre qu'a l'ouverture de la liste deroulante, et ne demarre pas du tout si cette liste est vide, sans rien afficher.
+  - Interieur des Sky Refuel Tower : encore a faire sur une partie des tours.
+
+
+---
+EN DEVELOPPEMENT  (PAS ENCORE LIVE - ne pas annoncer comme livre)
+
+  - Modules d'arme : les phases sur les armes, installees a l'etabli. 24 fiches au catalogue, 3 premiers modules cables et leurs items crees - canon renforce, chargeur rapide, grenade collante. Ordre fixe : armes, puis etabli, puis interface, puis passe how-it-works complete.
+  - Modules de vehicule.
+  - Ouverture publique des modules et retrait du systeme de phases V1.
+  - Rappel de flotte v2 : livraison longue distance (orbite, univers, trajet sur carte).
