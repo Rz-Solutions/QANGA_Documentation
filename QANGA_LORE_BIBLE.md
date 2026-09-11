@@ -190,7 +190,12 @@ contenu secondaire.
 
 ---
 
-## 6. Le Voss, ou Échelon Zéro
+## 6. Le Voss
+
+> **TRANCHÉ le 2026-09-11 par Benja : la faction s'appelle LE VOSS, et rien d'autre.** Le nom
+> *Échelon Zéro*, qui figurait dans une version du texte de référence, est **abandonné** : il ne
+> doit apparaître ni en jeu, ni dans le projet, ni dans un document. Le mouvement, sa doctrine et
+> son fondateur sont conservés tels quels, seul ce nom disparaît.
 
 **CANON.** C'est la matière narrative la plus développée du projet, et **la moins présente en jeu**.
 
@@ -212,9 +217,9 @@ Veyron, elles pourraient être **une réponse évolutive de la biosphère elle-m
 
 **La fondation.** Veyron quitte discrètement ICLabs et rassemble : des autonomes technologiques,
 des cyborgs de première génération rejetés par ICLabs, des intelligences artificielles militaires
-abandonnées, et des humains volontaires pour une transition cybernétique. Le mouvement prend le nom
-d'**ÉCHELON ZÉRO** : ramener l'humanité au point zéro de son évolution afin de permettre
-l'apparition d'une nouvelle forme de civilisation.
+abandonnées, et des humains volontaires pour une transition cybernétique. Le but qu'il assigne au
+mouvement : **ramener l'humanité au point zéro de son évolution** afin de permettre l'apparition
+d'une nouvelle forme de civilisation.
 
 **Les trois objectifs.**
 1. Empêcher la renaissance incontrôlée de l'humanité biologique.
@@ -297,7 +302,6 @@ Géométrie en place, aucun texte.
 | **Voss** | **0** |
 | **CRYO19** | **0** |
 | **Veyron** | **0** |
-| **Échelon** | **0** |
 | **PostCom** | **0** |
 | **Awakened** | **0** |
 
@@ -351,17 +355,45 @@ plus l'Orizaune et l'Orizaune rouillé dans l'espace), **Velkara** (Explorer, Pa
 Passenger, c'est le vaisseau du tutoriel), **Etlas** (Pawad, PodFury), **Berlin** (Police),
 **HV** (BlackSync), **Storm** (Travel), **Valrifle**. Le fabricant d'armes est **NASH**.
 
-**JEU, les 22 marques d'affichage** existent sous `Content/Resources/Pubs/`, mais **13 n'ont
-strictement aucun texte dans le jeu** : Titanium ICLI, I-C News Radio, IC Police, CineVortex,
-LoopLife, Komet, Vieego, McFrailenergy, CoperMuter, Sboutique, A.D Store, Hardware Store, Chez Fred.
-Elles n'existent qu'en logo.
+**JEU, les 22 marques et ce qu'elles vendent.** Relevé le 2026-09-11 en exportant les
+**58 affiches publicitaires** de `Content/Resources/Pubs/` depuis l'éditeur. Chaque texture est un
+atlas de deux affiches, et **chacune porte son slogan peint**. Les marques que l'on croyait vides
+ont toutes une identité complète : il n'y avait simplement aucun texte de jeu pour la porter.
 
-**JEU, marques cachées dans les objets, sans aucune description** : **Sola** et **Creaustine**
-(boissons), **Bottle Imperial**, **Captain's Special Reserve** (alcool, quête Q010), **Rodrigo**
-(chips), **Maorlbo** (cigarettes), **Cosbond**, **Malocrane** (médicament), **Starkito**
-(alimentaire, assez gros pour avoir donné son nom à la ville de **Starkitown**, aujourd'hui
-abandonnée), **Cryoday** (exploitant probable des caissons : il a une réplique, *"Welcome to the
-Cryoday!"*, et un son placé dans la séquence d'Introduction).
+| Marque | Métier, établi par l'affiche | Slogan peint |
+|---|---|---|
+| **A.D Store** | **Armurerie** (fusils d'assaut à l'image) | *"You're one purchase away from being safe."* et *"Protect your family / Stand up for yourself"* |
+| **Chez Fred** | **Restaurant**, service du midi | *"Treat yourself to lunch, Monday to Friday"*, *"The real taste"* |
+| **CineVortex** | **Cinéma**, salle et billetterie | *"Get your ticket"*, *"Open 24/24"*, *"Admit one"* |
+| **Cope Mutter** | **Banque** (confirme la bible) | *"Believe in yourself, we believe in your project"*, *"Invested in your future. Now."* |
+| **Costa Riv** | **Plage et loisirs balnéaires** | *"Take a break, summer holiday"*, *"Summer special offer -50 %"* |
+| **Hardware Store** | **Matériel informatique** | *"The new YGC-7999K, why are you waiting ?"*, *"Upgrade to the futur"* |
+| **Iron Dee** | **Véhicules**, en plus de la raffinerie | *"Fast. Big. Comfortable. Why choose ?"* |
+| **Komet** | **Parfumerie masculine** | *"Komet Fragrance. The Pure."* |
+| **Luna** | **Parfumerie féminine** | *"New fragrance, Iris, for her"*, *"Luna Fragrance, Narcisse"* |
+| **McFrailenergy** | **Boisson énergisante** | *"The energy you need"* |
+| **Sola** | **Soda** | *"Sola drink, great cryo"*, *"Which one is your mood today ?"* |
+| **Starkito** | **Restauration saine** | *"Starkito Restaurant"*, *"Healthy everyday"* |
+| **Sboutique** | **Centre commercial** | *"Shop. Enjoy. Repeat. At our mall."*, *"Spend without limits"* |
+| **LoopLife** | **Végétal et bien-être** | *"What if you keep it alive all your life ?"*, *"Take a deep breath"* |
+| **SawgeniuS Park** | **Parc d'attractions** | *"New attraction, new sensation"*, *"Open 7/7, unlimited fun"* |
+| **Titanium ICLI** | **Matériaux** | *"Unbreakable"*, *"Tearproof"* |
+| **Vieego** | **Écologie** | *"Nature by Vieego Futur"* |
+| **Cryoday** | **Cryogénie**, marque grand public de CRYO19 | *"A better future for your family"*, *"Futur is cryo"* |
+| **Melrose** | **Constructeur**, avec une division sport | *"Tougher than you can imagine"*, *"Melrose Motorsport"* |
+| **ICLIspace** | **Chantier orbital**, et **il vend les Velkara** | *"Now available: Velkara Explorer"*, *"Don't dream it, fly it"* |
+| **I-C News Radio** | **Radio** | *"Your ultimate playlist, all day, every day"*, *"Your sound, our passion"* |
+| **IC Labs Industrie** | **Corporation** | *"Yellow Wall: the safety first"*, *"Industry intelligence, innovation & design"* |
+
+**IC Police** dispose en plus d'un **écusson complet** (`Logo_IC_Police`) portant *IC POLICE /
+ICLABS INDUSTRIE* autour d'un monogramme IC et de deux étoiles.
+
+Toutes les affiches portent la même **signature circulaire Yellow Wall** en bas à droite : c'est la
+régie publicitaire commune du monde.
+
+> **Conséquence.** La question ouverte *"8 marques sur 22 n'ont aucune existence"* est **close** :
+> elles en ont toutes une, peinte, cohérente et souvent drôle. Ce qui manquait n'était pas
+> l'identité, c'était un endroit pour la lire. Le réseau IC est cet endroit.
 
 ---
 
