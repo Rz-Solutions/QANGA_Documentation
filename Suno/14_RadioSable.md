@@ -8,7 +8,7 @@
 
 **Registre.** Dignité, chaleur, refus sans haine. Ici on ne dit pas « cycle » mais « jour », on ne compte pas en Crédits mais en gourdes d'eau et en pièces de moteur, on ne se réveille qu'une fois. La Tour de Relais de Djibouti est à côté, gratuite, et personne n'y va : « un corps, une vie, un nom ». On regarde la Capitale et son Mur doré comme une chose lointaine et un peu triste. Les convoyeurs d'ICLabs passent au Grand Pont, on leur fait signe, on ne monte pas. Pas de pillards, pas de Voss : ceux du sable s'en méfient autant que d'ICLabs, et n'en parlent qu'à demi-mot.
 
-**Place dans le monde.** Nouvelle station, hors réseau IC. Émetteur `Local` faible centré sur la zone de Dire Dawa (plan section 4.1 : `FalloffStartKm` 20, `RadiusKm` 60). Pas de publicité : des annonces de troc à la place, plus un message poli aux convoyeurs. Aucune piste existante du projet n'est montée sur cette station.
+**Place dans le monde.** Nouvelle station, hors réseau IC. Émetteur `Local` faible centré sur la zone de Dire Dawa (plan section 4.1 : `FalloffStartKm` 20, `RadiusKm` 60) ; au catalogue depuis le 2026-09-14 (`RadioSable`, bloc `WAV_Radio_RADIOSABLE_01` dans `MS_QRadio_RadioSable`) en réception planétaire provisoire, l'émetteur local reste à valider sur place. Pas de publicité : des annonces de troc à la place, plus un message poli aux convoyeurs. Aucune piste existante du projet n'est montée sur cette station.
 
 ## Sommaire
 

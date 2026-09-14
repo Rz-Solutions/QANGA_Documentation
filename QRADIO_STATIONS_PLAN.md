@@ -101,7 +101,7 @@ Format de `QRADIO_GUIDE.md` section 7 : `Type`, `PlanetRef`, `LocalOffset`, `Fal
 | Yellow Roots, Traverse, Radio Velours, Radio Centinela | la Capitale et sa région | `Local`, `PlanetRef` = la planète, `LocalOffset` = antenne de la Capitale (à relever), `FalloffStartKm` 150, `RadiusKm` 350 |
 | Радио Орбита | l'orbite et la face visible | `Space`, `LocalOffset` = position d'ICLI Station (à relever), `FalloffStartKm` 3000, `RadiusKm` 8000 |
 | AMBRE | ponctuelle, intermittente | plusieurs émetteurs `Local` sur les sites Voss et les camps rebelles (`Content/_QLevel/Universe/Planetary/Rebel/Composite/`), `FalloffStartKm` 4, `RadiusKm` 15 ; plus tard, gating par le module Interception radio |
-| Radio Sable | le désert de Dire Dawa | `Local`, `LocalOffset` = zone Dire Dawa (à relever), `FalloffStartKm` 20, `RadiusKm` 60 |
+| Radio Sable | le désert de Dire Dawa | cible : `Local`, `LocalOffset` = zone Dire Dawa, `FalloffStartKm` 20, `RadiusKm` 60. **Au catalogue depuis le 2026-09-14 en réception planétaire provisoire** (choix de Benja). Position candidate relevée dans `QTrain_RelayDireDawa94566_Station.Data_Location` : (-206833577.38, -147529482.36, -126205927.81), repère non vérifié, à valider sur place avec `qradio.Debug 1` avant de passer en local |
 
 ### 4.2 Détail par station
 
@@ -620,7 +620,7 @@ Fichier : `Documentation/Suno/14_RadioSable.md` (76 Ko). Morceaux : 18 ; jingles
 
 **Registre.** Dignité, chaleur, refus sans haine. Ici on ne dit pas « cycle » mais « jour », on ne compte pas en Crédits mais en gourdes d'eau et en pièces de moteur, on ne se réveille qu'une fois. La Tour de Relais de Djibouti est à côté, gratuite, et personne n'y va : « un corps, une vie, un nom ». On regarde la Capitale et son Mur doré comme une chose lointaine et un peu triste. Les convoyeurs d'ICLabs passent au Grand Pont, on leur fait signe, on ne monte pas. Pas de pillards, pas de Voss : ceux du sable s'en méfient autant que d'ICLabs, et n'en parlent qu'à demi-mot.
 
-**Place dans le monde.** Nouvelle station, hors réseau IC. Émetteur `Local` faible centré sur la zone de Dire Dawa (plan section 4.1 : `FalloffStartKm` 20, `RadiusKm` 60). Pas de publicité : des annonces de troc à la place, plus un message poli aux convoyeurs. Aucune piste existante du projet n'est montée sur cette station.
+**Place dans le monde.** Nouvelle station, hors réseau IC. Émetteur `Local` faible centré sur la zone de Dire Dawa (plan section 4.1 : `FalloffStartKm` 20, `RadiusKm` 60) ; au catalogue depuis le 2026-09-14 (`RadioSable`, bloc `WAV_Radio_RADIOSABLE_01` dans `MS_QRadio_RadioSable`) en réception planétaire provisoire, l'émetteur local reste à valider sur place. Pas de publicité : des annonces de troc à la place, plus un message poli aux convoyeurs. Aucune piste existante du projet n'est montée sur cette station.
 
 | N | Titre | Artiste | Langue | Durée cible | Style | Clin d'oeil |
 |---|---|---|---|---|---|---|
@@ -764,6 +764,7 @@ Ces 27 pistes sont déjà montées dans `MS_MusicLib` (25) et `MS_BarMusic` (13)
 | Music_chill | 374.44 | ancienne piste de Chill FM, remplacée le 2026-09-14 (asset conservé) |
 | WAV_Radio_CHILLFM_01 | 1964.71 | Chill FM, bloc d'antenne monté par Benja, importé depuis une copie à -17 LUFS (2026-09-14) |
 | WAV_Radio_HitWall_01 | 1544.66 | HitWall, bloc d'antenne monté par Benja, importé depuis une copie à -17 LUFS (2026-09-14) |
+| WAV_Radio_RADIOSABLE_01 | 1229.09 | Radio Sable, bloc d'antenne monté par Benja, importé depuis une copie à -17 LUFS (2026-09-14) |
 | Pub_LifeLoop | 24.43 | pub LoopLife (toutes stations) |
 | Pub_Tamil | 15.32 | pub Tamil Station (Tamil Ondes) |
 | Pub_Tamil_Replique | 3.16 | réplique Tamil |
