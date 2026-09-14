@@ -104,6 +104,7 @@ Total estimé : environ 4 x 10^8 instructions double par tuile, dont plus de 90 
 - Le régulateur (`WSHeightfieldManager.cpp:1213-1240`) ne mesure que le temps CPU de soumission (budget 6 ms, `Main.cpp:160-165`) et le temps d'image relatif, avec un plancher de 4 tuiles par tick, un plafond de 64 et une rafale urgente de 8 (`WSHeightfieldManager.h:151-155`). Le commentaire des lignes 1214-1216 le dit : « The CPU submit time says nothing about the GPU cost of a 128 x 128 Earth tile ». Quatre tuiles par tick sur une 3060, c'est 16 à 32 ms de GPU dans l'image.
 - À chaque tuile générée, le maillage doit aussi être régénéré (nouvelle tuile = obligatoire, `WSGPUTerrainRenderer.cpp:1895-1925`), et les voisins dont le masque de couture change sont remaillés (`1898-1901`).
 - Le cache est un LRU sous budget (3 x caps x 361 Ko par tuile, clamp 128 Mo à 2 Go, `Main.cpp:1728`), donc au sol un demi-tour ré-demande des tuiles évincées (mesuré le 03/09, voir mémoire du projet).
+- Ordre de grandeur VRAM en mode GPU (estimation du 2026-09-12) : 0,55 à 1,3 Go (cache HF 3 x caps x 361 Ko + pool de sommets <= 768 Mo), contre ~10 Mo pour le clipmap.
 
 ## 6. Cause 3 : le coût par sommet et le nombre de passes
 

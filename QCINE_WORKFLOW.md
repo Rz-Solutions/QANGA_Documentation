@@ -127,6 +127,8 @@ ombres haute qualite, distance de vue x50, flush du streaming), TSR force par `M
 32 images de chauffe. Les methodes de GI, de reflexion et d anti-aliasing du projet ne sont pas touchees
 (`Documentation/Lighting/RzZz_Tested_Lighting_Settings.txt` reste l autorite).
 
+Note de rendu : `use_camera_cut_for_warm_up` doit valoir False quand le cut camera commence a l image 0.
+
 ## 3. Resultats mesures le 2026-09-04
 
 - Plateau `L_Stage_Studio` cree, sauve, rendu : premiere orbite de 180 images en 720p, 333 s dont environ 4 min de
@@ -151,6 +153,8 @@ ombres haute qualite, distance de vue x50, flush du streaming), TSR force par `M
   conversion est retiree.
 - Piege Python 5.7 : `get_cine_camera_component()` rend `None` sur un gabarit de spawnable ; la propriete
   `camera_component` fonctionne. `PrimitiveComponent.get_local_bounds` n existe pas ; `SystemLibrary.get_component_bounds` si.
+
+Cadence mesuree : un lot de 5 images fixes = 117 s (`render.render_batch`, une seule session PIE).
 
 ## 4. Le pont CLIScape : ce qu il y a dans le ventre (audit du 2026-09-04)
 
@@ -295,6 +299,9 @@ echantillons temporels etaient tous pris au meme instant (aucun flou, temps de r
 evaluait le monde avec un delta fictif. Depuis la v3, chaque camera de plan porte son propre reglage de
 post-process (`motion_blur_amount` 0.5 = 180 degres, `motion_blur_max` 5), ce qui prime sur les volumes du niveau
 sans toucher au projet. Les erreurs disparaissent et le passage du vaisseau et le whip pan ont un vrai flou.
+
+### Resultat final : teaser v3 (2026-09-04, 23:13)
+`Saved/QCine/Teaser/QANGA_teaser_v3.mp4` : 30 s, 1080p, 2.39:1, musique, flou de mouvement. Dernier livrable de l atelier : Benja a demande l arret a 23:13 ("arrete la, c est pas mal, on continuera plus tard").
 
 ## 6. Ce qu il reste a faire
 

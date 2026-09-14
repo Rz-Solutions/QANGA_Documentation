@@ -1,6 +1,6 @@
 # Fiche Cyborg V3 : proposition de refonte de l onglet Statistiques
 
-Etat : PROPOSITION (2026-09-05), rien n est construit. Ce document est le lot 0.
+Etat : PROPOSITION du 2026-09-05, LIVREE et validee par Benja le meme jour (W_Stats_Overview reparente sur UQModule_CyborgSheetWidgetBase). Ce document garde la proposition d origine (lot 0).
 Maquette interactive : https://claude.ai/code/artifact/b5a30dd1-1698-497c-af06-d9b16cc0f4a1
 (scene 1920x1080, vue A = la fiche, vue B = l impact d un module depuis le mur, bouton de
 simulation d un palier ; les chiffres du personnage d exemple sont illustratifs, les valeurs de

@@ -486,6 +486,24 @@ exerce : `QModule_Types.h` (00:59, qui porte `FQModule_SocketState.bActive`),
 Test decisif propose : relancer `qats.qmodule.start Cyborg Contract` sur une copie sans mes
 quatre edits C++. Si le preflight echoue quand meme, la regression est anterieure.
 
+## 12. Etat au 2026-09-15 (resume de reprise)
+
+- **Compile et synchronise** : DLL QModule du 2026-09-14 22:58, aucune source QModule plus recente.
+  Le depliage anime (par. 11 et `QModuleSentry::Stages`) est donc actif.
+- **Retour Benja du 2026-09-10** : palier 1 fonctionne en jeu, paliers 2 et 3 non.
+- **Ecarte par mesure** : classes de variantes vides (les 3 se chargent au boot), collision du pod
+  (aucun mesh du kit n'a de collision simple), references cassees (les variantes ne different que
+  par `SM_Turret_Missile` et `SentryLoaderR`), aggregation des stats (`Clamp(Level-1)`). Le seul
+  point du chemin qui depend du niveau est `ResolveTurretClass`.
+- **Reste** : test PIE reel palier par palier sur `L_Dev_Claude`.
+- **Son et effets de deploiement** : `SentryTurretDeployAudio` est vide. Consigne Benja : ne rien
+  inventer, reutiliser la palette existante (`MedicalDroneDeployAudio`, `StickyGrenadeStickAudio`,
+  `SupplyDropImpactAudio`, `SupplyDropImpactFX` = `NS_Smoke_03`). Tir et mort deja herites de
+  `TurretBase`.
+- **Incident hors chantier, resolu** : `CombatComponent` ne compilait plus sur cette machine
+  (fonction C++ `ResolveLastDamageController` synchronisee le 13/09 mais pas encore compilee). Un
+  build complet le 14/09 (22:54 a 23:00, `Result: Succeeded`) l'a regle.
+
 ## 8. Journal
 
 - **2026-08-31** : dossier ouvert. Renommage `SM_Turret_MacgineGun` -> `SM_Turret_MachineGun`
@@ -503,3 +521,4 @@ quatre edits C++. Si le preflight echoue quand meme, la regression est anterieur
   C++ verifie vivant dans l'editeur. NON FAIT : depliage anime de la tourelle, test en jeu,
   validation visuelle. A TRANCHER : verrou serveur dedie de la voie missile, et regression du
   preflight QATS apparue apres le 23/08.
+- **2026-09-15** : etat consolide (par. 12) ; build vert confirme ; test PIE des paliers 2 et 3 en cours.
