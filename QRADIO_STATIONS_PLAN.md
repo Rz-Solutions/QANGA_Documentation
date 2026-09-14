@@ -12,7 +12,7 @@
 - **268 morceaux, 65 jingles, 85 interventions et 81 publicités ou annonces**, tous écrits en entier : prompt de style et paroles complètes taguées, prêts à coller dans Suno. Onze langues : français, anglais, espagnol, russe, allemand, italien, portugais, japonais, coréen, arabe, latin.
 - **Le panel Suno** est dans `Documentation/Suno/` : un brief commun (`00_BRIEF_COMMUN.md`) et un fichier par station (`01_ICNewsRadio.md` à `14_RadioSable.md`). Le détail par station est en section 4, les comptes vérifiés en section 9.
 - **Chaque morceau est un clin d'oeil à une chanson réelle**, par son titre détourné, son nom d'artiste pastiche et son genre, dans la lignée des Bob Marcly et Big Roh déjà en jeu. Aucune parole réelle n'est reprise et aucun nom d'artiste réel n'apparaît dans un prompt Suno : la ligne `Clin d'oeil` de chaque morceau dit à Benja ce qui est visé.
-- **Le blocage technique reste entier** : la lecture continue n'est pas câblée, donc chaque station ne joue aujourd'hui qu'un seul morceau (section 1). C'est un câblage MetaSound, pas du C++, mais c'est une modification d'asset : elle attend l'accord de Benja.
+- **Lecture continue : voie (B) retenue par Benja le 2026-09-14** : un bloc d'antenne monté par station, rejoué en boucle (la boucle était déjà active dans les MetaSounds de station). Chill FM tourne sur son bloc `WAV_Radio_CHILLFM_01` (1964.71 s) depuis le 2026-09-14 (section 1).
 - **Les décisions qui reviennent à Benja** sont listées en section 2 (noms de stations, animateurs, langues, fréquences, arbitrages sur trois pistes existantes).
 
 ---
@@ -21,7 +21,7 @@
 
 | Constat | Où c'est écrit | Conséquence pour ce plan |
 |---|---|---|
-| **Lecture continue non câblée** : la station joue `Music[Index]` puis s'arrête en fin de piste ; le Wave Player n'est pas en boucle et le trigger `Play` du contrat n'est pas relié dans le graphe. | `Documentation/QRADIO_GUIDE.md`, section 11 (« À finaliser / prévu », première puce) | Tant que ce n'est pas fait, **toute station est une station à une chanson**. Deux voies, toutes deux des éditions d'asset MetaSound (aucun C++) : **(A)** relier `Play` au Wave Player et avancer d'index à `On Finished` (playlist par piste, « now playing » exact) ; **(B)** une seule longue piste par station (un bloc d'antenne monté : jingle, chanson, pub, chanson...) avec le Wave Player en boucle (« Loop, station mono-piste » dans la même section du guide). Ni l'une ni l'autre n'est faite ici. |
+| **Lecture continue : voie (B) retenue par Benja le 2026-09-14** : une seule longue piste par station (un bloc d'antenne monté : jingle, chanson, pub, chanson...), rejouée en boucle par le Wave Player (`Loop = true`, mesuré le 2026-09-14 sur `MS_QRadioStation` et `MS_QRadio_ChillFM`). Ces MetaSounds n'ont pas d'entrée `Play` : inutile avec un bloc unique. | `Documentation/QRADIO_GUIDE.md`, section 11 (« À finaliser / prévu », première puce) | Chaque station se monte en **un bloc exporté du logiciel de Benja**, normalisé à -17 LUFS, et `TrackMeta[0].Duration` doit valoir **exactement** la `Duration` du SoundWave (sinon départ au mauvais endroit et auditeurs désynchronisés). La voie **(A)** (playlist par piste, avance d'index à `On Finished`, « now playing » exact) n'est pas câblée. |
 | **Aucun widget de tuner** : on zappe avec deux touches, à l'aveugle. | `QRADIO_GUIDE.md` section 11 (« UI tuner + changement de station ») | À 14 stations, un tuner devient nécessaire. Les champs `DisplayName`, `Icon`, `Frequency` du catalogue sont prêts pour lui. |
 | **`Frequency` vaut 0.0 et n'est lu nulle part** ; **`GenreTags` est vide partout**. | Session précédente (catalogue `Content/Systems/QRadio/DA_QRadio_Stations`) | Les fréquences de la section 6 sont une proposition d'affichage. **Aucune fréquence n'est prononcée à l'antenne** dans le panel. |
 | **La réception ne filtre pas par module** : les émetteurs ne connaissent que la distance. | `QRADIO_GUIDE.md` section 7 | La station du Voss « recevable seulement avec le module Interception radio » demande un petit ajout (un drapeau de station testé contre le module) : **hors périmètre, à valider**. Le module `Interception radio` est listé dans `QMODULE_CATALOGUE.md` (ligne 89, « Capte les canaux police/Voss ») ; `Antenne longue portée` (section 9.21) multiplie déjà la portée de réception (`ReceptionRangeMult`). |
@@ -36,7 +36,7 @@
 1. **Les noms d'antenne** des 12 nouvelles stations (section 4). Ils sont proposés, pas gravés. Les `StationId` proposés deviennent des contrats dès qu'ils entrent au catalogue : à fixer une fois.
 2. **Les animateurs** : un nom principal et deux alternatives par station, dans la nomenclature du jeu (prénom court + nom techno ou astronomique). Cas particulier : Vieux Monde pourrait être animée par **Tom Ohm**, PNJ existant (cyborg Gen-1 hors réseau, collectionneur), ce qui l'engage narrativement ; le panel propose **Gus Lumen** par défaut.
 3. **Les langues** : la répartition de la section 4 (FR, EN, ES, RU, DE, IT, PT, JP, KO, AR, LA). Chaque station a une langue dominante et des invitées ; c'est ajustable station par station sans réécrire le reste.
-4. **La voie de lecture continue** : (A) trigger `Play` câblé et avance d'index, ou (B) bloc d'antenne long en boucle. Le panel est écrit pour (A) (une piste = un fichier), et reste montable en (B).
+4. **La voie de lecture continue** : **tranchée par Benja le 2026-09-14, voie (B)**, bloc d'antenne long en boucle. Le panel, écrit une piste par fichier, se monte en blocs dans son logiciel avant import.
 5. **Trois pistes existantes à double usage** : `Dissidence` (479.36 s), `Sanglotown` (104.56 s) et `Glitze` (158.88 s) sont dans `Content/Sounds/QangaMusic/SoundTracks/2026/`, c'est-à-dire dans la playlist d'ambiance Exploration de QMusicDirector. Les affecter aussi à une radio (AMBRE, Traverse) veut dire qu'un joueur peut les entendre en ambiance ET en radio.
 6. **`SummerHit_2790`** : le titre porte l'année 2790 alors que le présent du jeu est 2755. Renommer (« SummerHit 2755 »), ou assumer un « tube du futur » ; le panel le liste sur HitWall sans trancher.
 7. **La station du Voss** : recevable partout dès qu'on est près d'un site Voss (émetteurs locaux), ou uniquement avec le module Interception radio (demande un ajout moteur). Le panel est écrit pour la seconde option, et fonctionne avec la première.
@@ -144,7 +144,7 @@ Fichier : `Documentation/Suno/02_ChillFM.md` (41 Ko). Morceaux : 18 ; jingles : 
 
 Chill FM est la station que personne n'a choisie et que tout le monde laisse tourner. Pas d'animateur, pas de bulletin, pas de cours des minerais : de la musique, et entre deux morceaux une voix chuchotée qui dit le nom de la station comme on vérifie que la lumière est restée allumée.
 
-- **StationId** : `ChillFM` (existe déjà dans le catalogue, une seule piste aujourd'hui : `Music_chill`).
+- **StationId** : `ChillFM` (au catalogue ; depuis le 2026-09-14 sa piste est le bloc d'antenne `WAV_Radio_CHILLFM_01`, 1964.71 s, qui remplace `Music_chill`).
 - **Animateur** : aucun. Quatre identifiants chuchotés (FR et EN) et deux « voix de nuit » de vingt secondes remplacent les interventions.
 - **Langues** : instrumental en majorité (11 morceaux sur 18), puis anglais (3), français (2, dont un en vocalises), japonais (2, en kana et kanji).
 - **Registre** : ambient, downtempo, lo-fi, chillwave, trip-hop, néo-classique électronique. Tempos entre 50 et 128 bpm, jamais de refrain scandé, jamais de guitare saturée, jamais de voix qui force.
@@ -502,7 +502,7 @@ Fichier : `Documentation/Suno/11_HitWall.md` (78 Ko). Morceaux : 24 ; jingles : 
 > Règles de fabrication : `Documentation/Suno/00_BRIEF_COMMUN.md`. Canon : `Documentation/QANGA_LORE_BIBLE.md`.
 > Aucun asset ni code du projet n'est modifié par ce fichier.
 
-**StationId proposé** : `HitWall` (à valider par Benja, le nom devient un contrat dès qu'il entre au catalogue).
+**StationId** : `HitWall`, au catalogue depuis le 2026-09-14 (contrat : ne plus le renommer). Bloc d'antenne `WAV_Radio_HitWall_01` (1544.66 s, copie à -17 LUFS) dans `MS_QRadio_HitWall`, mêmes émetteurs qu'I-C News.
 
 **Ce qu'est la station.** Le mur du son. Le Top 40 de la Capitale, celui qu'on entend dans les couloirs de Sboutique, dans la file du CineVortex, dans les manèges de SawgeniuS Park et dans tous les taxis Melrose. Pop 2755, dance-pop, K-pop, J-pop, eurodance, variété française, synthpop relue par la génération d'aujourd'hui, afrobeats. Sponsorisée par Sola, Sboutique et SawgeniuS Park.
 
@@ -761,7 +761,9 @@ Ces 27 pistes sont déjà montées dans `MS_MusicLib` (25) et `MS_BarMusic` (13)
 | I-C_News_YellowWall | 259.68 | I-C News |
 | WAV_I-C_News_Radio_Var01 | 259.68 | I-C News |
 | WAV_I-C_News_Radio_Var02 | 227.24 | I-C News |
-| Music_chill | 374.44 | Chill FM (seule piste de la station aujourd'hui) |
+| Music_chill | 374.44 | ancienne piste de Chill FM, remplacée le 2026-09-14 (asset conservé) |
+| WAV_Radio_CHILLFM_01 | 1964.71 | Chill FM, bloc d'antenne monté par Benja, importé depuis une copie à -17 LUFS (2026-09-14) |
+| WAV_Radio_HitWall_01 | 1544.66 | HitWall, bloc d'antenne monté par Benja, importé depuis une copie à -17 LUFS (2026-09-14) |
 | Pub_LifeLoop | 24.43 | pub LoopLife (toutes stations) |
 | Pub_Tamil | 15.32 | pub Tamil Station (Tamil Ondes) |
 | Pub_Tamil_Replique | 3.16 | réplique Tamil |
@@ -801,7 +803,7 @@ Ces 27 pistes sont déjà montées dans `MS_MusicLib` (25) et `MS_BarMusic` (13)
 
 ## 10. Ordre de production suggéré
 
-1. Trancher la voie de lecture continue (section 1) : sans elle, rien de ce qui suit ne s'entend au-delà d'un morceau.
+1. Voie de lecture continue : tranchée par Benja le 2026-09-14, voie (B), un bloc d'antenne par station (section 1). Chill FM est la première station montée ainsi.
 2. Compléter les deux stations existantes (I-C News : jingles, pubs, lits ; Chill FM : 18 pistes) : elles sont déjà au catalogue, zéro ligne à ajouter.
 3. Yellow Roots, Traverse, Vieux Monde : les trois stations de la maquette intranet, avec leurs pistes existantes déjà montées.
 4. HitWall et Forge FM : les deux plus grosses playlists, celles qui donnent le sentiment « GTA ».

@@ -4,7 +4,7 @@
 > Règles de fabrication : `Documentation/Suno/00_BRIEF_COMMUN.md`. Canon : `Documentation/QANGA_LORE_BIBLE.md`.
 > Aucun asset ni code du projet n'est modifié par ce fichier.
 
-**StationId proposé** : `HitWall` (à valider par Benja, le nom devient un contrat dès qu'il entre au catalogue).
+**StationId** : `HitWall`, au catalogue depuis le 2026-09-14 (contrat : ne plus le renommer). Bloc d'antenne `WAV_Radio_HitWall_01` dans `MS_QRadio_HitWall`.
 
 **Ce qu'est la station.** Le mur du son. Le Top 40 de la Capitale, celui qu'on entend dans les couloirs de Sboutique, dans la file du CineVortex, dans les manèges de SawgeniuS Park et dans tous les taxis Melrose. Pop 2755, dance-pop, K-pop, J-pop, eurodance, variété française, synthpop relue par la génération d'aujourd'hui, afrobeats. Sponsorisée par Sola, Sboutique et SawgeniuS Park.
 
