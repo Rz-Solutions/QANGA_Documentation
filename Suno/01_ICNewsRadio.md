@@ -6,7 +6,7 @@ I-C News Radio est la station officielle d'IC Labs Industries : la voix civile e
 - **Animateur** : **Théo Cadence**, la matinale. Enjoué, chaleureux, un peu trop optimiste : il traite un réveil en salle de récupération comme un retard d'aérotram. Noms alternatifs dans la nomenclature du monde (prénom court + patronyme techno ou astronomique), pour arbitrage de Benja : **Sam Vector** ou **Milo Sirius**.
 - **Seconde voix** : **Ava Signal**, bulletins de zone et trafic. Sèche, factuelle, elle lit un nid de Sanglines comme un relevé de compteur. Noms alternatifs : **Léa Radian** ou **Mia Azimut**.
 - **Langue** : français, avec les slogans peints des marques en anglais, tels quels. Aucune fréquence chiffrée n'est annoncée.
-- **Registre musical** : lits instrumentaux space synth-rock, cyberpunk enjoué et rétro-futuriste (les pistes existantes `ICNEWSRADIO_01`, `I-C_News_YellowWall` et les deux `WAV_I-C_News_Radio_Var` sont dans cette veine), plus six chansons « maison » en français : de la pop corporate optimiste au second degré, l'optimisme institutionnel qui ne voit pas les Sanglines.
+- **Registre musical** : lits instrumentaux space synth-rock, cyberpunk enjoué et rétro-futuriste (les anciennes pistes `ICNEWSRADIO_01`, `I-C_News_YellowWall` et les deux `WAV_I-C_News_Radio_Var` étaient dans cette veine ; retirées du projet le 2026-09-14 au profit de l'émission définitive `WAV_Radio_ICNEWSRADIO_01`), plus six chansons « maison » en français : de la pop corporate optimiste au second degré, l'optimisme institutionnel qui ne voit pas les Sanglines.
 - **Rubriques** : ouverture et fermeture de cycle, bulletin de zone, logistique et trafic aérotram (par sauts, de tour en tour), cours des minerais (Fer, Obsidienne, Silicium, Cuivre, Aluminium), publicité. La blague signature reste celle de la bible d'antenne : la mort n'est pas grave, seule la cargaison l'est.
 - **Place dans le monde** : émetteur spatial à l'origine de l'univers (plein jusqu'à 9000 km, fondu jusqu'à 10000 km d'après `QRADIO_GUIDE.md`) : on la capte à la Capitale, dans la zone de test, sur le Grand Pont de Dire Dawa et jusqu'à la file d'amarrage d'ICLI Station.
 - **Slogans peints** : « Your ultimate playlist, all day, every day » et « Your sound, our passion ». Ils ferment l'autopromo et les identifiants chantés.
@@ -1076,11 +1076,12 @@ Ces fichiers existent et sont montables sur la station sans rien générer. La d
 
 | Asset | Dossier | Durée (s) | Usage sur l'antenne |
 |---|---|---|---|
-| `ICNEWSRADIO_01` | `Plugins/Qasset/Content/Audio/WAV/Radio/` | 1475.37 | émission complète, la seule piste de la station aujourd'hui |
-| `I-C_News_YellowWall` | idem | 259.68 | module d'antenne sur YellowWall |
-| `WAV_I-C_News_Radio_Var01` | idem | 259.68 | variante du même module |
-| `WAV_I-C_News_Radio_Var02` | idem | 227.24 | seconde variante |
-| `Pub_LifeLoop` | idem | 24.43 | spot LoopLife déjà enregistré, à garder en rotation |
+| `WAV_Radio_ICNEWSRADIO_01` | `Plugins/Qasset/Content/Audio/WAV/Radio/` | 1502.47 | émission définitive montée par Benja (2026-09-14), la seule piste de la station |
+| `ICNEWSRADIO_01` | retiré du projet le 2026-09-14 | 1475.37 | ancienne émission, copie dans `F:\QANGA_Backups\qradio_placeholders_2026-09-14` |
+| `I-C_News_YellowWall` | retiré du projet le 2026-09-14 | 259.68 | ancien module d'antenne sur YellowWall, copie sauvegardée |
+| `WAV_I-C_News_Radio_Var01` | retiré du projet le 2026-09-14 | 259.68 | ancienne variante, copie sauvegardée |
+| `WAV_I-C_News_Radio_Var02` | retiré du projet le 2026-09-14 | 227.24 | ancienne variante, copie sauvegardée |
+| `Pub_LifeLoop` | `Plugins/Qasset/Content/Audio/WAV/Radio/` | 24.43 | spot LoopLife déjà enregistré, à garder en rotation |
 | `Pub_Tamil` | idem | 15.32 | spot Tamil Station déjà enregistré |
 
 Les six spots de la bible d'antenne (`QRADIO_ICNEWS_ANTENNE.md`, section 4 : Melrose, Iron Dee, IClabs, Titanium ICLI et ICLI Station, SawgeniuS Park) et ses quatre identifiants restent valables. Les douze publicités et huit jingles de ce fichier les complètent, ils ne les remplacent pas.
