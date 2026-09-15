@@ -489,6 +489,132 @@ quatre edits C++. Si le preflight echoue quand meme, la regression est anterieur
 
 ## 12. Etat au 2026-09-15 (resume de reprise)
 
+### Correctif du combat, compile et valide en PIE le 15/09
+
+**Livre et actif** : C++ compile par Codex apres autorisation explicite de l'utilisateur,
+classes chargees dans l'editeur, cinq Blueprints compiles et sauvegardes sans erreur ni
+avertissement. Les essais ci-dessous utilisent uniquement `L_Dev_Claude`, avec un serveur
+dedie PIE (instance 0) et un client connecte (instance 1). PIE est arrete en fin de chantier.
+
+#### Causes mesurees et rectification des hypotheses du par. 2.2
+
+- Le `FindLookAtRotation` de `UpdateAim` part de **WeaponMesh**, pas du muzzle.
+  `PredictedLocation` recoit directement la position de la cible, sans prediction de vitesse.
+  Le `LoopTimer` de 1 s reprend `Delay(0)` pendant cette seconde : ce n'est pas un calcul a 1 Hz.
+- Avant correction, le muzzle est a **X=120 cm** sous WeaponMesh, pivot a Z=91 cm.
+  `FireStaticDefenseMachineGun` utilise sa position et son forward. Son trace serveur ignore
+  les hits `bStartPenetrating` ou de distance <= 1 cm. A 1,2 m, mesure en PIE : muzzle a
+  **0,337 cm du centre de la capsule IA**, trace initialement penetrant, distance 0 ; depuis
+  le pivot, entree a **90,109 cm** sans penetration. Vie serveur **98700 -> 98700 en 6 s**.
+  Recentrage du muzzle de cette seule instance : **98700 -> 98550 en 10,674 s**.
+  L'origine avancee explique donc directement les tirs perdus au contact.
+- `SetWeaponRotation` reoriente aussi le muzzle en rotation monde puis, apres **0,07 s**,
+  vise un point aleatoire dans une boite de demi-taille **200 cm** autour des non-vehicules.
+  Cette constante ignore `TargetUnprecision=0`. Elle perturbe fortement le tir au contact.
+  Le clamp [-30,+60] du pivot ne borne pas directement cette rotation independante du muzzle.
+- Dans l'orbite de reference a 2 m, recentrage seul, le pivot accuse jusqu'a **21,95 degres**
+  de retard et un bref recul de 158,802 a 158,045 degres au passage de cible 165 -> 180.
+  A 80 cm, le muzzle avance peut viser vers l'arriere. La singularite supposee du calcul
+  principal depuis le muzzle est donc infirmée ; l'origine du tir, la dispersion et le
+  suivi interpole sont les defauts effectivement observes.
+- La branche missile de TurretBase ne spawne rien sur serveur dedie. BP_Missile detruit en
+  construction les projectiles dedies sans ShoulderMissile et utilise historiquement
+  `ClientRequestDamage`. Le projectile propre au module remplace ces deux chemins.
+- La remise en service du missile a revele un masquage par son propre collider : projectile
+  immobilise entre tourelle et IA, `FindNearest` renvoie `None` avec Visibility=Block, puis
+  **la meme IA** avec Visibility=Ignore. Seule cette reponse est changee dans l'enfant missile.
+  Preuve A/B : `evidence/Missile_LineOfSight_AB.json`.
+
+#### Correctif limite aux sentinelles du module
+
+- Nouveau parent `/Game/Systems/QModule/Turrets/Turret_ModuleCy_CombatBase`, enfant de
+  TurretBase, parent des trois variantes existantes. Son seul evenement de combat surcharge
+  `SetWeaponRotation` et appelle `SentryCombat.ApplyAim`, sans appel parent.
+- `UQModule_SentryCombatComponent` vise la position actuelle de la cible depuis le pivot
+  stable, dans le repere planetaire de Base. Il ecrit lacet et tangage sur le serveur ;
+  les SceneComponents repliquent ces rotations au client. Muzzle recentre et rotation
+  relative nulle : plus de rotation aleatoire independante ni d'origine devant la cible.
+  Acquisition, riposte, priorite vehicule et cadences restent celles de TurretBase.
+- Nouveau `/Game/Systems/QModule/Turrets/Projectile_ModuleCy_SentryMissile`, enfant de
+  TurretMissileProjectile. La surcharge `FireWeapon` du seul TwinMissile cree ce projectile
+  sur l'autorite ; sons et notification de menace vaisseau sont conserves.
+  `UQModule_SentryMissileComponent` applique les degats sur serveur avec la politique native
+  QWeapon/QCombat et la regle de zone sure. Impact replique, mouvement client desactive,
+  retour cosmetique via le hook existant. Rayon **600 cm**, attenuation quadratique et
+  multiplicateurs vehicules conserves ; le tireur est explicitement exclu du souffle.
+- La collision de vol reste la sphere racine existante de **50 cm**, independante du mesh.
+  Camera et Visibility sont Ignore dans ce seul enfant ; les autres reponses sont conservees.
+  Aucun code de combat n'est ajoute a la coque detruite apres depliage. Noms des pieces,
+  hierarchies de deploiement et Base Movable sont conserves.
+
+#### Mesures apres correction
+
+Les IA de test proviennent du **QAI_AgentSpawner existant**, classe configuree
+`AI_Infected_1`, redirigee par le projet vers AILean. Pour isoler la geometrie, les series
+fixes desactivent `QAI_FloatingPawnMovement.EnabledSimulation` sur les deux pairs et utilisent
+`K2_SetActorLocation`. `LockMovement` seul ne garantit pas une position fixe en combat.
+La vie est lue dans `GetCombatStateSnapshot`, jamais dans la valeur initiale `CurrentLife`.
+Les PV eleves des cibles et tourelles sont des reglages d'instances PIE uniquement.
+
+| Essai | Palier 1 | Palier 2 | Palier 3 |
+|---|---:|---:|---:|
+| Rayons 50 / 80 / 120 / 200 / 300 cm | 75 degats a chaque point | 125 / 125 / 150 / 100 / 175 | 198 / 198 / 194 / 182 / 79 |
+| Orbite controlee a 120 cm, 25 positions, pas de 15 degres | 500 degats | 500 degats | 485 degats |
+| Ecart maximal de lacet serveur/client dans cette orbite | 0,00273 degre | 0,00197 degre | 0,00197 degre |
+| Tir a 10 m | 75 degats | 100 degats | 89 degats |
+| Tir a 50 m, ligne degagee | 150 degats | 200 degats | 145 degats |
+| Tir a 150 m, ligne degagee | 75 degats | 225 degats | 156 degats |
+
+Les fenetres de mesure durent environ 5 a 9 s selon la serie : ces totaux ne comparent pas
+les DPS. Le lacet deroule sans inversion sur les trois orbites ; erreur maximale par rapport
+aux positions demandees < 0,016 degre. Les tirs a 50/150 m utilisent une ligne surélevee de
+50 m pour isoler la portee des obstacles de la carte. La serie missile finale a 10/50/150 m
+ne perd aucune cible dans ses huit releves par distance, apres correction de Visibility.
+
+- **Mouvement QAI normal** : palier 1, IA arrive au contact puis meurt ; tourelle attaquee au
+  corps a corps. Paliers 2 et 3, `EnabledSimulation` reactive sur les deux pairs et poursuite
+  demandee par l'API existante `QAI_AgentComponent.SetPursuitTarget` : **300 et 279 degats**,
+  attribues par `GetLastDamageCauser` aux bonnes tourelles. L'IA atteint environ **1,67/1,68 m**
+  du centre de la tourelle et l'attaque. Les releves de position serveur/client sont
+  sequentiels, pas une mesure synchronisee du retard QAI ; ils ne prouvent pas que QAI soit
+  la cause initiale du defaut.
+- **Priorite vehicule** : le FindNearest herite choisit un SingleST hostile a environ 35 m
+  avant l'IA a 3 m dans le test du palier 1, cible courante effacee. L'entree IA est fournie
+  par l'evenement OnEnterVolume existant pour ce test a simulation figee. Les trois variantes
+  conservent exactement le meme proprietaire de cette logique, sans surcharge de selection.
+  Ce controle ne constitue pas une matrice exhaustive des situations de priorite vehicule.
+- **Replication missile** : projectile present sur le serveur dedie et le client, Tick de
+  mouvement client desactive ; meme position et normale d'impact repliquees sur les deux.
+- **Deploiement** : RPC de lancer du rack execute pour les niveaux 1, 2 et 3 apres installation
+  par l'API autorite de test existante. Les **9 / 8 / 7 pieces** changent de transform sur
+  serveur et client ; a la fin, meme variante debout sur les deux pairs et coque absente.
+  Le test parcourt le chemin rack/coque/depliage, pas la manipulation clavier T/X de la roue.
+  Le module de test a ete retire par l'API autorite, sans credit d'inventaire ou de phases.
+
+#### Compilation, preuves et integrite
+
+- Build complet **QangaEditor : Succeeded** ; test natif **QModule.Sentry.AimGeometry : Success**
+  (repere planetaire, coordonnees LWC, passage +/-180 degres, visee sous -30 degres et pole vertical).
+- Dossier `Saved/SentryCombat_Patch_20260915/` : `orig`, `new`, `diff`, manifest MD5,
+  `APPLY.ps1`, `REVERT.ps1`, integration appliquee et preuves JSON/logs dans `evidence`.
+  Le retour arriere couvre les **5 fichiers source et 5 assets** ; son precontrole MD5 passe.
+  Les mutations du script exigent l'editeur ferme, puis une compilation avant reouverture.
+- Mesures : `Validation_summary.json`, `After_Tier1_Matrix.json`, `After_Tier2_Matrix.json`,
+  `After_Tier3_Isolated.json`, `After_Tier*_Orbit.json`, `Final_Tier3_Range.json`,
+  `After_Tier1_ClearRange.json`, `After_Tier2_Tier3_ClearRange.json`,
+  `After_Natural_Tier1.json`, `Final_Natural_Tier2_Tier3.json`,
+  `Final_Missile_Replication.json`, `Vehicle_Priority.json`, `Deployment_ThreeTiers.json`.
+  Diagnostic avant correction : `PIE_measurements.json` et exports semantiques des graphes.
+- `TurretBase.uasset` avant/apres : **CEF39D52282AC454BB9C168214BAA7B9**.
+  TurretMissileProjectile et BP_Missile sont aussi identiques aux MD5 initiaux. Tourelles du
+  monde et QBuilder, carte et rendu inchanges. `CLAUDE.md` absent de cette racine ;
+  instructions de `agents.md` lues. Aucun fichier moteur modifie.
+- **Limite** : validation en PIE dedie avec client, pas en serveur packagé. PIE conserve les
+  meshes editeur. Les erreurs Blueprint LocalData/achievements deja presentes dans les
+  sessions de test ne permettent pas de qualifier le journal global de sans erreur.
+
+### Historique du deploiement
+
 - **Les 3 paliers se deploient en jeu** (PIE `L_Dev_Claude`, DLL du 14/09) : niveau 3
   `TwinMissile` (7 pieces animees resolues), niveau 1 `TwinGun` (9), niveau 2 `Hybrid` (8), et
   Benja confirme "ca fonctionne quel que soit le palier". Le "paliers 2 et 3 KO" du 10/09 datait
@@ -524,10 +650,10 @@ quatre edits C++. Si le preflight echoue quand meme, la regression est anterieur
   - repli `SentryTurretLifetimeSeconds` 45 -> 90 (egal au palier 1).
 - **Verifie en PIE apres les correctifs de donnees** (23:36 UTC, DLL encore sans le patch) : palier 2
   lance avec "life 120 s", plus aucun avertissement de mobilite sur `Base`.
-- **Reste** : rejouer un lancer par palier avec la DLL patchee ; descriptions en/fr/es qui disent
+- **Suivi actuel** : lancers des trois paliers revalides ci-dessus ; descriptions en/fr/es qui disent
   encore 45 / 60 / 75 s (passe loc : source, traductions, compilation des locres) ; aucun effet de
   pose ajoute, ni la balise ni la construction QBuilder n'en ont (la poussiere du largage
-  `NS_Smoke_03` reste disponible) ; arbitrages inchanges (verrou serveur dedie de la voie missile,
+  `NS_Smoke_03` reste disponible) ; arbitrages hors de ce correctif (voie missile monde/QBuilder inchangee,
   pas de hochement visuel, variantes jumelles en echelle negative).
 - **Equilibrage a connaitre** : 90 / 120 / 150 s de vie contre 120 / 100 / 80 s de recharge et un
   plafond 1 / 2 / 2 : au palier 3, deux sentinelles restent en poste presque en permanence.
