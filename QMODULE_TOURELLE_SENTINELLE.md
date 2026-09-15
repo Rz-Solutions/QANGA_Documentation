@@ -310,11 +310,12 @@ mais la cible ne peut pas rendre `Succeeded` tant que DQS n'est pas reconcilie.
 | StatTag (Op = Override) | Niveau 1 | Niveau 2 | Niveau 3 |
 |---|---|---|---|
 | `Stat.Cyborg.Sentry.CooldownSec` | 120 | 100 | 80 |
-| `Stat.Cyborg.Sentry.LifetimeSec` | 45 | 60 | 75 |
+| `Stat.Cyborg.Sentry.LifetimeSec` | 90 | 120 | 150 |
 | `Stat.Cyborg.Sentry.MaxDeployed` | 1 | 2 | 2 |
 
 Le plafond passe a 2 des le niveau 2 : c'est la derogation assumee a la regle UX 14.6
-(RzZz, 2026-08-31).
+(RzZz, 2026-08-31). Duree de vie doublee le 2026-09-15 (Benja : les sentinelles s'usaient trop
+vite) ; elle valait 45 / 60 / 75 s.
 
 ### 9.3 Cook
 
@@ -417,7 +418,7 @@ Toutes les surcharges de composants herites sont ecrites sur le **template propr
 (`get_object_for_blueprint`), verifie par l'outer : `Turret_ModuleCy_*_C`. `TurretBase` n'a pas
 ete touche.
 
-Le respawn du parent n'a pas besoin d'etre desactive : le C++ pose un `SetLifeSpan` de 45 a 75 s
+Le respawn du parent n'a pas besoin d'etre desactive : le C++ pose un `SetLifeSpan` de 90 a 150 s (45 a 75 s avant le 2026-09-15)
 sur la tourelle, toujours plus court que les 300 s du parametre global `Turrets/RespawnS`, donc
 une sentinelle detruite ne revient jamais.
 
@@ -488,21 +489,48 @@ quatre edits C++. Si le preflight echoue quand meme, la regression est anterieur
 
 ## 12. Etat au 2026-09-15 (resume de reprise)
 
-- **Compile et synchronise** : DLL QModule du 2026-09-14 22:58, aucune source QModule plus recente.
-  Le depliage anime (par. 11 et `QModuleSentry::Stages`) est donc actif.
-- **Retour Benja du 2026-09-10** : palier 1 fonctionne en jeu, paliers 2 et 3 non.
-- **Ecarte par mesure** : classes de variantes vides (les 3 se chargent au boot), collision du pod
-  (aucun mesh du kit n'a de collision simple), references cassees (les variantes ne different que
-  par `SM_Turret_Missile` et `SentryLoaderR`), aggregation des stats (`Clamp(Level-1)`). Le seul
-  point du chemin qui depend du niveau est `ResolveTurretClass`.
-- **Reste** : test PIE reel palier par palier sur `L_Dev_Claude`.
-- **Son et effets de deploiement** : `SentryTurretDeployAudio` est vide. Consigne Benja : ne rien
-  inventer, reutiliser la palette existante (`MedicalDroneDeployAudio`, `StickyGrenadeStickAudio`,
-  `SupplyDropImpactAudio`, `SupplyDropImpactFX` = `NS_Smoke_03`). Tir et mort deja herites de
-  `TurretBase`.
-- **Incident hors chantier, resolu** : `CombatComponent` ne compilait plus sur cette machine
-  (fonction C++ `ResolveLastDamageController` synchronisee le 13/09 mais pas encore compilee). Un
-  build complet le 14/09 (22:54 a 23:00, `Result: Succeeded`) l'a regle.
+- **Les 3 paliers se deploient en jeu** (PIE `L_Dev_Claude`, DLL du 14/09) : niveau 3
+  `TwinMissile` (7 pieces animees resolues), niveau 1 `TwinGun` (9), niveau 2 `Hybrid` (8), et
+  Benja confirme "ca fonctionne quel que soit le palier". Le "paliers 2 et 3 KO" du 10/09 datait
+  de l'ancienne DLL ; le build complet du 14/09 (22:54 a 23:00, `Result: Succeeded`) a aussi regle
+  `CombatComponent`, qui ne compilait plus (`ResolveLastDamageController` synchronise, non compile).
+- **Retour Benja du 15/09** : aucune animation de deploiement, "tout reste aplati et la tourelle
+  100 % montee apparait d'un coup" ; les tourelles doivent tenir deux fois plus longtemps.
+- **Cause mesuree du depliage fige** : `AQModule_ThrownDeviceActor::ApplyPlantedState` (et son
+  `Tick`) coupe le Tick de la coque des qu'elle touche le sol. La sentinelle ne tiquait donc plus :
+  `ApplyUnfold(0)` a la pose (tout aplati), puis plus rien jusqu'a la mort de la coque par sa duree
+  de vie de secours (`ThrowMaxFlightSeconds + 20 s`), dont l'`EndPlay` posait la tourelle finie.
+  La balise de frappe et la grenade collante reactivent leur Tick dans `OnPlantedCosmetic` ; la
+  sentinelle ne le faisait pas.
+- **Second defaut, lu dans le log** : `Base`, herite de `TurretBase`, est `Static` ; le moteur
+  refuse de le deplacer ("Base has to be 'Movable' if you'd like to move").
+- **Fait en donnees (sauve)** : `Base` passe `Movable` sur les 3 variantes, par surcharge propre a
+  chaque enfant (outer `Turret_ModuleCy_*_C`), `TurretBase.uasset` identique au md5 pres avant et
+  apres ; les 3 variantes compilent sans avertissement. `QMD_TourelleSentinelle` : duree de vie
+  **90 / 120 / 150 s** (tags et operations relus apres ecriture).
+- **Patch C++ applique le 2026-09-15 sur go de Benja et compile vert** (build de Benja a 01:54 local,
+  `Result: Succeeded`, 0 erreur ni avertissement, DLL QModule plus recente que toutes ses sources ;
+  `Saved/SentryTurret_Patch_20260915/`,
+  4 fichiers verifies au md5, sauvegarde `before_apply/`, retour arriere `REVERT.ps1`) :
+  - Tick reactive a la pose et au late join ; la branche posee du `Tick` ne repasse plus par la
+    brique de base (meme decoupage que la balise) ; une piece non `Movable` reste debout avec un
+    avertissement unique au lieu d'un refus par image ;
+  - sons : sifflement de lancer et clonk de pose de la balise (meme coque, meme geste, memes
+    appels) ; depliage sur `Scifi_Elevator_Medium_End`, l'onde de `QBuilder_Sound_Construct`
+    (la construction des tourelles de base), jouee en onde monde (la MetaSound est routee
+    `QSClass_UI`), profil `QATT_GameplayElement`, pitch 1.3 pour que ses 2,15 s tombent sur le
+    depliage de 1,6 s ; `SentryTurretLockAudio` cree **vide** (regle `DropshipRampAudio` : a
+    remplir apres ecoute, pour ne pas empiler deux clonks) ;
+  - repli `SentryTurretLifetimeSeconds` 45 -> 90 (egal au palier 1).
+- **Verifie en PIE apres les correctifs de donnees** (23:36 UTC, DLL encore sans le patch) : palier 2
+  lance avec "life 120 s", plus aucun avertissement de mobilite sur `Base`.
+- **Reste** : rejouer un lancer par palier avec la DLL patchee ; descriptions en/fr/es qui disent
+  encore 45 / 60 / 75 s (passe loc : source, traductions, compilation des locres) ; aucun effet de
+  pose ajoute, ni la balise ni la construction QBuilder n'en ont (la poussiere du largage
+  `NS_Smoke_03` reste disponible) ; arbitrages inchanges (verrou serveur dedie de la voie missile,
+  pas de hochement visuel, variantes jumelles en echelle negative).
+- **Equilibrage a connaitre** : 90 / 120 / 150 s de vie contre 120 / 100 / 80 s de recharge et un
+  plafond 1 / 2 / 2 : au palier 3, deux sentinelles restent en poste presque en permanence.
 
 ## 8. Journal
 
@@ -521,4 +549,7 @@ quatre edits C++. Si le preflight echoue quand meme, la regression est anterieur
   C++ verifie vivant dans l'editeur. NON FAIT : depliage anime de la tourelle, test en jeu,
   validation visuelle. A TRANCHER : verrou serveur dedie de la voie missile, et regression du
   preflight QATS apparue apres le 23/08.
-- **2026-09-15** : etat consolide (par. 12) ; build vert confirme ; test PIE des paliers 2 et 3 en cours.
+- **2026-09-15** : les 3 paliers se deploient en PIE. Depliage fige explique (Tick coupe a la pose par
+  la brique de base) ; `Base` Movable sur les variantes et duree de vie doublee, faits en donnees ;
+  patch C++ du Tick et des sons applique sur go (`Saved/SentryTurret_Patch_20260915/`), compile vert a
+  01:54 ; reste le test en jeu.
