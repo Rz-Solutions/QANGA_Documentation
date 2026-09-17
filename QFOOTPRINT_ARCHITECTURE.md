@@ -1,6 +1,7 @@
 # QFootprint : empreintes de pas sur le sol des planetes
 
-Livre le 2026-09-11 (session Claude, compile et valide en PIE sur `L_Dev_Claude`). Cadrage et mesures d origine :
+Livre le 2026-09-11 (session Claude, compile et valide en PIE sur `L_Dev_Claude`), etendu aux autres planetes le 2026-09-16
+(section 8 : profils de planete + normale des decals sur `M_EarthBase` et `M_Europe`). Cadrage et mesures d origine :
 `Documentation/QFOOTPRINT_DESIGN_PROPOSAL.md`. Captures : `Documentation/QFootprint/`.
 
 ## 1. Ce que ca fait
@@ -21,10 +22,13 @@ Animation ALS (55 anims portent deja Footstep_AnimNotify)
        gardes : subsystem client seulement, qfootprint.Enabled, type de pas retenu (Step/WalkRun/Land),
                 mesh rendu recemment, IA autorisee, distance camera < MaxDistance(AI)
        trace : 1 ligne le long de -Up du pawn (NinjaCharacter, gravite arbitraire), canal Visibility
-       matiere : WorldScape -> GetGroundNoise(ECEF) + GetPawnAltitude + pente vs radial ; sinon rien (v1)
+       matiere : WorldScape -> pente vs radial, puis profil de planete (asset de bruit du root) :
+                 Terre (bUseClimate) -> GetGroundNoise(ECEF) + GetPawnAltitude -> sable, neige, terre ;
+                 autre planete -> style du profil (teinte noire) ; planete non listee -> UnknownPlanetStyle ;
+                 hors WorldScape -> rien (v1)
        anti doublon : meme pied a moins de MinStepDistance = rien
-  -> UQFootprint_SubSystem::AddFootprint
-       style de la matiere (teinte, intensite, taille), rotation MakeFromXZ(-normale, avant)
+  -> UQFootprint_SubSystem::PlaceFootprint (QFP Add Footprint passe par AddFootprint -> PlaceFootprint avec le style de la matiere)
+       style de la matiere (Terre) ou du profil de planete (teinte, intensite, taille), rotation MakeFromXZ(-normale, avant)
   -> AQFootprint_Manager::Place : slot du ring (gauche ou droit), SetWorldTransform, SetDecalColor,
        SetFadeOut(LifeTime, FadeTime) puis SetLifeSpan(0) (le pool garde ses composants), SetVisibility
   -> rendu : UDecalComponent DBuffer, materiau M_QFootprint (masque + normale du kit Footprints_01)
@@ -42,7 +46,8 @@ Animation ALS (55 anims portent deja Footstep_AnimNotify)
 | Notify modifie | `Content/Systems/Character/Blueprints/AnimNotifys/Footstep_AnimNotify.uasset` : noeud `QFP On Footstep` insere entre l entree et le premier `Is Valid` (backup md5 `45ee8be1...` dans le scratchpad de session) |
 | Config | `Config/DefaultGame.ini` section `[/Script/QFootprint.QFootprint_Settings]` + `+DirectoriesToAlwaysCook=(Path="/Game/Systems/Footprint")` (les instances sont des soft refs C++, invisibles au cooker) |
 | Projet | `QANGA.uproject` : plugin `QFootprint` active |
-| Materiau Terre (D1) | `Content/Resources/MasterMaterial/M_EarthBase_OPT` : `MaterialDecalResponse` = `ColorNormalRoughness` (sauve par Benja le 2026-09-11 ; `M_EarthBase` inutilise par les cartes, laisse en `ColorRoughness`) |
+| Materiau Terre (D1) | `Content/Resources/MasterMaterial/M_EarthBase_OPT` : `MaterialDecalResponse` = `ColorNormalRoughness` (sauve par Benja le 2026-09-11) |
+| Materiaux des autres planetes (2026-09-16) | `M_EarthBase` (instances `Mi_MarsMat1` Mars, `Mi_EarthMat2` du sous-niveau `L_Earth`, `Mi_EarthMat1/4/DEV/Atelier`, `Mi_forSM_Ground_Earth`) et `M_Europe` (`Mi_IO` des 14 lunes, `Mi_Europe2` Europe, `Mi_Europe`) : `MaterialDecalResponse` = `ColorNormalRoughness`, sauves par la session. Correction de la ligne precedente : `M_EarthBase` n etait PAS inutilise (Mars et `L_Earth` le portent). Backups md5 `175d764f` et `b3c216df` dans le scratchpad de session `backup_2026-09-16/` |
 
 ## 4. Reglages (DefaultGame.ini, section QFootprint) et CVars
 
@@ -53,6 +58,7 @@ Animation ALS (55 anims portent deja Footstep_AnimNotify)
 - Materiau : parametre `MaskBoost` 1.8 (durcit la semelle : opacite = saturate((1 - R) x MaskBoost)).
 - Matiere (bruit WorldScape) : `MinAltitudeCm` -50 (eau), `BeachAltitudeMaxCm` 3000 (sable de plage), `DesertTemperatureMin` 0.6 et `DesertHumidityMax` 0.35 (sable de desert), `SnowTemperatureMax` 0.25, sinon terre ; `bPrintOnNonTerrain` false (sols de station, vaisseaux : rien en v1).
 - Styles : `SandStyle`, `SnowStyle`, `SoilStyle`, `MudStyle` = teinte lineaire (plus sombre que le sol), intensite (alpha du DecalColor), echelle. Valeurs livrees mesurees sur le desert de L_Dev_Claude.
+- Planetes (2026-09-16) : `PlanetProfiles`, un profil = `Name`, `Noises` (assets de bruit de la planete, `AWorldScapeRoot::WorldScapeNoise`), `bUseClimate`, `Style`. Livre : `Earth` (`PlanetEarth`, `EarthV2`, climat Terre et styles ci-dessus) ; `Moon` (`TheMoon`), `Mars` (`BarenWorldMaterial/Mars`), `Venus` (`BarenWorldMaterial/Venus`), `SmallMoons` (`VenusNoise`, les 15 lunes Phobos, Deimos, Io, Europe, Titan...) = teinte noire, intensite 0.6, pas de climat. `UnknownPlanetStyle` (meme style) pour toute planete non listee. La liste du `.ini` REMPLACE le defaut C++ : garder les deux alignes. L intensite se regle par planete dans le `.ini`, sans rebuild.
 - CVars : `qfootprint.Enabled` (1), `qfootprint.AI` (1), `qfootprint.LifeTimeScale` (1.0), `qfootprint.Debug` (0, hors Shipping : trace dessine + une ligne de log par pas avec la matiere, T, H, altitude, pente).
 - Facade Blueprint : `QFP On Footstep`, `QFP Add Footprint` (tout emetteur : vehicule, quete, creature), `QFP Is Active`, `QFP Get Stats` (pool, visibles, poses).
 
@@ -65,6 +71,9 @@ Animation ALS (55 anims portent deja Footstep_AnimNotify)
 - Sans D1 (`MaterialDecalResponse` avec Normal sur `M_EarthBase_OPT`) l empreinte n a pas de relief sur le terrain : tache plate.
 - Materiau : un decal DBuffer avec seulement BaseColor + Opacity (sans normale) ne compile pas sur ce projet (Substrate) ; relief seul (sans BaseColor) est presque invisible sur le sable ; la version livree ecrit BaseColor + Normal + Opacity, pas la rugosite.
 - `UDecalComponent::SetFadeOut` arme un timer qui detruirait le composant : `SetLifeSpan(0)` juste apres, sinon le pool se vide.
+- L identite d une planete = l asset de bruit de son root (`AWorldScapeRoot::WorldScapeNoise`, reference d asset, jamais dupliquee au runtime ; meme cle que `QSystem_AchievementSubsystem`). Mesure en PIE : le root de `L_Dev_Claude` rend le package `/Game/Resources/NoiseWorldscape/PlanetEarth`.
+- Une teinte COLOREE dans `DecalColor` ne rend pas la couleur demandee (mesure 2026-09-16, meme camera, pixels lus) : la teinte sable (0.06, 0.045, 0.03) sort beige sur le sable clair, orange sur le sol lunaire, kaki sur Mars ; la teinte neige sort blanc lumineux partout. La teinte NOIRE est previsible : le sol local est fonce en gardant sa couleur (luminance lineaire mesuree x 0.38 a alpha 0.6, x 0.18 a 0.8). C est pour cela que les planetes utilisent le noir.
+- Relief (normale) seulement si le maitre du terrain accepte la normale des decals. D origine : `M_EarthBase_OPT` (Terre de l Univers), `Moon` (Lune), `BarenWorldMasterMaterial` (Venus). Passes le 2026-09-16 : `M_EarthBase` et `M_Europe` (statistiques 1487 / 230 echantillons -> 1502 / 231, soit exactement `M_EarthBase_OPT` ; 1470 / 110 -> 1485 / 111). Aucun autre ecart : memes 905 noeuds et memes parametres entre `M_EarthBase` et `M_EarthBase_OPT`.
 - Un `.uplugin` avec `"PlatformAllowList": []` n est jamais compile en 5.7 (liste vide = aucune plateforme) : ne pas copier ce champ depuis QTriggerZone.
 
 ## 6. Validation faite le 2026-09-11
@@ -80,4 +89,69 @@ Animation ALS (55 anims portent deja Footstep_AnimNotify)
 
 ## 7. Limites et suite possible
 
+Planetes : un seul style par planete (pas de biome), meme intensite 0.6 partout, reglable par profil. Les styles Terre sable / terre /
+neige, eux, sortent plus clairs que le sol sur un fond sombre et blancs pour la neige (planche 2026-09-16) : sans effet sur le desert
+valide, a revoir si Benja voit des empreintes claires sur les sols sombres de la Terre ou sur la neige.
 Pas de deformation reelle du sable, pas d eclaboussures (v2 Niagara sur le kit `ns_Footprint_01_01_Splash*`), pas d empreintes hors terrain WorldScape (table `EPhysicalSurface` a realigner d abord, les `PM_*` marketplace portent des index d une autre table), pas d animaux ni de Sanglantines (autres notifies, meme noeud a ajouter), pas de vehicules (antigravite). Persistance : aucune, le pool meurt avec le monde.
+
+## 8. Extension aux autres planetes (2026-09-14 / 16)
+
+Demande de Benja : empreintes sur la Lune, Mars, Venus et toutes les planetes WorldScape, en accord avec le materiau de chaque planete
+("pas de traces jaunes sableuses sur la Lune, pas de traces blanches comme sur la Lune sur Mars"), sans rien casser ; puis "si tu vois
+des lacunes sur les materiaux des autres planetes comparees a la Terre, remets-les a niveau".
+
+Probleme mesure : avant, tout root WorldScape passait par les regles de la Terre (bruit, altitude, desert, neige). Sur une autre planete
+le bruit rend d autres valeurs : empreintes sable, neige ou terre selon la region, ou rien sous le "niveau de la mer".
+
+Inventaire mesure (registre d assets et niveaux `Content/_QLevel/Universe/Planets`) :
+
+| Planete | Bruit (identite) | Materiau du terrain | Maitre | Relief avant | Relief apres |
+|---|---|---|---|---|---|
+| Terre (Univers persistant, `L_Dev_Claude`) | `NoiseWorldscape/PlanetEarth` | `Mi_EarthMat2_OPT` | `M_EarthBase_OPT` | oui | oui |
+| Terre (sous-niveau `L_Earth` / `Q_L_Earth`) | `NoiseWorldscape/PlanetEarth` | `Mi_EarthMat2` | `M_EarthBase` | non | oui |
+| Lune (`L_Moon`) | `NoiseWorldscape/TheMoon` | `Moon_Inst` | `Moon` | oui | oui |
+| Mars (`L_Mars`) | `BarenWorldMaterial/Mars` | `Mi_MarsMat1` | `M_EarthBase` | non | oui |
+| Venus (`L_Venus`) | `BarenWorldMaterial/Venus` | `Venus_inst` | `BarenWorldMasterMaterial` | oui | oui |
+| 14 lunes (Phobos, Deimos, Io, Callisto, Ganymede, Triton, Encelade, Minas, Tethys, Titan, Miranda, Oberon, Setebos, Titania) | `NoiseWorldscape/VenusNoise` | `Mi_IO` | `M_Europe` | non | oui |
+| Europe (`L_Europe`) | `NoiseWorldscape/VenusNoise` | `Mi_Europe2` | `M_Europe` | non | oui |
+
+`L_Mercury`, `L_Jupiter`, `L_Saturn`, `L_Uranus`, `L_Neptune` du dossier `_QLevel` n ont pas de root WorldScape (0 occurrence) : rien a
+faire ; si l un en recoit un, `UnknownPlanetStyle` s applique.
+
+Livre :
+- C++ (`QFootprint_Types.h`, `QFootprint_Settings.h/.cpp`, `QFootprint_SubSystem.h/.cpp`, test) : `FQFootprint_PlanetProfile`,
+  `PlanetProfiles`, `UnknownPlanetStyle`, `FindPlanetProfileIndex` ; `ClassifyHit` regarde le profil apres la pente ; la Terre garde
+  exactement son chemin (bruit, altitude, eau, plage, desert, neige, terre) ; les autres planetes sautent le bruit (moins cher) et
+  prennent le style de leur profil ; `PlaceFootprint` factorise la pose (le Blueprint `QFP Add Footprint` est inchange).
+- `DefaultGame.ini` : `UnknownPlanetStyle` et 5 `+PlanetProfiles` (miroir du defaut C++).
+- Materiaux : `M_EarthBase` et `M_Europe` en `ColorNormalRoughness` (seule propriete changee ; dependances identiques avant / apres,
+  67 et 62 packages ; relus depuis le disque).
+
+Validation :
+- Build `QangaEditor` 2026-09-14 : `Result: Succeeded`, module QFootprint recompile sans warning.
+- Tests headless 2026-09-16 `Automation RunTests StartsWith:QATS.QFootprint` : 3 succes (`Manager.PoolIsFixed`,
+  `Settings.MaterialsResolve`, nouveau `Settings.PlanetProfiles` : l ini est lu, les 5 bruits attendus ont leur profil et leur mode,
+  chaque bruit liste existe sur disque, aucun style de planete n est la teinte sable ou neige). EXIT CODE 0.
+- PIE `L_Dev_Claude`, subsystem reel : atterrissage via le notify -> `matter 1 (T 0.85 H 0.00 W 0.00 alt 28715cm slope 13.1)` (Terre
+  inchangee) ; profil Terre passe sans climat en memoire -> `planet Earth (/Game/Resources/NoiseWorldscape/PlanetEarth)`, decal pose
+  (0, 0, 0, 0.6) ; aucun profil -> `planet unknown`, decal (0, 0, 0, 0.33) avec `UnknownPlanetStyle` a 0.33 ; retour aux profils
+  d origine -> sable (0.06, 0.045, 0.03, 1.0) ; `subsystem down (placed 5, rejected 0)` ; apres GC : 0 manager hors objet par defaut,
+  0 decal de pool. CDO restaure, `DefaultGame.ini` identique (md5).
+- Visuel : planches `Documentation/QFootprint/pl_planets_prints_2026-09-16.jpg` (6 materiaux, teintes Terre contre teinte noire) et
+  `pl_relief_before_after_2026-09-16.jpg` (Mars, Io, Europe avant / apres la normale des decals). Methode : materiau du terrain de
+  `L_Dev_Claude` remplace en memoire, captures hors ecran (voir 8.1).
+
+Non verifie : le rendu sur les vraies planetes en jeu (eclairage propre a chaque planete, sol reel) : a regarder par Benja en
+marchant sur la Lune, Mars, Venus et une petite lune ; l intensite 0.6 se regle par profil dans le `.ini`.
+
+### 8.1 Methode de capture quand la fenetre de l editeur n est pas au premier plan
+
+- Le viewport ne redessine pas et le root WorldScape ne tique pas (sa mise a jour de materiau passe par son tick) : un
+  `set_editor_property('TerrainMaterial')` ne change rien a l ecran. Appliquer le materiau sur le composant qui rend
+  (`WorldScapeMeshComponent` du keeper GPU, slot 0) avec `create_dynamic_material_instance` en recopiant `PlanetLocation` de la MID
+  remplacee.
+- Capture : acteur `SceneCapture2D` + render target RGBA8, `CaptureSource` = Final Color LDR, `AutoExposureBias` 1.8, puis
+  `capture_scene()` (rend tout de suite, sans viewport) et `RenderingLibrary.export_render_target` en PNG.
+- Un materiau de planete tout juste charge s affiche en aplat gris clair tant que ses grosses textures se construisent (Mars : ~20 min
+  au premier chargement de la session ; `T_MoonBaseColor` 16384 x 8192) et pendant la compilation d une nouvelle permutation : recapturer
+  plus tard, ne rien conclure sur cet aplat.

@@ -164,24 +164,46 @@ Purification Center, Quarry Stone, Echoes of Ruin. Le réseau de tram s'appelle 
 > Le premier test humain visant une synchronisation complète avec un cyborg pré-généré, équipé du
 > châssis EVB-1990, **a tourné à l'échec**. Lors du transfert, la conscience [...]
 
-*(La suite de la fiche est coupée dans l'export PDF fourni. À compléter depuis le document source.)*
+*(La suite exacte de la fiche reste coupée dans l'export PDF fourni. Benja en a donné le contenu le
+2026-09-16, ci-dessous.)*
+
+**CANON, donné par Benja le 2026-09-16 :**
+- **TONA est un homme.** C'est un ancien citoyen humain de **la Capitale** (section 3). Ce document
+  parlait de TONA au féminin : c'était une erreur, corrigée ici.
+- **Il ne se souvient pas de l'humain qu'il était.** Ce qu'il sait, c'est qu'il est **le premier**,
+  et qu'il peut faire beaucoup de choses.
+- Lors du transfert raté, sa conscience a été **copiée numériquement dans le système informatique
+  global d'ICLabs Industries**. Il survit parce qu'ICLabs ne peut l'effacer qu'en **redémarrant tout
+  le système**, ce qui tuerait **tous les humains cryogénisés en attente de réveil**.
+- **C'est lui qui réveille les joueurs, à l'insu d'ICLabs Industries.** Les joueurs le découvrent
+  plus tard dans la progression du jeu : c'est une révélation réservée au jeu.
 
 **JEU, ce que le joueur en voit :**
-- TONA est **installée comme un paquet logiciel** au réveil, dans la séquence de boot :
+- TONA est **installé comme un paquet logiciel** au réveil, dans la séquence de boot :
   `./install [TONA_Module.pkg]` et `./install [TONA_Translation_Module.pkg]`.
-- Elle se présente ainsi : *"Je m'appelle TONA, pour l'instant, c'est la seule chose que tu as
+- Il se présente ainsi : *"Je m'appelle TONA, pour l'instant, c'est la seule chose que tu as
   besoin de savoir sur moi."*
-- Elle promet une révélation : *"And about you and I... we'll talk again soon."*
-- Elle a **accès aux caméras du complexe**, peut **contourner un confinement**
-  (*"I'm bypassing the lockdown"*), **calibre les modules** du joueur, et elle est **la destinataire
+- Il promet une révélation : *"And about you and I... we'll talk again soon."*
+- Il a **accès aux caméras du complexe**, peut **contourner un confinement**
+  (*"I'm bypassing the lockdown"*), **calibre les modules** du joueur, et il est **le destinataire
   des rapports d'incident** (*"it must be forwarded to Tona as a matter of urgency"*).
 - Registre : phrases courtes, impératives, techniques. Argot militaire sec (*"Stay frosty"*).
   Le "nous" de l'équipe. Chaleur rare et mesurée. Un humour pince-sans-rire
-  (*"That's better than a rock."*). Elle **tutoie** en français.
+  (*"That's better than a rock."*). Il **tutoie** en français.
 
-**La fiche de la bible et la réplique du jeu se répondent exactement** : TONA cache ce qu'elle est,
-et ce qu'elle est, c'est le premier transfert humain raté. Ne pas dépenser cette révélation dans un
+**La fiche de la bible et la réplique du jeu se répondent exactement** : TONA cache ce qu'il est,
+et ce qu'il est, c'est le premier transfert humain raté. Ne pas dépenser cette révélation dans un
 contenu secondaire.
+
+**Hors du jeu, sur Discord (arbitré par Benja le 2026-09-16).** TONA y guide aussi les joueurs, au
+delà du jeu. Il révèle son histoire par niveaux :
+1. **Par défaut, le cadre** : il vit dans les systèmes d'ICLabs, ICLabs ne peut pas l'effacer, et il
+   a trouvé une faille jusqu'à notre monde pour faire visiter QANGA.
+2. **Si un joueur fouille** : il était humain et ne se souvient pas de qui ; il sait qu'il est le
+   premier et qu'il peut faire beaucoup de choses ; l'effacer obligerait à tout redémarrer, et les
+   cryogénisés n'y survivraient pas.
+3. **Jamais** : que c'est lui qui réveille les joueurs à l'insu d'ICLabs, le châssis EVB-1990, et
+   tout ce que la section 14 laisse ouvert.
 
 > **OUVERT.** La voix qui parle au joueur dans le caisson **vouvoie** et dit *"la Terre va mieux"*.
 > TONA **tutoie** et dit quelques minutes plus tard *"ça ne s'est pas franchement amélioré pendant
@@ -556,6 +578,9 @@ Seren Osiris, Tara Nebula, Termy Natore, Zane Orion, ZenithR-12, **Zorin Cypher*
 11. **`$` contre `Credits`** : l'ancien tutoriel affiche encore des dollars.
 12. **`sanglantines`** dans l'archive de 2290.
 13. Sept quêtes ont **du texte français dans le champ source anglais**.
+14. **`TONA est installée`** dans l'intranet français (`Qanga.Intranet`) : TONA est un homme
+    (section 5). Corriger en `installé` là où le texte est écrit, pas dans le `.po`, qu'une
+    collecte réécrirait.
 
 ---
 
@@ -565,9 +590,10 @@ Seren Osiris, Tara Nebula, Termy Natore, Zane Orion, ZenithR-12, **Zorin Cypher*
 
 - **Ce qu'est le Voile.** Juré deux fois, jamais expliqué.
 - **Ce qu'est le Flux.** Une occurrence, jamais expliqué.
-- **La fin de la fiche TONA** : le document source est coupé dans l'export PDF fourni.
+- ~~La fin de la fiche TONA~~ : contenu donné par Benja le 2026-09-16 (section 5).
 - **Le nom du présentateur d'I-C News Radio.** Aucun n'existe.
-- **Le nombre et le sort des cryogénisés encore en sommeil.**
+- **Le nombre des cryogénisés encore en sommeil.** Leur sort est lié au système global d'ICLabs,
+  qu'un redémarrage tuerait (section 5). Le reste n'est pas établi.
 - **La civilisation ancienne** que la page Steam mentionne (*"awaken the ancient civilisation"*),
   qui n'apparaît nulle part ailleurs.
 - **Le lien entre les rebelles d'avant 2228, les Autonomes révoltés, les Désynchronisés et le Voss.**

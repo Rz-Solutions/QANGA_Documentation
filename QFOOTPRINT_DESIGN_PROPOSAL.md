@@ -340,3 +340,15 @@ recompiler pour qu ils comptent sans ini). Le materiau a ete reconstruit proprem
 
 **Cloture (2026-09-12, 00:30) : valide par Benja en jeu** ("la pointe est dans le bon sens, ca marche", "bon pour le ratio",
 "la taille est nickel"). Reste ouvert pour plus tard : neige (jamais vue), sols hors WorldScape, IA hors ALS, eclaboussures v2.
+
+## 11. Extension aux autres planetes (2026-09-14 / 16)
+
+Reference d exploitation : `Documentation/QFOOTPRINT_ARCHITECTURE.md` section 8 (inventaire mesure, livraison, validation).
+
+| Etape | Fait | Preuve |
+|---|---|---|
+| Mesure | Chaque planete marchable identifiee par l asset de bruit de son root ; teintes Terre posees sur 7 materiaux de terrain | planche `QFootprint/pl_planets_prints_2026-09-16.jpg` : sable beige / orange / kaki et neige blanche selon la planete, teinte noire fidele a la couleur du sol |
+| C++ + ini | Profils de planete, style par planete (teinte noire 0.6), planete inconnue couverte, Terre inchangee | build Succeeded ; QATS 3 / 3 ; PIE : Terre = `T 0.85 H 0.00`, planete = decal (0, 0, 0, 0.6), inconnue = (0, 0, 0, 0.33) |
+| Materiaux | Ecart trouve avec la Terre : `M_EarthBase` (Mars, `L_Earth`) et `M_Europe` (15 lunes) refusaient la normale des decals ; passes en `ColorNormalRoughness` sur autorisation de Benja ("remets-les a niveau") | planche `QFootprint/pl_relief_before_after_2026-09-16.jpg` ; statistiques de `M_EarthBase` = `M_EarthBase_OPT` ; dependances identiques |
+
+Decision laissee a Benja : l intensite par planete apres essai en jeu (profil par profil dans `DefaultGame.ini`, sans rebuild).
