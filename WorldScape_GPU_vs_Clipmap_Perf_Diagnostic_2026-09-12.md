@@ -187,6 +187,35 @@ Un éditeur QANGA était ouvert par Benja en fin d'analyse (PID 21856) ; il n'a 
 
 Aucune de ces pistes n'a été appliquée. Chacune touche un contrat (miroirs shader / VF / C++, régulateurs, précision) : à planifier une par une, avec mesure avant et après.
 
+## 12. Réglage d'équivalence : quelle résolution GPU pour la densité du clipmap 128 (ajout du 2026-09-18)
+
+Question de Benja : « quelle valeur mettre dans la résolution du quadtree GPU pour avoir la même densité que le clipmap en 128 ».
+
+**Fait vérifié dans le code, contre-intuitif : le nombre de tuiles ne dépend pas de la résolution.** Le seuil automatique vaut `Facteur x PixelsPerUnit / (HeightfieldResolution - 1)` (`WSQuadtreeManager.cpp:573-582`) et l'erreur mesurée vaut `(TailleTuile / (HeightfieldResolution - 1)) / Distance x PixelsPerUnit` (`:843-849`). Le diviseur se simplifie des deux côtés : une tuile est divisée si et seulement si `TailleTuile > 2,75 x Distance`, quelle que soit la résolution. Changer la résolution ne change donc ni la forme de l'arbre, ni le nombre de tuiles : uniquement les sommets par tuile (au carré) et les texels par tuile.
+
+Simulation de la règle de subdivision sur une face plane (script `scratchpad/ws_density_sim.py`, sans frustum ni horizon, donc comptage indicatif en absolu mais exact en rapport) : 120 à 144 tuiles au sol, 94 à 115 en altitude, **identique pour toutes les résolutions testées**.
+
+| Résolution GPU | Sommets dessinés | Rapport au clipmap (155 708) | Taille de cellule contre le clipmap |
+|---|---|---|---|
+| 128 (test actuel) | 1 970 000 | 12,6 x | 3,2 fois plus fine |
+| 64 | 534 000 | 3,4 x | 1,6 fois plus fine |
+| 48 | 313 000 | 2,0 x | 1,3 fois plus fine |
+| 40 | 229 000 | 1,5 x | équivalente |
+| **32** | **146 000** | **0,94 x** | équivalente (1,09) |
+| 24 | 83 000 | 0,53 x | 1,7 fois plus grossière |
+
+**Réglage à poser sur l'acteur planète (trois propriétés, pas une) :**
+
+| Propriété | Valeur | Pourquoi |
+|---|---|---|
+| `IndirectNoise_MeshResolution` | **32** | sommets par côté de tuile GPU ; `LodResolution` reste à 128 pour le clipmap CPU (fallback et serveur dédié) |
+| `IndirectNoise_TileResolution` | **32** | sinon la résolution du heightfield reste `max(LodResolution, OceanLodResolution, MeshResolution)` = 128 (`WorldScapeRoot_Main.cpp:1687-1689`) et le coût du bruit en double précision reste entier. À 32 : 1 600 texels par tuile au lieu de 18 496, soit 11,6 fois moins, et 31 Ko au lieu de 361 Ko |
+| `Quadtree_MaxDepth` | **18** | à 16, la cellule la plus fine tombe à 3,12 m contre 1,00 m au clipmap. À 18 elle vaut 0,78 m. Formule : face du cube 6 338 km / 2^profondeur / (résolution - 1) |
+
+Effet de bord à connaître : la résolution des tuiles d'océan est plafonnée à `max(résolution terrain / 4, 8)` (`WorldScapeRoot_Main.cpp:1866-1871`). À 32 côté terre, l'océan tombe à 8 sommets par tuile. Sans effet sur L_Earth (`bOcean = False`) mais visible sur L_Dev_Claude (`bOcean = True`), à compenser par `OceanLodResolution` si besoin.
+
+Ce réglage traite la cause 1 (densité) et l'essentiel de la cause 2 (coût du bruit par tuile). Il ne change rien aux causes 3 et 4 : le vertex shader sans variante position-only et l'absence de cache VSM sur une primitive dynamique restent. À densité et sommets égaux, le quadtree GPU restera donc plus cher que le clipmap en prépasse et en ombres. Mesurer après changement avec le plan du paragraphe 10.
+
 ## Annexe 0 : dette relevée en passant, hors périmètre, non corrigée
 
 - Chemin CPU : `TriangleSize * (2 ^ i)` dans `GenerateBaseMesh` (`WorldScapeRoot_Main.cpp:3905, 3963`) est un XOR C++, pas une puissance ; sans effet visible car la géométrie provisoire d'`Init` est remplacée par le worker. Les canaux UV1 à UV3 sont toujours nuls mais uploadés (12 octets par sommet par régénération). `IsDynamicRelevance` (`WorldScapeMeshComponent.h:198`) est morte, `bTreatAsBackgroundForOcclusion` est inerte sur desktop.
