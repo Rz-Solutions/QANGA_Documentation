@@ -400,6 +400,48 @@ Ordonne par gain visible sur risque. Chaque lot est livrable seul et ne casse ri
 
 **Ce qui manque encore apres ce lot, et qu'il faut assumer.** Trois choses : le **rang de culture** (le sampler du foliage tire dans une boite), la **bordure nette** (rejet stochastique, donc bord flou), et surtout l'**automatisation du bake**. Le champ actuel est 17,5 Mo de transforms figes fabriques a la main : multiplier les variantes multiplie ce travail manuel. C'est precisement la que PCG a sa valeur (section 6.2), et c'est ce qui justifie de le faire au lot 2 plutot qu'apres.
 
+### Lot 2bis : le reseau de Sky Roads entre les Refuel Towers (le premier lot reel, demande par Benja le 2026-09-19)
+
+**Pourquoi c'est le meilleur point d'entree.** Une Sky Road est **surelevee** : elle ne carve pas le terrain. Elle evite donc les trois seules choses vraiment dures du dossier, en une fois : pas de miroir CPU/GPU sur la hauteur, pas de parite de collision a prouver, pas de probleme de fleche. Le serveur n'a besoin que du graphe des segments ; la geometrie est client.
+
+**Les briques, verifiees le 2026-09-19.** Les 11 meshes `Content/Tools/WS_Tools/WS_Road_Tools/StaticMesh/Type_A/SM_SkyRoute_A_*` : droit, courbes `L-5`, `L-10`, `L-15`, `L-25`, `L-45`, pente `Z-5`, et les embranchements **`_Yl` et `_Yr`**. Les piliers `Content/CapitalHLOD/APPROX_SM_Pillar_Route`. Les **141** relais de la Terre, `Content/_QData/WorldData/Earth/Relay/QDB_Earth_Relay_*`, chacun un `QDB_WD_Relay_Tower` portant sa `Location`. Et l'outil de pose sur spline `WS_Road_Spline_Former` (a rebrancher : il n'importe pas `WorldScapeCore`, sa hauteur vient d'un `NodeHeight` saisi a la main).
+
+**Les deux etages a porter, et ils sont petits.**
+
+*Etage 1, la topologie : le graphe de Gabriel.* Une liaison A-B n'est gardee que si aucun autre site ne tombe dans le disque de diametre AB. Le test tient en une dizaine de lignes (`RoadNetworkGenerator.h:1817-1826`, tolerance `rad * 0.999`). Effet : une route ne saute jamais par-dessus une tour intermediaire. Rendement ~2 a 2,5 liaisons par site, donc **environ 300 liaisons pour 141 tours**, sans reglage a deviner. **Plus simple chez nous que chez lui** : son moteur doit gerer la decidabilite du disque dans une fenetre glissante (`:1802`), nous avons les 141 sites d'un coup. Et le generateur de sites par hash (`SiteOf`) n'a pas a etre porte du tout, les relais sont authores.
+
+*Etage 2, le trace : `RoutePath` (`RoadNetworkGenerator.h:631-760`).* **Ce n'est pas un A***, et le commentaire de l'auteur dit pourquoi : le corridor est un DAG en couches, chaque pas avance d'une colonne vers B, donc un simple programme dynamique avant est **globalement optimal**, en `O(colonnes x voies^2)`, sans file de priorite et sans heuristique a rater. Il travaille en **directions unitaires sur la sphere** (`DVec3`, `chordAngle = acos(dirA.Dot(dirB))`), donc **la courbure planetaire est native, il n'y a rien a adapter**. Sa seule dependance exterieure est une `HeightFn`, c'est a dire `height = f(direction)` : cote QANGA c'est `GetGroundHeight_HOnly`, a la conversion de repere pres. **L'interface d'adaptation est une seule fonction.**
+
+Le coût du trace, tel qu'il est ecrit :
+
+| Grandeur | Valeur | Ligne |
+|---|---|---|
+| Colonnes | `clamp(chordLen / (tier.spacing * 0.04), 8, 48)` | `:645` |
+| Voies laterales | `kLanes = 11` | `:555` |
+| Decalage max par colonne (= borne de courbure) | `kMaxShift = 2` | `:556` |
+| Demi-largeur du corridor | `chordLen * 0.22` | `:649` |
+| Coût d'un pas | `ds * (1 + 14 * grade + 60 * excess)` | `:716` |
+| Franchissement d'eau | `+ ds * (6 + 0,05 * min(profondeur, 400))` | `:723` |
+| Amortissement de changement de voie | `+ |l-p| * laneStepM * 0,05` | `:731` |
+| Finition | **Catmull-Rom a travers** les waypoints, resample au spacing du tier | `:754-760` |
+
+Trois choses a retenir de ce coût, toutes documentees par l'auteur :
+
+- **la pente est penalisee continument, pas seulement au-dela du plafond** (`14 * grade` en plus de `60 * excess`). C'est, mot pour mot, « toute la difference entre une route et un plus court chemin » : si seul l'exces etait facture, sur un sol ou la plupart des pentes sont deja legales le coût retomberait sur la longueur et l'optimum serait une ligne droite. C'est aussi pourquoi les routes suivent les courbes de niveau et les vallees ;
+- **l'eau est chere mais jamais interdite**, donc la route suit la cote et ne franchit un detroit que si le detour serait absurde, et un corridor entierement immerge garde une reponse de coût fini ;
+- **l'amortissement de voie a ete divise par 7** (0,35 puis 0,05) : a 0,35 il « noyait toute economie que le terrain pouvait offrir et epinglait la route en ligne droite ». `ds` facture deja le detour d'un pas diagonal, le charger deux fois est une faute.
+
+**Le point de recalibrage, et c'est le seul vrai travail de conception.** Ces constantes sont calibrees pour des liaisons de **16 km** sur une planete de 300 km. Nos liaisons entre relais font de l'ordre de **950 km** (141 relais sur 1,26e8 km2, s'ils etaient uniformes). Consequences mecaniques :
+
+- `cols` sature a **48**, donc une colonne tous les ~20 km : la grille ne voit aucune montagne ;
+- `halfWidthM = 0,22 x 950 km` = **209 km de demi-largeur**, sur 11 voies, soit une voie tous les 42 km : absurde, aucune route ne devie de 200 km.
+
+Le reglage a poser : **garder `kLanes = 11` mais fixer la demi-largeur en absolu**, une dizaine de kilometres au lieu de 22 % de la longueur, et **monter `cols`** pour une colonne tous les 2 km environ. Chiffrage du coût qui en resulte : 475 colonnes x 11 voies = 5 225 sondes de hauteur par liaison, soit **environ 1,6 million de sondes pour tout le reseau de la Terre**. Avec `GetGroundNoise_Batch` en `ParallelFor`, c'est de l'ordre de la seconde, une fois, hors image.
+
+**Ce qui manque, et qui manque aussi chez lui** : les echangeurs. `docs/ROAD_HIERARCHY.md:483-485` le dit, une route qui croise un tier inferieur est traitee comme un croisement simple, « ni bretelle, ni voie d'insertion, ni ouvrage dedie », et c'est annonce comme le chantier suivant. Ne pas l'attendre du portage.
+
+**Validation.** Le graphe et les longueurs de liaison d'abord (sonde en lecture seule sur les 141 positions, avec la distribution des longueurs d'arete Gabriel : c'est elle qui calibre les tiers). Puis le trace d'une seule liaison, vue en PIE, avant d'en generer 300.
+
 ### Lot 3 : le champ de route, sans geometrie (1 a 2 semaines)
 
 **Perimetre.** Le portage de `RoadField.h`, et lui seul. Une structure de segment 48 octets, une collecte spatiale bornee, une fonction `EvaluateRoadField(position)` qui retourne `(weight, height, lateral, halfWidth, type)`, un etage insere dans `AWorldScapeRoot::GetNoise` **apres les volumes heightmap et avant les trous**, et son miroir dans `WSHeightfieldGenerate.usf`. Le trace vient d'une donnee **authoree ou cuite**, pas d'un generateur (voir 4.1, point 3).
