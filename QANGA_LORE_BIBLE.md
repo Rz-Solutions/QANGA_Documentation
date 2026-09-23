@@ -309,6 +309,19 @@ d'ancrage existent, et ils sont bons :
 **Camps rebelles existants, muets** : templates `QDB_L_Camp_Bunker_RebelCyborg_B1`, `_C1`, `_D1`.
 Géométrie en place, aucun texte.
 
+### 6.2 Esthétique et symboles
+
+**CANON, donné par Benja le 2026-09-23.**
+- **Le Voss a étudié la vieille histoire depuis son époque et s'en est fait un costume** : l'ordre militaire allemand
+  des années 1940 et Rome (légions, enseignes, devises latines). Un mélange de tout, rejoué dans le futur.
+- **Le Signe** (logo) : un anneau d'acier en quatre pièces, traversé par une lame rouge verticale à double pointe.
+  Il n'est pas encore en jeu. Ses déclinaisons (pochoir, bannière, enseignes, emblème d'État) sont en cours de
+  validation : `G:\QangaSync\Props\_Voss\` (planche, charte, liste des props).
+- **Concept art** : manteau de cuir, casquette d'officier à insigne d'engrenage, masque de crâne, étendards et affiches
+  de recrutement rouges, plastron ambre.
+- **Interdits** : aucun symbole réel du IIIe Reich, et pas de disque blanc sur fond rouge (trop explicite). Les
+  bannières du Voss sont noires, traversées par la bande rouge de la lame.
+
 ---
 
 ## 7. Ce que le joueur voit réellement du lore
