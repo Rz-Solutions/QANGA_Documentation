@@ -84,3 +84,20 @@ QANGA doit sauvegarder un état de jeu riche et hétérogène : réglages, état
 | `Source/QSave/Public/QS_Settings.h` / `…cpp` | `UDeveloperSettings` (auto-save, noms, classes, version, compression) |
 | `Source/QSave/Public/QS_GI_SubSystem.h` | `UGameInstanceSubsystem` (stub) |
 | `QSave.uplugin` | Descripteur : Runtime, plugin `QSettings` |
+
+---
+
+## 8. Steam Cloud pour les parties hors ligne
+
+La synchronisation des sauvegardes locales Windows est configurée dans Steamworks pour QANGA (app 1648190) via Auto-Cloud. Steam synchronise les fichiers sous `%LOCALAPPDATA%/Qanga/Saved/SaveGames/` selon ces règles publiées :
+
+| Sous-dossier depuis `%LOCALAPPDATA%` | Filtre | Récursif |
+|---|---|---|
+| `Qanga/Saved/SaveGames/Offline` | `*` | Oui |
+| `Qanga/Saved/SaveGames/BACKUP_Offline` | `*.sav` | Non |
+| `Qanga/Saved/SaveGames/QStorage/Offline` | `*.qst` | Oui |
+| `Qanga/Saved/SaveGames/QStorage/Offline` | `*.qst.bak` | Oui |
+| `Qanga/Saved/SaveGames` | `*Tutorial.sav` | Non |
+| `Qanga/Saved/SaveGames` | `LocalData.sav` | Non |
+
+Le quota Steam Cloud est de 2 000 000 000 octets et 10 000 fichiers. `InputConfig.sav` et `QGraphicsSettings.sav` restent locaux pour conserver les contrôles et les réglages graphiques propres à chaque machine. Les sauvegardes du serveur dédié ne sont pas concernées. La page Steam de QANGA affiche la fonctionnalité Steam Cloud.

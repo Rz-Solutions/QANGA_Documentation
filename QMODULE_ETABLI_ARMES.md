@@ -1,8 +1,8 @@
 # QMODULE : l'établi d'armes (chantier)
 
-> **Statut : cadrage du 2026-09-23, rien n'est encore construit.** Mesuré sur l'arbre synchronisé ce
-> jour (sources de RzZz jusqu'au 22/09 inclus). Ce document fixe ce qui existe, ce qui manque,
-> l'ordre des lots et les 4 décisions à prendre avant d'écrire.
+> **Statut au 2026-09-23, 23h30 : lots 1 et 2 construits et testés en PIE, écran refait dans la DA
+> du jeu (état détaillé au paragraphe 1 bis).** Le cadrage d'origine ci-dessous reste la référence
+> des lots et des décisions.
 > Compagnons : `QMODULE_ARCHITECTURE.md` §15.8 et §15.9 (rack d'arme, premier établi en C++),
 > `QMODULE_CATALOGUE_ARMES_VEHICULES.md` §0.5 et §3 (catalogue, pont de stats).
 > Ordre fixé par Benja le 2026-08-18 : (1) modules d'armes, (2) **l'établi**, (3) l'interface,
@@ -72,6 +72,64 @@ ID 14703) :
 
 L'ancien `QBD_QModule_Workbench` (prototype de juillet, inscrit nulle part) n'est ni utilisé ni
 supprimé.
+
+### État au 2026-09-23, 23h30 : lot 2 FAIT (l'arme sur la table), écran refait dans la DA du jeu
+
+| Élément | État mesuré |
+|---|---|
+| M4 (comment l'arme se dessine) | Le modèle d'une arme EST sa classe ItemScript : composants du Blueprint (SCS) et surcharges héritées (ICH). Comparé à une instance posée, pour les 40 objets de catégorie Weapon : **0 écart** (le construction script ne touche ni meshes ni transforms). Les variantes NASH V1 ne diffèrent que par ces surcharges (canons, crosses, rails). Lunettes en ChildActor (NASH Sniper, NashV2 Sniper, Rocket Launcher). |
+| D1 (qui voit l'arme) | **Copie locale (option b)** : chaque joueur voit sa propre arme, plusieurs joueurs peuvent partager un établi (« tout le monde peut l'utiliser »), rien ne passe par le réseau. `QModuleItemVisual` reconstruit le modèle depuis la classe : l'ItemScript n'est jamais instancié, aucune de ses briques de jeu (contrat, phase, registres) ne tourne. Limite : les pièces montées par les attachements QInventory ne sont pas montrées (lot 4). |
+| Liste des armes (D3) | armes équipées puis sac, filtrées par les `UseTags` de l'objet : « Weapon » (21 armes à feu, la grenade, le multitool, 3 outils de recyclage) moins « Grenade », « Recycler », « MelleeWeapon ». Mesuré en PIE : 16 armes listées sur 19 données, grenade, katana et recycleur écartés. Le **multitool** reste listé (à trancher). |
+| Pose sur la table | ancre déplacée au centre du tapis rouille (0, 20, 121,5) ; arme centrée, point bas 5 cm au-dessus, canon vers la droite, flanc droit vers le joueur. Classe chargée au choix de l'arme (29 ms à 2,9 s en éditeur, une fois par arme). |
+| Caméra | cadrage calculé sur la boîte de l'arme (60 % de l'écran) ; deux caméras se passent le relais, changer d'arme glisse en 0,6 s. **FOV** : le modificateur `CM_BaseFOV` imposait le FOV du joueur (95°) à toute caméra ; la session active son interrupteur `ForceFOV` vers 55° (comme la visée) et remet les valeurs à l'identique à la fin. |
+| Lampe | lampe d'établi locale pendant la session (`DisplayLightLumens`, 400 lm) : à 1500 lm la table sortait brûlée en plein jour. |
+| HUD | masqué pendant la session (`W_HUD` en Hidden, jamais Collapsed), remis exactement comme avant à la fermeture. |
+| Écran (retour Benja : « UI dégueulasse, pas la logique visuelle du jeu ») | refait avec les briques du Mur : conteneur `StarMap_MenuContainer` titré « ETABLI D'ARMES », barres de section ambre à segments, BlenderPro, boutons et sons du Mur. Plan table : une plaque au cadre des notifications de module (filets 1 px, crochets ambre) avec flèches, nom de l'arme, MODULES et QUITTER (flèches du clavier aussi). Plan ordinateur : trois colonnes (ARMES, RACK DE L'ARME, MODULES EN STOCK limités aux modules d'arme) **calées sur la dalle du moniteur** (D2). |
+| Tests | PIE client et serveur : 16 armes posées une à une (du pistolet NASH, 23 cm, au sniper NASH, 130 cm), fermeture propre, input rendu. Commandes : `qmodule.Test.Workbench.GiveItem`, `.Show`, `.Capture`. C++ : patchs `Saved/WeaponBench_Patch_20260923_v3` à `v6` (orig, new, APPLY, REVERT). |
+| Reste à voir | l'œil de Benja sur l'écran refait, le réglage de la lampe, la décision multitool, puis le lot 3 (aperçu chiffré par arme). |
+
+### État au 2026-09-23, 20h15 : lot 1 et inscription QBuilder FAITS, test humain en attente
+
+| Élément | État mesuré |
+|---|---|
+| `BP_WeaponBench` | compile **sans erreur** (doublon `HasInteraction` retiré) ; `HasInteraction` rend vrai, étiquette sur `WeaponAnchor` ; `InteractClient` → session |
+| Entrée de construction | `QA_ICLAB_WeaponBench` (ID 14705 → `BP_WeaponBench_ForBuild`), `QDD_ICLAB_WeaponBench` (Data_ID unique, catégorie Station, tag `Workbench`, emprise de l'établi 165 × 55 × 105 cm au lieu des 27 m de la station), `QTS_ICLAB` 48 → 49 sans doublon ; catalogues sauvegardés avant dans `Saved/QBuilderBackups_WeaponBench_20260923/` |
+| Nom du menu | « Weapon Workbench », depuis `/Game/_QData/Localization/WeaponBenchLocalizationTable` (clé `weapon_bench.name`), donc traduisible |
+| Cadrages | capturés (scene capture, sans voler le focus) : plan table sur le tapis de travail, plan ordinateur sur la dalle du moniteur (écran bien tourné vers le joueur) |
+| Test PIE automatique (`L_Dev_Claude`, établi posé à 4 m du point d'apparition, aligné sur la gravité locale) | `HasInteraction` vrai ; ouverture vraie ; plan ordinateur ; input de jeu coupé pendant la session ; fermeture ; **input rendu** 3 s après. Aucune erreur liée à l'établi dans le log (les erreurs `ItemsManager ... incompatible world-drop/loot state schema` et la sauvegarde DQS préexistent). |
+| Reste à voir par Benja | l'étiquette et la touche d'interaction en vrai, le rendu des deux plans en jeu, la pose depuis le menu de construction. Puis lot 2 (l'arme sur la table) et lot 3 (l'écran de l'ordinateur). |
+
+### État au 2026-09-23, 18h40 (chantier mis en pause par Benja, machine saturée)
+
+**À faire en premier à la reprise** : `BP_WeaponBench` est sauvé avec une **erreur de compilation**
+(« more than one function with the same name HasInteraction »). `AddInterface` crée déjà le graphe
+`HasInteraction` de l'interface (rangé dans `ImplementedInterfaces`), et l'outil RzMCP en a créé un
+second dans les fonctions. Correctif prêt (`wb_create_step2d.py` : supprimer le doublon des fonctions,
+régler le graphe de l'interface). Le BP n'est référencé nulle part : aucun effet sur le jeu en attendant.
+
+Déjà posé dans `BP_WeaponBench` : les 3 ancres (arme à (0, 5, 121) ; plan table à (0, 115, 178),
+pitch -27 ; plan ordinateur à (115, 45, 150)), le moniteur `ComputerMesh`
+(`SM_Monitor_01_Hopital`, orientation de l'écran à vérifier à l'image), l'interface
+`Interact_Interface`, et `Event InteractClient` → `Branch(Pressed)` → `QMOD_OpenWorkbench(PlayerController)`.
+Reste : `HasInteraction` (vrai + étiquette sur `WeaponAnchor`), puis l'inscription QBuilder
+(`wb_create_step3.py` : `QA_ICLAB_WeaponBench`, ID 14705, `QDD_ICLAB_WeaponBench`, `QTS_ICLAB`) ; le nom
+de menu passera par une String Table (un `unreal.Text` ne serait jamais traduit), et le prix reprend
+celui de la station de matière en attendant l'avis de Benja.
+
+| Élément | État |
+|---|---|
+| C++ lot 1 (session caméra 2 plans, input suspendu puis rendu en différé, verrou serveur, 3 ancres) | **Compilé et démarrage d'éditeur vérifié** (patch v2, 16h26, 303 s de boot). Verrou réglable par la variable console `qmodule.Workbench.RequireBench` (1 par défaut), pas par `UQModule_Settings`. |
+| `SM_WeaponBench` | **Créé** (copie d'`AtelierArme`) : 324 × 102 × 206 cm, plateau de travail vers 120 cm, panneau arrière côté -Y, joueur côté +Y. |
+| `BP_WeaponBench` | **Créé** sur `AQModule_WorkbenchActor`, mesh posé, `bReplicates = False` (comme `BP_Shop`, `BP_Module_Machine`, la station de matière : chaque machine a sa copie). |
+| `BP_WeaponBench_ForBuild` | **Créé**, enfant sans graphe, hérite de tout. |
+| Ancres, moniteur latéral, interaction, entrée QBuilder | Scripts prêts, en attente d'un éditeur disponible. |
+
+**Incident du 2026-09-23 (15h37 à 15h50), réparé** : la première application du patch a fait
+planter deux éditeurs au démarrage. Cause mesurée : les fichiers avaient été posés par `Copy-Item`,
+qui garde la date d'origine ; `QModule_Settings.h` paraissait plus vieux que les `.obj`, UBT n'a
+recompilé que 3 blocs sur les 45 fichiers qui l'incluent, d'où une DLL incohérente (la
+réinstanciation de Blueprint au démarrage lisait des pointeurs souples décalés). Patch retiré,
+recompilé, puis réappliqué en v2 avec des fichiers datés de l'instant.
 
 ---
 
