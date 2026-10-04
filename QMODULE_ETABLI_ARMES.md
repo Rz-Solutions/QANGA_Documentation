@@ -1,7 +1,8 @@
 # QMODULE : l'établi d'armes (chantier)
 
-> **Statut au 2026-09-23, 23h30 : lots 1 et 2 construits et testés en PIE, écran refait dans la DA
-> du jeu (état détaillé au paragraphe 1 bis).** Le cadrage d'origine ci-dessous reste la référence
+> **Statut au 2026-09-25 : lots 1 et 2 construits et testés en PIE, 20 armes posées sur la table
+> (dont AK47, AT56, FA62 et le sniper d'origine), plan de l'établi passé en qualité AAA (v8 et v9),
+> écran refait dans la DA du jeu (état détaillé au paragraphe 1 bis).** Le cadrage d'origine ci-dessous reste la référence
 > des lots et des décisions.
 > Compagnons : `QMODULE_ARCHITECTURE.md` §15.8 et §15.9 (rack d'arme, premier établi en C++),
 > `QMODULE_CATALOGUE_ARMES_VEHICULES.md` §0.5 et §3 (catalogue, pont de stats).
@@ -73,6 +74,48 @@ ID 14703) :
 L'ancien `QBD_QModule_Workbench` (prototype de juillet, inscrit nulle part) n'est ni utilisé ni
 supprimé.
 
+### Lot 3 : aperçu chiffré sur l'ordinateur (2026-09-25, patchs v10 à v12 compilés, VÉRIFIÉ en PIE)
+
+Mesuré le 2026-09-25 au soir sur L_Dev_Claude : NashV2 Assault Rifle « STATS AU TIR » dégâts 35, 400 coups/min ; Canon renforcé installé avec une phase 35 → 45, Amplificateur de dégâts 35 → 36,8, Chargeur rapide « Sans effet sur cette arme » ; NASH SMG « Les modules d'arme n'ont pas encore d'effet sur cette arme ». Câblage confirmé dans l'éditeur : dans `ResolveWeaponFireContext` du fusil, `Damage` ← variable `Damage`, `FireDelaySeconds` ← variable `FireDelay`, `ReloadDurationSeconds` ← `ReloadTime`.
+
+- v11 : la colonne MODULES EN STOCK lit tout le sac (`QModuleInventory::CollectModuleStock`) ; avant, elle ne lisait que la table `ModuleItemAssetByTagName` des réglages, qui ne connaît que 2 modules d'arme (l'Amplificateur, la Chambre thermique et le Recycleur n'y apparaissaient jamais).
+- v12 : l'écran et le bandeau du bas suivent l'arme posée sur la table, quelle que soit la source (`QMOD_NotifyDisplayedItemChanged`) ; le bandeau restait bloqué sur l'arme 1 quand la table changeait d'arme par un autre chemin.
+- Pas vu en jeu : la ligne « AVEC UNE PHASE DE PLUS » sous un module installé (il faut installer un module et une phase ; les commandes de test d'arme ne visent qu'une arme équipée).
+- Langue : les libellés de stats viennent du Mur (source anglaise traduite par le pipeline), les autres textes de l'établi sont en français dans le code comme ceux du Mur ; même convention que l'existant, la passe de localisation reste à faire pour les deux.
+
+| Élément | Contenu |
+|---|---|
+| Source des chiffres | le calcul du tir lui-même : l'agrégation du rack de l'arme (`QModuleAggregation::BuildStatAggregates` puis `ComputeFinal`, comme `QModuleItemRack::GetStat` dans `ResolveFireContext`). Dégâts = `Stat.Weapon.Damage` sur la variable `Damage` de l'arme ; cadence = `60 / (FireDelay × (1 - Stat.Weapon.FireRate))` coups par minute. Valeurs de base lues sur les défauts de classe du script d'arme (variables `Damage` et `FireDelay` de `WeaponScript`) : **contrat par nom, à confirmer dans l'éditeur** (ce qui alimente la structure de tir du NashV2 Assault Rifle). |
+| Colonne RACK | bloc « STATS AU TIR » (dégâts, cadence avec les modules actuels) ; sous chaque module installé, « AVEC UNE PHASE DE PLUS » : les chiffres qui bougent, ambre si mieux, rouge si pire ; « Sans effet sur cette arme. » sinon. |
+| Colonne MODULES EN STOCK | sous chaque module non installé : « INSTALLE AVEC UNE PHASE » (un module seul reste au niveau 0, inactif). |
+| Arme non branchée | une seule ligne : « Les modules d'arme n'ont pas encore d'effet sur cette arme. » Détection automatique (le script d'arme implémente `IQWeaponFireControlContextAdapter`) : une arme que RzZz passe au tir natif affiche ses chiffres sans retoucher l'établi. |
+| Constat | `ChargeurRapide` multiplie `Stat.Weapon.FireRate`, dont la base au tir vaut 0 : il ne peut rien faire, même sur l'arme branchée (l'aperçu dit « Sans effet »). Donnée à revoir (une réduction de délai s'ajoute, elle ne se multiplie pas). |
+| Reste | vue en jeu (capture de l'écran), confirmation des variables de base dans l'éditeur. |
+
+### Plan de l'établi « qualité AAA » (2026-09-25, patchs v8 et v9 compilés, vérifié en PIE)
+
+Demande de Benja : arme plus grande, « au mieux AAA qualité », exposition baissée sur les seules caméras de l'établi ; le multitool reste listé (il aura ses propres modules).
+
+| Élément | Réglage (propriété de `AQModule_WorkbenchActor`) et mesure |
+|---|---|
+| Taille | `DisplayScreenFill` 0,75 (au lieu de 0,6) ; recul minimal `ShotDistanceRange.X` 35 cm pour les pistolets. |
+| Angle | `ShotPitchDegrees` -12° : vue de profil un peu plongeante, l'arme se détache sur le panneau en bois au lieu de la table blanche. Calculé dans le repère de l'établi (un établi posé sur une planète n'est pas aligné sur les axes du monde). `ShotLiftFraction` (0,12) devient réglable. |
+| Éclairage studio | lumière principale chaude (`DisplayLightLumens` 20 lm, avec ombres, décalage `DisplayKeyLightOffset`) et contre-jour froid (`DisplayRimLumens` 50 lm, `DisplayRimLightOffset`), sur le **canal d'éclairage 2**, que seuls les meshes de l'arme rejoignent : la table n'est plus touchée par la lampe. Mesuré : dès 150 lm, un fusil noir sortait blanc en plein jour ; à 20/50 lm chaque arme garde sa matière (NashV2 en métal sombre, NASH acier, pièces blanches rouillées, chargeur rouge). |
+| Exposition | `ShotExposureBias` -0,7 EV **par rapport à la vue du joueur** au moment où il s'assoit (lue dans l'ordre du moteur : défaut `r.DefaultFeature.AutoExposure.Bias`, volumes non bornés par priorité, puis la caméra de la vue). Seul le biais d'exposition est surchargé sur les caméras de l'établi, tout le reste du post-process reste celui du monde. Mesuré sur L_Dev_Claude : vue joueur 0,00 EV, établi -0,70 EV. |
+| Barre de défilement | réellement 4 px (mesuré sur capture) : les images invisibles des extrémités gardaient la taille par défaut d'un pinceau (32 px) et imposaient une barre de 34 px. |
+| Réglage en jeu | `qmodule.Test.Workbench.Tune <Propriété> <Valeur>` change une propriété de l'établi ouvert et repose l'arme (hors Shipping). `Show view` donne aussi le biais d'exposition de la vue. |
+| Vérifié | PIE sur L_Dev_Claude avec les valeurs compilées : NASH SMG, NashV2 Assault Rifle, NASH Sniper, NashV2 MachineGun, NashV2 Rocket Launcher, NASH Pistol ; écran de l'ordinateur. Patchs `Saved/WeaponBench_Patch_20260925_v8` et `v9` (orig, new, APPLY, REVERT). |
+| Non vérifié | de nuit et en intérieur : l'exposition suit la vue du joueur, mais le rapport entre les lampes et le décor changera ; à regarder en jeu. |
+
+### Vérifié le 2026-09-25 (patch v7 compilé, PIE sur L_Dev_Claude)
+
+| Élément | Mesure |
+|---|---|
+| Anciennes armes | AK47 (« AM47 » en jeu, 90 cm), AT56 (93 cm), FA62 (73 cm) et le sniper d'origine (118 cm) posés et cadrés, modèles complets. Leur absence du 23/09 venait du **sac plein du personnage de test** (QInventory : « Admission cannot fit the complete remainder… »), pas de l'établi. |
+| Cadrage du sniper NASH | mesuré pièce par pièce (`qmodule.Test.Workbench.Show <n>`) et caméra réelle (`Show view`) : arme centrée (caméra à X = 0 dans le repère de l'ancre), 57 % de la largeur, recul 212 cm conforme au calcul. L'impression de décalage vient du canon fin et clair sur la table blanche : rien à corriger dans le calcul. Levier si on veut l'arme plus grande : `DisplayScreenFill` (0,6). |
+| Lampe, barre de défilement | lampe à 250 lm (v7) et barre ambre : remplacées par l'éclairage studio et la barre de 4 px de v8 et v9 (section ci-dessus). |
+| Banc de test | le sac du personnage de test vit dans la sauvegarde de la carte (`Saved/SaveGames/Offline/L_Dev_Claude_Offline*.sav`) : les 16 armes données le 23/09 le remplissent. Pour tester d'autres armes : mettre ces 8 fichiers de côté, tester, les remettre (contrôle md5). `pie_control stop` perd souvent sa réponse : relancer jusqu'à lire `stopped`, sinon la partie continue de sauvegarder. |
+
 ### État au 2026-09-23, 23h30 : lot 2 FAIT (l'arme sur la table), écran refait dans la DA du jeu
 
 | Élément | État mesuré |
@@ -82,10 +125,10 @@ supprimé.
 | Liste des armes (D3) | armes équipées puis sac, filtrées par les `UseTags` de l'objet : « Weapon » (21 armes à feu, la grenade, le multitool, 3 outils de recyclage) moins « Grenade », « Recycler », « MelleeWeapon ». Mesuré en PIE : 16 armes listées sur 19 données, grenade, katana et recycleur écartés. Le **multitool** reste listé (à trancher). |
 | Pose sur la table | ancre déplacée au centre du tapis rouille (0, 20, 121,5) ; arme centrée, point bas 5 cm au-dessus, canon vers la droite, flanc droit vers le joueur. Classe chargée au choix de l'arme (29 ms à 2,9 s en éditeur, une fois par arme). |
 | Caméra | cadrage calculé sur la boîte de l'arme (60 % de l'écran) ; deux caméras se passent le relais, changer d'arme glisse en 0,6 s. **FOV** : le modificateur `CM_BaseFOV` imposait le FOV du joueur (95°) à toute caméra ; la session active son interrupteur `ForceFOV` vers 55° (comme la visée) et remet les valeurs à l'identique à la fin. |
-| Lampe | lampe d'établi locale pendant la session (`DisplayLightLumens`, 400 lm) : à 1500 lm la table sortait brûlée en plein jour. |
+| Lampe | lampe d'établi locale pendant la session (`DisplayLightLumens`, 250 lm depuis v7) : à 1500 lm la table sortait brûlée en plein jour. |
 | HUD | masqué pendant la session (`W_HUD` en Hidden, jamais Collapsed), remis exactement comme avant à la fermeture. |
 | Écran (retour Benja : « UI dégueulasse, pas la logique visuelle du jeu ») | refait avec les briques du Mur : conteneur `StarMap_MenuContainer` titré « ETABLI D'ARMES », barres de section ambre à segments, BlenderPro, boutons et sons du Mur. Plan table : une plaque au cadre des notifications de module (filets 1 px, crochets ambre) avec flèches, nom de l'arme, MODULES et QUITTER (flèches du clavier aussi). Plan ordinateur : trois colonnes (ARMES, RACK DE L'ARME, MODULES EN STOCK limités aux modules d'arme) **calées sur la dalle du moniteur** (D2). |
-| Tests | PIE client et serveur : 16 armes posées une à une (du pistolet NASH, 23 cm, au sniper NASH, 130 cm), fermeture propre, input rendu. Commandes : `qmodule.Test.Workbench.GiveItem`, `.Show`, `.Capture`. C++ : patchs `Saved/WeaponBench_Patch_20260923_v3` à `v6` (orig, new, APPLY, REVERT). |
+| Tests | PIE client et serveur : 16 armes posées une à une (du pistolet NASH, 23 cm, au sniper NASH, 130 cm), fermeture propre, input rendu. Commandes : `qmodule.Test.Workbench.GiveItem`, `.Show`, `.Capture`. C++ : patchs `Saved/WeaponBench_Patch_20260923_v3` à `v7` (orig, new, APPLY, REVERT). |
 | Reste à voir | l'œil de Benja sur l'écran refait, le réglage de la lampe, la décision multitool, puis le lot 3 (aperçu chiffré par arme). |
 
 ### État au 2026-09-23, 20h15 : lot 1 et inscription QBuilder FAITS, test humain en attente
@@ -197,7 +240,7 @@ Tant que ces points ne sont pas mesurés, tout ce qu'on pose dessus est à risqu
 |---|---|---|---|
 | M1 | Le rack d'une arme survit-il à un redémarrage ? | `QMODRack` est écrit dans le DataObject **hors** transaction d'inventaire ; la persistance native pourrait restaurer l'item sans cette clé. | Installer un module, redémarrer la session, relire (`qmodule.Test.Weapon.Dump`). |
 | M2 | Un client distant lit-il le rack de son arme ? | En PIE solo le client est le serveur. Les pièces ont une propriété répliquée dédiée (`RepSlotAttachments`), le rack n'en a pas. L'écran de l'ordinateur tourne chez le client. | PIE 2 joueurs : installer côté client, relire côté client. |
-| M3 | Les dégâts réels changent-ils ? | Le pont est écrit dans `ResolveFireContext`, mais je n'ai pas trouvé son appelant : je n'ai pas pu vérifier quelles armes passent par là. | Tirer avec et sans `CanonRenforce`, comparer les dégâts. |
+| M3 | Les dégâts réels changent-ils ? | **Réponse du 2026-09-25 (lecture du code et des assets, sans moteur) : pour UNE arme seulement.** `UQangaWeaponContextLibrary::ResolveFireContext` (QInventoryIntegration) applique `Stat.Weapon.Damage` et `Stat.Weapon.FireRate` du rack de l'arme au tir (`(base + ajouts) × multiplicateurs`, cadence plafonnée par QModule). Elle n'est appelée que par l'adaptateur `IQWeaponFireControlContextAdapter`, que seul `IS_NashV2_Assault_Rifle` implémente (scan complet de Content et des plugins, 1952 s). Les 19 autres armes tirent par l'ancien chemin de `WeaponScript` (qui n'utilise le natif que pour le chargeur) : un module de dégâts ou de cadence posé dessus n'a aucun effet. `Stat.Weapon.MatterPerShot` (RecycleurDeDouilles) n'a aucun lecteur. | Tirer avec et sans `CanonRenforce` sur le NashV2 Assault Rifle, comparer les dégâts (pas fait : moteur non lancé à la demande de Benja). |
 | M4 | Comment l'arme se dessine en 3D ? | Un ItemScript spawné nu est vide (mesuré pour le codex) : le visuel vient de la chaîne d'équipement ou de drop, et les pièces sont posées par le serveur. C'est ce qui tranche la décision D1. | Observer une arme équipée et une arme au sol en PIE, relever qui ajoute les meshes. |
 
 ---
