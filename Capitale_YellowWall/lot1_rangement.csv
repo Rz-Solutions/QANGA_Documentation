@@ -1,0 +1,252 @@
+dossier;level_source;acteur;label;classe;mesh;X_m;Y_m;Z_m;level_cible;action;note
+1 Center;L_Capital_Center;BP_Immeuble_A1_C_0;BP_Immeuble_A1;BP_BigShop_1_C;;357;108;114;L_Capital_Entry_Est;deplacer;
+1 Center;L_Capital_Center;BP_Door_02_GEN_VARIABLE_BP_Door_02_C_CAT_0;BP_Door_020;BP_Door_02_C;;357;108;114;L_Capital_Entry_Est;suit son parent;acteur enfant genere par BP_Immeuble_A1_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Door_18_GEN_VARIABLE_BP_Door_18_C_CAT_0;BP_Door_180;BP_Door_18_C;;405;-579;114;L_Capital_Nord;suit son parent;acteur enfant genere par BP_SmallShop_B_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Door_18_GEN_VARIABLE_BP_Door_18_C_CAT_1;BP_Door_181;BP_Door_18_C;;386;-579;114;L_Capital_Nord;suit son parent;acteur enfant genere par BP_SmallShop_B_C_1 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Door_18_GEN_VARIABLE_BP_Door_18_C_CAT_2;BP_Door_182;BP_Door_18_C;;396;-580;114;L_Capital_Nord;suit son parent;acteur enfant genere par BP_SmallShop_B_C_2 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Door_27_GEN_VARIABLE_BP_Door_27_C_CAT_0;BP_Door_270;BP_Door_27_C;;405;-579;114;L_Capital_Nord;suit son parent;acteur enfant genere par BP_SmallShop_B_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Door_27_GEN_VARIABLE_BP_Door_27_C_CAT_1;BP_Door_271;BP_Door_27_C;;386;-579;114;L_Capital_Nord;suit son parent;acteur enfant genere par BP_SmallShop_B_C_1 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Door_27_GEN_VARIABLE_BP_Door_27_C_CAT_2;BP_Door_272;BP_Door_27_C;;396;-580;114;L_Capital_Nord;suit son parent;acteur enfant genere par BP_SmallShop_B_C_2 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Door_17_GEN_VARIABLE_BP_Door_17_C_CAT_1;BP_DoorA241;BP_DoorA24_C;;600;-366;114;L_Capital_Litchout;suit son parent;acteur enfant genere par BP_YellowBuild_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Door_17_GEN_VARIABLE_BP_Door_17_C_CAT_2;BP_DoorA242;BP_DoorA24_C;;582;-366;114;L_Capital_Litchout;suit son parent;acteur enfant genere par BP_YellowBuild_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Door_17_GEN_VARIABLE_BP_Door_17_C_CAT_3;BP_DoorA243;BP_DoorA24_C;;585;-399;114;L_Capital_Litchout;suit son parent;acteur enfant genere par BP_YellowBuild_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Door_17_GEN_VARIABLE_BP_Door_17_C_CAT_4;BP_DoorA244;BP_DoorA24_C;;590;-385;128;L_Capital_Litchout;suit son parent;acteur enfant genere par BP_YellowBuild_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Door_04_GEN_VARIABLE_BP_Door_04_C_CAT_0;BP_DoorA280;BP_DoorA28_C;;357;108;114;L_Capital_Entry_Est;suit son parent;acteur enfant genere par BP_Immeuble_A1_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Door_04_GEN_VARIABLE_BP_Door_04_C_CAT_1;BP_DoorA281;BP_DoorA28_C;;357;108;114;L_Capital_Entry_Est;suit son parent;acteur enfant genere par BP_Immeuble_A1_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Door_04_GEN_VARIABLE_BP_Door_04_C_CAT_2;BP_DoorA282;BP_DoorA28_C;;357;108;114;L_Capital_Entry_Est;suit son parent;acteur enfant genere par BP_Immeuble_A1_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Door_04_GEN_VARIABLE_BP_Door_04_C_CAT_3;BP_DoorA283;BP_DoorA28_C;;357;108;114;L_Capital_Entry_Est;suit son parent;acteur enfant genere par BP_Immeuble_A1_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Door_04_GEN_VARIABLE_BP_Door_04_C_CAT_4;BP_DoorA284;BP_DoorA28_C;;357;108;114;L_Capital_Entry_Est;suit son parent;acteur enfant genere par BP_Immeuble_A1_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Door_04_GEN_VARIABLE_BP_Door_04_C_CAT_5;BP_DoorA285;BP_DoorA28_C;;357;108;114;L_Capital_Entry_Est;suit son parent;acteur enfant genere par BP_Immeuble_A1_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Door_04_GEN_VARIABLE_BP_Door_04_C_CAT_6;BP_DoorA286;BP_DoorA28_C;;405;-579;114;L_Capital_Nord;suit son parent;acteur enfant genere par BP_SmallShop_B_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Door_04_GEN_VARIABLE_BP_Door_04_C_CAT_7;BP_DoorA287;BP_DoorA28_C;;386;-579;114;L_Capital_Nord;suit son parent;acteur enfant genere par BP_SmallShop_B_C_1 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Door_04_GEN_VARIABLE_BP_Door_04_C_CAT_8;BP_DoorA288;BP_DoorA28_C;;396;-580;114;L_Capital_Nord;suit son parent;acteur enfant genere par BP_SmallShop_B_C_2 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_YellowBuild_C_0;BP_YellowBuild;BP_SimpleBuilding_2_C;;590;-385;128;L_Capital_Litchout;deplacer;
+1 Center;L_Capital_Center;BP_SmallShop_B_C_0;BP_SmallShop_B3;BP_SmallShop_B_C;;405;-579;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;BP_SmallShop_B_C_1;BP_SmallShop_B;BP_SmallShop_B_C;;386;-579;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;BP_SmallShop_B_C_2;BP_SmallShop_B2;BP_SmallShop_B_C;;396;-580;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;BP_Window_A_GEN_VARIABLE_BP_Window_A_C_CAT_0;BP_Window_A0;BP_Window_A_C;;590;-385;128;L_Capital_Litchout;suit son parent;acteur enfant genere par BP_YellowBuild_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Window_A_GEN_VARIABLE_BP_Window_A_C_CAT_1;BP_Window_A1;BP_Window_A_C;;590;-385;128;L_Capital_Litchout;suit son parent;acteur enfant genere par BP_YellowBuild_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Window_A_GEN_VARIABLE_BP_Window_A_C_CAT_10;BP_Window_A10;BP_Window_A_C;;590;-385;128;L_Capital_Litchout;suit son parent;acteur enfant genere par BP_YellowBuild_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Window_A_GEN_VARIABLE_BP_Window_A_C_CAT_11;BP_Window_A11;BP_Window_A_C;;590;-385;128;L_Capital_Litchout;suit son parent;acteur enfant genere par BP_YellowBuild_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Window_A_GEN_VARIABLE_BP_Window_A_C_CAT_12;BP_Window_A12;BP_Window_A_C;;590;-385;128;L_Capital_Litchout;suit son parent;acteur enfant genere par BP_YellowBuild_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Window_A_GEN_VARIABLE_BP_Window_A_C_CAT_13;BP_Window_A13;BP_Window_A_C;;590;-385;128;L_Capital_Litchout;suit son parent;acteur enfant genere par BP_YellowBuild_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Window_A_GEN_VARIABLE_BP_Window_A_C_CAT_14;BP_Window_A14;BP_Window_A_C;;590;-385;128;L_Capital_Litchout;suit son parent;acteur enfant genere par BP_YellowBuild_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Window_A_GEN_VARIABLE_BP_Window_A_C_CAT_15;BP_Window_A15;BP_Window_A_C;;590;-385;128;L_Capital_Litchout;suit son parent;acteur enfant genere par BP_YellowBuild_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Window_A_GEN_VARIABLE_BP_Window_A_C_CAT_16;BP_Window_A16;BP_Window_A_C;;590;-385;128;L_Capital_Litchout;suit son parent;acteur enfant genere par BP_YellowBuild_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Window_A_GEN_VARIABLE_BP_Window_A_C_CAT_2;BP_Window_A2;BP_Window_A_C;;590;-385;128;L_Capital_Litchout;suit son parent;acteur enfant genere par BP_YellowBuild_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Window_A_GEN_VARIABLE_BP_Window_A_C_CAT_3;BP_Window_A3;BP_Window_A_C;;590;-385;128;L_Capital_Litchout;suit son parent;acteur enfant genere par BP_YellowBuild_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Window_A_GEN_VARIABLE_BP_Window_A_C_CAT_4;BP_Window_A4;BP_Window_A_C;;590;-385;128;L_Capital_Litchout;suit son parent;acteur enfant genere par BP_YellowBuild_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Window_A_GEN_VARIABLE_BP_Window_A_C_CAT_5;BP_Window_A5;BP_Window_A_C;;590;-385;128;L_Capital_Litchout;suit son parent;acteur enfant genere par BP_YellowBuild_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Window_A_GEN_VARIABLE_BP_Window_A_C_CAT_6;BP_Window_A6;BP_Window_A_C;;590;-385;128;L_Capital_Litchout;suit son parent;acteur enfant genere par BP_YellowBuild_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Window_A_GEN_VARIABLE_BP_Window_A_C_CAT_7;BP_Window_A7;BP_Window_A_C;;590;-385;128;L_Capital_Litchout;suit son parent;acteur enfant genere par BP_YellowBuild_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Window_A_GEN_VARIABLE_BP_Window_A_C_CAT_8;BP_Window_A8;BP_Window_A_C;;590;-385;128;L_Capital_Litchout;suit son parent;acteur enfant genere par BP_YellowBuild_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;BP_Window_A_GEN_VARIABLE_BP_Window_A_C_CAT_9;BP_Window_A9;BP_Window_A_C;;590;-385;128;L_Capital_Litchout;suit son parent;acteur enfant genere par BP_YellowBuild_C_0 : se recree avec lui, ne pas deplacer a la main
+1 Center;L_Capital_Center;SM_House216_27;SM_House219;StaticMeshActor;SM_House13;440;170;108;L_Capital_Entry_Est;deplacer;
+1 Center;L_Capital_Center;SM_House217_28;SM_House297;StaticMeshActor;SM_House13;386;168;108;L_Capital_Entry_Est;deplacer;
+1 Center;L_Capital_Center;SM_Overhang01Part03_575;SM_Overhang01Part231;StaticMeshActor;SM_Overhang01Part03;422;267;125;L_Capital_Entry_Est;deplacer;
+1 Center;L_Capital_Center;SM_Overhang01Part03_576;SM_Overhang01Part232;StaticMeshActor;SM_Overhang01Part03;381;267;125;L_Capital_Entry_Est;deplacer;
+1 Center;L_Capital_Center;SM_Overhang01Part03_579;SM_Overhang01Part233;StaticMeshActor;SM_Overhang01Part03;409;267;125;L_Capital_Entry_Est;deplacer;
+1 Center;L_Capital_Center;SM_Overhang01Part03_581;SM_Overhang01Part234;StaticMeshActor;SM_Overhang01Part03;368;267;125;L_Capital_Entry_Est;deplacer;
+1 Center;L_Capital_Center;SM_Overhang01Part26_572;SM_Overhang01Part228;StaticMeshActor;SM_Overhang01Part01;402;267;120;L_Capital_Entry_Est;deplacer;
+1 Center;L_Capital_Center;SM_Overhang01Part27_573;SM_Overhang01Part229;StaticMeshActor;SM_Overhang01Part01;388;267;120;L_Capital_Entry_Est;deplacer;
+1 Center;L_Capital_Center;SM_StoreFrontsPrefab44;SM_StoreFrontsPrefab44;StaticMeshActor;SM_SlumPrefab17;184;212;121;L_Capital_Entry_Est;laisser;objet desactive par un level designer (cache en jeu, cache dans l editeur, editeur seulement) : laisse en place
+1 Center;L_Capital_Center;SM_WVC_Floor_141;SM_WVC_Floor86;StaticMeshActor;SM_WVC_Floor;2386;2399;259;L_Complex_Welcome;deplacer;cible ajustee : L_Complex_Welcome aussi proche que L_Complex_Elevator_Down et grossit moins
+1 Center;L_Capital_Center;StaticMeshActor_1288;SM_Sidewalk_Curve_02;StaticMeshActor;SM_Sidewalk_Curve_02;597;-632;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1290;SM_Sidewalk_Trotoirsolo70;StaticMeshActor;SM_Sidewalk_Trotoirsolo;592;-626;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1291;SM_Sidewalk_Trotoirsolo71;StaticMeshActor;SM_Sidewalk_Trotoirsolo;592;-620;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1292;SM_Sidewalk_Trotoirsolo72;StaticMeshActor;SM_Sidewalk_Trotoirsolo;592;-614;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1294;SM_Sidewalk_Trotoirsolo73;StaticMeshActor;SM_Sidewalk_Trotoirsolo;592;-608;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1295;SM_Sidewalk_Trotoirsolo74;StaticMeshActor;SM_Sidewalk_Trotoirsolo;592;-602;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1296;SM_Sidewalk_Trotoirsolo75;StaticMeshActor;SM_Sidewalk_Trotoirsolo;592;-596;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1298;SM_Sidewalk_Trotoirsolo76;StaticMeshActor;SM_Sidewalk_Trotoirsolo;592;-590;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1299;SM_Sidewalk_Trotoirsolo77;StaticMeshActor;SM_Sidewalk_Trotoirsolo;592;-584;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1300;SM_Sidewalk_Trotoirsolo78;StaticMeshActor;SM_Sidewalk_Trotoirsolo;592;-578;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1302;SM_Sidewalk_Trotoirsolo79;StaticMeshActor;SM_Sidewalk_Trotoirsolo;592;-573;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1303;SM_Sidewalk_Curve_191;StaticMeshActor;SM_Sidewalk_Curve_02;597;-568;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1304;SM_Sidewalk_Trotoirsolo80;StaticMeshActor;SM_Sidewalk_Trotoirsolo;604;-565;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1306;SM_Sidewalk_Trotoirsolo81;StaticMeshActor;SM_Sidewalk_Trotoirsolo;610;-565;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1308;SM_Sidewalk_Trotoirsolo82;StaticMeshActor;SM_Sidewalk_Trotoirsolo;616;-565;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1310;SM_Sidewalk_Trotoirsolo83;StaticMeshActor;SM_Sidewalk_Trotoirsolo;622;-565;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1311;SM_Sidewalk_Trotoirsolo84;StaticMeshActor;SM_Sidewalk_Trotoirsolo;628;-565;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1313;SM_Sidewalk_Trotoirsolo85;StaticMeshActor;SM_Sidewalk_Trotoirsolo;634;-565;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1318;SM_Sidewalk_Trotoirsolo86;StaticMeshActor;SM_Sidewalk_Trotoirsolo;640;-565;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1319;SM_Sidewalk_Trotoirsolo87;StaticMeshActor;SM_Sidewalk_Trotoirsolo;646;-565;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1320;SM_Sidewalk_Trotoirsolo88;StaticMeshActor;SM_Sidewalk_Trotoirsolo;652;-565;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1321;SM_Sidewalk_Trotoirsolo89;StaticMeshActor;SM_Sidewalk_Trotoirsolo;658;-565;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1322;SM_Sidewalk_Trotoirsolo90;StaticMeshActor;SM_Sidewalk_Trotoirsolo;664;-565;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1323;SM_Sidewalk_Trotoirsolo91;StaticMeshActor;SM_Sidewalk_Trotoirsolo;670;-565;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1324;SM_Sidewalk_Trotoirsolo92;StaticMeshActor;SM_Sidewalk_Trotoirsolo;676;-565;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1325;SM_Sidewalk_Trotoirsolo93;StaticMeshActor;SM_Sidewalk_Trotoirsolo;682;-565;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1327;SM_Sidewalk_Trotoirsolo94;StaticMeshActor;SM_Sidewalk_Trotoirsolo;688;-565;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1328;SM_Sidewalk_Trotoirsolo95;StaticMeshActor;SM_Sidewalk_Trotoirsolo;695;-565;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_133;SM_ColumnInt54;StaticMeshActor;SM_ColumnInt01;411;-572;116;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1331;SM_Sidewalk_Curve_193;StaticMeshActor;SM_Sidewalk_Curve_02;702;-569;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1332;SM_Sidewalk_Curve_194;StaticMeshActor;SM_Sidewalk_Curve_02;700;-632;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1333;SM_Sidewalk_Trotoirsolo96;StaticMeshActor;SM_Sidewalk_Trotoirsolo;704;-626;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1334;SM_Sidewalk_Trotoirsolo97;StaticMeshActor;SM_Sidewalk_Trotoirsolo;704;-621;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1335;SM_Sidewalk_Trotoirsolo98;StaticMeshActor;SM_Sidewalk_Trotoirsolo;704;-578;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1336;SM_Sidewalk_Trotoirsolo99;StaticMeshActor;SM_Sidewalk_Trotoirsolo;704;-615;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1337;SM_Sidewalk_Trotoirsolo100;StaticMeshActor;SM_Sidewalk_Trotoirsolo;704;-609;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1338;SM_Sidewalk_Trotoirsolo101;StaticMeshActor;SM_Sidewalk_Trotoirsolo;704;-603;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1339;SM_Sidewalk_Trotoirsolo102;StaticMeshActor;SM_Sidewalk_Trotoirsolo;704;-597;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_134;SM_ColumnInt56;StaticMeshActor;SM_ColumnInt01;380;-572;116;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1340;SM_Sidewalk_Trotoirsolo103;StaticMeshActor;SM_Sidewalk_Trotoirsolo;704;-591;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1341;SM_Sidewalk_Trotoirsolo104;StaticMeshActor;SM_Sidewalk_Trotoirsolo;704;-585;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1344;SM_Sidewalk_Trotoirsolo106;StaticMeshActor;SM_Sidewalk_Trotoirsolo;613;-634;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1345;SM_Sidewalk_Trotoirsolo107;StaticMeshActor;SM_Sidewalk_Trotoirsolo;608;-634;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1346;SM_Sidewalk_Trotoirsolo108;StaticMeshActor;SM_Sidewalk_Trotoirsolo;619;-634;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1347;SM_Sidewalk_Trotoirsolo109;StaticMeshActor;SM_Sidewalk_Trotoirsolo;625;-634;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1348;SM_Sidewalk_Trotoirsolo110;StaticMeshActor;SM_Sidewalk_Trotoirsolo;631;-634;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1349;SM_Sidewalk_Trotoirsolo111;StaticMeshActor;SM_Sidewalk_Trotoirsolo;637;-634;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_135;SM_ColumnInt57;StaticMeshActor;SM_ColumnInt01;380;-587;116;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1350;SM_Sidewalk_Trotoirsolo112;StaticMeshActor;SM_Sidewalk_Trotoirsolo;643;-634;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1351;SM_Sidewalk_Trotoirsolo113;StaticMeshActor;SM_Sidewalk_Trotoirsolo;649;-634;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1352;SM_Sidewalk_Trotoirsolo114;StaticMeshActor;SM_Sidewalk_Trotoirsolo;655;-634;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1353;SM_Sidewalk_Trotoirsolo115;StaticMeshActor;SM_Sidewalk_Trotoirsolo;661;-634;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1354;SM_Sidewalk_Trotoirsolo116;StaticMeshActor;SM_Sidewalk_Trotoirsolo;667;-634;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1355;SM_Sidewalk_Trotoirsolo117;StaticMeshActor;SM_Sidewalk_Trotoirsolo;673;-634;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1356;SM_Sidewalk_Trotoirsolo118;StaticMeshActor;SM_Sidewalk_Trotoirsolo;679;-634;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1357;SM_Sidewalk_Trotoirsolo119;StaticMeshActor;SM_Sidewalk_Trotoirsolo;685;-634;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1358;SM_Sidewalk_Trotoirsolo120;StaticMeshActor;SM_Sidewalk_Trotoirsolo;692;-634;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_1359;Box132;StaticMeshActor;Box_50E73752;648;-600;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_136;SM_ColumnInt58;StaticMeshActor;SM_ColumnInt01;411;-587;116;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_137;SM_ColumnInt59;StaticMeshActor;SM_ColumnInt01;411;-572;120;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_138;SM_ColumnInt60;StaticMeshActor;SM_ColumnInt01;380;-572;120;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_139;SM_ColumnInt61;StaticMeshActor;SM_ColumnInt01;380;-587;120;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_140;SM_ColumnInt62;StaticMeshActor;SM_ColumnInt01;411;-587;120;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_141;SM_ColumnInt63;StaticMeshActor;SM_ColumnInt01;411;-572;124;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_142;SM_ColumnInt64;StaticMeshActor;SM_ColumnInt01;380;-572;124;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_143;SM_ColumnInt65;StaticMeshActor;SM_ColumnInt01;380;-587;124;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_144;SM_ColumnInt66;StaticMeshActor;SM_ColumnInt01;411;-587;124;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_145;SM_ColumnInt67;StaticMeshActor;SM_ColumnInt01;411;-572;128;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_146;SM_ColumnInt68;StaticMeshActor;SM_ColumnInt01;380;-572;128;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_147;SM_ColumnInt69;StaticMeshActor;SM_ColumnInt01;380;-587;128;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_148;SM_ColumnInt70;StaticMeshActor;SM_ColumnInt01;411;-587;128;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_149;SM_ColumnInt71;StaticMeshActor;SM_ColumnInt01;411;-572;132;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_150;SM_ColumnInt72;StaticMeshActor;SM_ColumnInt01;380;-572;132;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_151;SM_ColumnInt73;StaticMeshActor;SM_ColumnInt01;380;-587;132;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_152;SM_ColumnInt74;StaticMeshActor;SM_ColumnInt01;411;-587;132;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_156;SM_conditioning06;StaticMeshActor;SM_conditioning06;402;-574;133;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_160;SM_conditioning03;StaticMeshActor;SM_conditioning03;402;-575;132;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_165;SM_conditioningB04;StaticMeshActor;SM_conditioningB04;407;-585;133;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_168;SM_conditioningB5;StaticMeshActor;SM_conditioningB04;382;-576;133;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_170;SM_conditioningA5;StaticMeshActor;SM_conditioningA01;388;-585;133;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_177;SM_walldecor7;StaticMeshActor;SM_walldecor02;388;-576;134;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_178;SM_walldecor8;StaticMeshActor;SM_walldecor02;388;-583;134;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_179;SM_walldecor11;StaticMeshActor;SM_walldecor02;404;-583;134;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_180;SM_walldecor12;StaticMeshActor;SM_walldecor02;404;-576;134;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_196;Bloc_Beton164;StaticMeshActor;Bloc_Beton;-499;-159;112;L_Capital_Port;deplacer;cible ajustee : L_Capital_Port aussi proche que L_Capital_BusStation et grossit moins
+1 Center;L_Capital_Center;StaticMeshActor_199;Bloc_Beton165;StaticMeshActor;Bloc_Beton;-499;-146;112;L_Capital_Port;deplacer;cible ajustee : L_Capital_Port aussi proche que L_Capital_BusStation et grossit moins
+1 Center;L_Capital_Center;StaticMeshActor_538;Bloc_Beton166;StaticMeshActor;Bloc_Beton;-499;-133;112;L_Capital_Port;deplacer;cible ajustee : L_Capital_Port aussi proche que L_Capital_BusStation et grossit moins
+1 Center;L_Capital_Center;StaticMeshActor_604;SM_Stairs_Short2;StaticMeshActor;SM_Stairs_Short1;388;-588;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_605;SM_Stairs_Short3;StaticMeshActor;SM_Stairs_Short1;398;-589;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_606;SM_Stairs_Short4;StaticMeshActor;SM_Stairs_Short1;408;-588;114;L_Capital_Nord;deplacer;
+1 Center;L_Capital_Center;StaticMeshActor_618;Bloc_Beton167;StaticMeshActor;Bloc_Beton;-499;-120;112;L_Capital_Port;deplacer;cible ajustee : L_Capital_Port aussi proche que L_Capital_BusStation et grossit moins
+1 Center;L_Capital_Center;StaticMeshActor_619;Bloc_Beton168;StaticMeshActor;Bloc_Beton;-499;-107;112;L_Capital_Port;deplacer;cible ajustee : L_Capital_Port aussi proche que L_Capital_BusStation et grossit moins
+1 Center;L_Capital_Center;StaticMeshActor_623;Bloc_Beton172;StaticMeshActor;Bloc_Beton;-499;-56;112;L_Capital_Port;deplacer;cible ajustee : L_Capital_Port aussi proche que L_Capital_BusStation et grossit moins
+1 Center;L_Capital_Center;StaticMeshActor_624;Bloc_Beton173;StaticMeshActor;Bloc_Beton;-499;-43;112;L_Capital_Port;deplacer;cible ajustee : L_Capital_Port aussi proche que L_Capital_BusStation et grossit moins
+1 Center;L_Capital_Center;StaticMeshActor_625;Bloc_Beton174;StaticMeshActor;Bloc_Beton;-499;-30;112;L_Capital_Port;deplacer;cible ajustee : L_Capital_Port aussi proche que L_Capital_BusStation et grossit moins
+1 Center;L_Capital_Center;StaticMeshActor_626;Bloc_Beton175;StaticMeshActor;Bloc_Beton;-499;-17;112;L_Capital_Port;deplacer;cible ajustee : L_Capital_Port aussi proche que L_Capital_BusStation et grossit moins
+1 Center;L_Capital_Center;StaticMeshActor_627;Bloc_Beton176;StaticMeshActor;Bloc_Beton;-499;-6;112;L_Capital_Port;deplacer;cible ajustee : L_Capital_Port aussi proche que L_Capital_BusStation et grossit moins
+2 Nord;L_Capital_Nord;SM_House5;SM_House5;StaticMeshActor;SM_House02;1185;-368;87;L_Capital_Hospital;deplacer;"cible ajustee : L_Capital_Hospital aussi proche que L_Capital_HospitalBis et grossit moins ; A VALIDER : fait grossir L_Capital_Hospital de plus de 100 m"
+2 Nord;L_Capital_Nord;StaticMeshActor_125;SM_Road_Curb_B_Drop_Corner_179;StaticMeshActor;SM_Road_Curb_B_Corner_02;1777;290;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_1266;SM_MERGED_StaticMeshActor_100;StaticMeshActor;SM_MERGED_StaticMeshActor_98;169;229;113;L_Capital_Entry_Est;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_141;SM_Road_Curb_B_Drop_Corner_187;StaticMeshActor;SM_Road_Curb_B_02;1784;300;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_144;SM_Road_Curb_B_Drop_Corner_188;StaticMeshActor;SM_Road_Curb_B_02;1784;280;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_183;SM_Road_Curb_B_Drop_Corner_189;StaticMeshActor;SM_Road_Curb_B_02;1794;270;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_213;SM_Road_Curb_B_Drop_Corner_190;StaticMeshActor;SM_Road_Curb_B_02;1804;260;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_214;SM_Road_Curb_B_Drop_Corner_191;StaticMeshActor;SM_Road_Curb_B_02;1815;250;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_221;SM_Road_Curb_B_Drop_Corner_192;StaticMeshActor;SM_Road_Curb_B_02;1793;310;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_222;SM_Road_Curb_B_Drop_Corner_193;StaticMeshActor;SM_Road_Curb_B_02;1803;320;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_223;SM_Road_Curb_B_Drop_Corner_194;StaticMeshActor;SM_Road_Curb_B_02;1813;330;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_224;SM_Road_Curb_B_Drop_Corner_195;StaticMeshActor;SM_Road_Curb_B_02;1822;340;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_225;SM_Road_Curb_B_Drop_Corner_196;StaticMeshActor;SM_Road_Curb_B_02;1832;351;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_226;SM_Road_Curb_B_Drop_Corner_197;StaticMeshActor;SM_Road_Curb_B_02;1842;361;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_227;SM_Road_Curb_B_Drop_Corner_198;StaticMeshActor;SM_Road_Curb_B_02;1851;371;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_228;SM_Road_Curb_B_Drop_Corner_199;StaticMeshActor;SM_Road_Curb_B_02;1861;381;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_229;SM_Road_Curb_B_Drop_Corner_200;StaticMeshActor;SM_Road_Curb_B_02;1871;391;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_230;SM_Road_Curb_B_Drop_Corner_201;StaticMeshActor;SM_Road_Curb_B_02;1880;401;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_231;SM_Road_Curb_B_Drop_Corner_202;StaticMeshActor;SM_Road_Curb_B_02;1890;411;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_232;SM_Road_Curb_B_Drop_Corner_203;StaticMeshActor;SM_Road_Curb_B_02;1899;422;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_233;SM_Road_Curb_B_Drop_Corner_204;StaticMeshActor;SM_Road_Curb_B_02;1909;432;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_234;SM_Road_Curb_B_Drop_Corner_205;StaticMeshActor;SM_Road_Curb_B_Corner_02;1919;439;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_235;SM_Road_Curb_B_Drop_Corner_206;StaticMeshActor;SM_Road_Curb_B_Corner_02;1826;243;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_236;SM_Road_Curb_B_Drop_Corner_207;StaticMeshActor;SM_Road_Curb_B_02;1835;251;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_237;SM_Road_Curb_B_Drop_Corner_208;StaticMeshActor;SM_Road_Curb_B_02;1845;261;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_238;SM_Road_Curb_B_Drop_Corner_209;StaticMeshActor;SM_Road_Curb_B_02;1855;271;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_239;SM_Road_Curb_B_Drop_Corner_210;StaticMeshActor;SM_Road_Curb_B_02;1864;281;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_240;SM_Road_Curb_B_Drop_Corner_211;StaticMeshActor;SM_Road_Curb_B_02;1874;291;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_241;SM_Road_Curb_B_Drop_Corner_212;StaticMeshActor;SM_Road_Curb_B_02;1884;301;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_242;SM_Road_Curb_B_Drop_Corner_213;StaticMeshActor;SM_Road_Curb_B_02;1893;311;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_243;SM_Road_Curb_B_Drop_Corner_214;StaticMeshActor;SM_Road_Curb_B_02;1903;322;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_244;SM_Road_Curb_B_Drop_Corner_215;StaticMeshActor;SM_Road_Curb_B_02;1913;332;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_245;SM_Road_Curb_B_Drop_Corner_216;StaticMeshActor;SM_Road_Curb_B_02;1922;342;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_246;SM_Road_Curb_B_Drop_Corner_217;StaticMeshActor;SM_Road_Curb_B_02;1932;352;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_247;SM_Road_Curb_B_Drop_Corner_218;StaticMeshActor;SM_Road_Curb_B_02;1942;362;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_248;SM_Road_Curb_B_Drop_Corner_219;StaticMeshActor;SM_Road_Curb_B_02;1951;372;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_249;SM_Road_Curb_B_Drop_Corner_220;StaticMeshActor;SM_Road_Curb_B_02;1961;383;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_250;SM_Road_Curb_B_Drop_Corner_221;StaticMeshActor;SM_Road_Curb_B_Corner_02;1968;393;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_251;SM_Road_Curb_B_Drop_Corner_222;StaticMeshActor;SM_Road_Curb_B_02;1929;432;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_252;SM_Road_Curb_B_Drop_Corner_223;StaticMeshActor;SM_Road_Curb_B_02;1939;423;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_253;SM_Road_Curb_B_Drop_Corner_224;StaticMeshActor;SM_Road_Curb_B_02;1949;413;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_254;SM_Road_Curb_B_Drop_Corner_225;StaticMeshActor;SM_Road_Curb_B_02;1960;403;234;L_Capital_AirPort;deplacer;
+2 Nord;L_Capital_Nord;StaticMeshActor_255;Box141;StaticMeshActor;Box_E6AD17F5;1872;341;227;L_Capital_AirPort;deplacer;
+3 Port;L_Capital_Port;StaticMeshActor_131;SM_Billboard29;StaticMeshActor;SM_Billboard11;-470;-390;147;L_Capital_Traverse;deplacer;
+3 Port;L_Capital_Port;StaticMeshActor_14;Cylinder18;StaticMeshActor;Base_Nanite_Cylinder;112;1049;80;L_Capital_CostaRive;deplacer;
+3 Port;L_Capital_Port;StaticMeshActor_1419;SM_CityWall11;StaticMeshActor;SM_CityWall03;-455;-365;115;L_Capital_Traverse;deplacer;
+3 Port;L_Capital_Port;StaticMeshActor_1454;SM_CityWall5;StaticMeshActor;SM_CityWall01;-471;-361;123;L_Capital_Traverse;deplacer;
+3 Port;L_Capital_Port;StaticMeshActor_1467;SM_CityWall6;StaticMeshActor;SM_CityWall01;-471;-361;131;L_Capital_Traverse;deplacer;
+3 Port;L_Capital_Port;StaticMeshActor_1471;SM_CityWall9;StaticMeshActor;SM_CityWall01;-471;-361;138;L_Capital_Traverse;deplacer;
+3 Port;L_Capital_Port;StaticMeshActor_1474;SM_CityWall10;StaticMeshActor;SM_CityWall01;-471;-361;144;L_Capital_Traverse;deplacer;
+3 Port;L_Capital_Port;StaticMeshActor_1476;SM_CityWall12;StaticMeshActor;SM_CityWall01;-471;-361;152;L_Capital_Traverse;deplacer;
+3 Port;L_Capital_Port;StaticMeshActor_1478;SM_CityWall13;StaticMeshActor;SM_CityWall01;-471;-361;160;L_Capital_Traverse;deplacer;
+3 Port;L_Capital_Port;StaticMeshActor_1480;SM_CityWall14;StaticMeshActor;SM_CityWall01;-471;-361;167;L_Capital_Traverse;deplacer;
+3 Port;L_Capital_Port;StaticMeshActor_15;Cylinder19;StaticMeshActor;Base_Nanite_Cylinder;124;923;80;L_Capital_CostaRive;deplacer;
+3 Port;L_Capital_Port;StaticMeshActor_1507;SM_Lift_Pillar;StaticMeshActor;SM_Lift_Pillar;-459;-426;127;L_Capital_Traverse;deplacer;
+3 Port;L_Capital_Port;StaticMeshActor_170;SM_CityWall2;StaticMeshActor;SM_CityWall01;-471;-361;115;L_Capital_Traverse;deplacer;
+3 Port;L_Capital_Port;StaticMeshActor_1760;SM_Lift_Pillar2;StaticMeshActor;SM_Lift_Pillar;-404;-476;125;L_Capital_Traverse;deplacer;
+3 Port;L_Capital_Port;StaticMeshActor_2390;SM_Gate2;StaticMeshActor;SM_GateBG;605;2035;170;L_Capital_SkyRoad;deplacer;porte + blocs poses sur le parking SkyRoad (94 objets SkyRoad a moins de 100 m)
+3 Port;L_Capital_Port;StaticMeshActor_2392;Bloc_Beton244;StaticMeshActor;Bloc_Beton;609;2032;188;L_Capital_SkyRoad;deplacer;porte + blocs poses sur le parking SkyRoad (94 objets SkyRoad a moins de 100 m)
+3 Port;L_Capital_Port;StaticMeshActor_2393;Bloc_Beton245;StaticMeshActor;Bloc_Beton;591;2010;179;L_Capital_SkyRoad;deplacer;porte + blocs poses sur le parking SkyRoad (94 objets SkyRoad a moins de 100 m)
+3 Port;L_Capital_Port;StaticMeshActor_2394;Bloc_Beton285;StaticMeshActor;Bloc_Beton;627;2055;179;L_Capital_SkyRoad;deplacer;porte + blocs poses sur le parking SkyRoad (94 objets SkyRoad a moins de 100 m)
+3 Port;L_Capital_Port;StaticMeshActor_2396;Bloc_Beton321;StaticMeshActor;Bloc_Beton;636;2061;160;L_Capital_SkyRoad;deplacer;porte + blocs poses sur le parking SkyRoad (94 objets SkyRoad a moins de 100 m)
+3 Port;L_Capital_Port;StaticMeshActor_2397;Bloc_Beton322;StaticMeshActor;Bloc_Beton;586;1999;160;L_Capital_SkyRoad;deplacer;porte + blocs poses sur le parking SkyRoad (94 objets SkyRoad a moins de 100 m)
+3 Port;L_Capital_Port;StaticMeshActor_32;SM_FuelSilo_1;StaticMeshActor;SM_FuelSilo_1;878;-440;118;L_Capital_Litchout;deplacer;cible ajustee : L_Capital_Litchout aussi proche que L_Capital_Nord et grossit moins
+3 Port;L_Capital_Port;StaticMeshActor_33;SM_FuelSilo_2;StaticMeshActor;SM_FuelSilo_1;880;-400;118;L_Capital_Litchout;deplacer;cible ajustee : L_Capital_Litchout aussi proche que L_Capital_Nord et grossit moins
+3 Port;L_Capital_Port;StaticMeshActor_438;SM_Chalutier2;StaticMeshActor;SM_Chalutier;-3385;1756;95;L_Capital_BaseStruct;deplacer;hors quartier, a 3 km de tout quartier : rangé dans le fond
+3 Port;L_Capital_Port;StaticMeshActor_589;SM_CityWall03;StaticMeshActor;SM_CityWall03;-467;-363;115;L_Capital_Traverse;deplacer;
+3 Port;L_Capital_Port;StaticMeshActor_590;SM_CityWall4;StaticMeshActor;SM_CityWall03;-466;-361;115;L_Capital_Traverse;deplacer;
+3 Port;L_Capital_Port;StaticMeshActor_607;SM_CityWall7;StaticMeshActor;SM_CityWall03;-461;-364;115;L_Capital_Traverse;deplacer;
+3 Port;L_Capital_Port;StaticMeshActor_608;SM_CityWall8;StaticMeshActor;SM_CityWall03;-461;-362;115;L_Capital_Traverse;deplacer;
+3 Port;L_Capital_Port;StaticMeshActor_779;SM_Gate;StaticMeshActor;SM_Gate;614;2028;170;L_Capital_SkyRoad;deplacer;porte + blocs poses sur le parking SkyRoad (94 objets SkyRoad a moins de 100 m)
+4 Complex_Welcome;L_Complex_Welcome;SphereReflectionCapture_1;SphereReflectionCapture15;SphereReflectionCapture;;2763;2793;410;L_Complex_Terrasse;deplacer;
+4 Complex_Welcome;L_Complex_Welcome;Plane_3431;Plane;StaticMeshActor;Plane;-1802;-826;57;L_Capital_BaseStruct;deplacer;plan d ecume 6 m (MI_Wave_Foam) a 900 m de tout quartier : fond, ou suppression si tu preferes
+4 Complex_Welcome;L_Complex_Welcome;StaticMeshActor_6205;Cube;StaticMeshActor;Cube_DistanceField;-434462474;256863703;343810744;;supprimer;cube de base perdu a 434 000 km : A VALIDER
+5 Persistant;QL_YellowWall;GroupActor_0;GroupActor_358;GroupActor;;-1252;-106;114;L_Capital_Traverse;deplacer;"batiment Iclab pose dans le persistant ; Traverse a 218 m, Port a 263 m : a choisir"
+5 Persistant;QL_YellowWall;StaticMeshActor_0;StaticMeshActor1762;StaticMeshActor;SM_MERGE_Bat_Prefab_04;-1262;-102;118;L_Capital_Traverse;deplacer;"batiment Iclab pose dans le persistant ; Traverse a 218 m, Port a 263 m : a choisir"
+5 Persistant;QL_YellowWall;StaticMeshActor_1;StaticMeshActor1763;StaticMeshActor;cornicheBAT_Alex;-1251;-106;116;L_Capital_Traverse;deplacer;"batiment Iclab pose dans le persistant ; Traverse a 218 m, Port a 263 m : a choisir"
+5 Persistant;QL_YellowWall;StaticMeshActor_10;StaticMeshActor1777;StaticMeshActor;SM_MERGE_Bat_Prefab_01;-1261;-95;109;L_Capital_Traverse;deplacer;"batiment Iclab pose dans le persistant ; Traverse a 218 m, Port a 263 m : a choisir"
+5 Persistant;QL_YellowWall;StaticMeshActor_11;StaticMeshActor1778;StaticMeshActor;SM_Awning_01;-1240;-110;113;L_Capital_Traverse;deplacer;"batiment Iclab pose dans le persistant ; Traverse a 218 m, Port a 263 m : a choisir"
+5 Persistant;QL_YellowWall;StaticMeshActor_12;StaticMeshActor1784;StaticMeshActor;SM_Awning_01;-1240;-95;113;L_Capital_Traverse;deplacer;"batiment Iclab pose dans le persistant ; Traverse a 218 m, Port a 263 m : a choisir"
+5 Persistant;QL_YellowWall;StaticMeshActor_13;StaticMeshActor1785;StaticMeshActor;SM_Awning_01;-1247;-94;113;L_Capital_Traverse;deplacer;"batiment Iclab pose dans le persistant ; Traverse a 218 m, Port a 263 m : a choisir"
+5 Persistant;QL_YellowWall;StaticMeshActor_14;StaticMeshActor1786;StaticMeshActor;SM_Awning_01;-1262;-94;113;L_Capital_Traverse;deplacer;"batiment Iclab pose dans le persistant ; Traverse a 218 m, Port a 263 m : a choisir"
+5 Persistant;QL_YellowWall;StaticMeshActor_15;StaticMeshActor1788;StaticMeshActor;SM_Awning_01;-1263;-102;113;L_Capital_Traverse;deplacer;"batiment Iclab pose dans le persistant ; Traverse a 218 m, Port a 263 m : a choisir"
+5 Persistant;QL_YellowWall;StaticMeshActor_16;StaticMeshActor1789;StaticMeshActor;SM_Enseigne_Iclab;-1264;-106;114;L_Capital_Traverse;deplacer;"batiment Iclab pose dans le persistant ; Traverse a 218 m, Port a 263 m : a choisir"
+5 Persistant;QL_YellowWall;StaticMeshActor_17;StaticMeshActor1795;StaticMeshActor;entre_BAT_Alex;-1263;-104;109;L_Capital_Traverse;deplacer;"batiment Iclab pose dans le persistant ; Traverse a 218 m, Port a 263 m : a choisir"
+5 Persistant;QL_YellowWall;StaticMeshActor_18;StaticMeshActor1796;StaticMeshActor;SM_Awning_01;-1240;-117;113;L_Capital_Traverse;deplacer;"batiment Iclab pose dans le persistant ; Traverse a 218 m, Port a 263 m : a choisir"
+5 Persistant;QL_YellowWall;StaticMeshActor_19;StaticMeshActor1797;StaticMeshActor;SM_DoorFrame;-1263;-104;109;L_Capital_Traverse;deplacer;"batiment Iclab pose dans le persistant ; Traverse a 218 m, Port a 263 m : a choisir"
+5 Persistant;QL_YellowWall;StaticMeshActor_2;StaticMeshActor1764;StaticMeshActor;Bloc_Beton;-1244;-96;116;L_Capital_Traverse;deplacer;"batiment Iclab pose dans le persistant ; Traverse a 218 m, Port a 263 m : a choisir"
+5 Persistant;QL_YellowWall;StaticMeshActor_20;StaticMeshActor1798;StaticMeshActor;SM_Billboard11;-1263;-98;109;L_Capital_Traverse;deplacer;"batiment Iclab pose dans le persistant ; Traverse a 218 m, Port a 263 m : a choisir"
+5 Persistant;QL_YellowWall;StaticMeshActor_21;StaticMeshActor1799;StaticMeshActor;SM_Billboard11;-1255;-94;109;L_Capital_Traverse;deplacer;"batiment Iclab pose dans le persistant ; Traverse a 218 m, Port a 263 m : a choisir"
+5 Persistant;QL_YellowWall;StaticMeshActor_22;StaticMeshActor1800;StaticMeshActor;SM_Billboard11;-1240;-103;109;L_Capital_Traverse;deplacer;"batiment Iclab pose dans le persistant ; Traverse a 218 m, Port a 263 m : a choisir"
+5 Persistant;QL_YellowWall;StaticMeshActor_23;StaticMeshActor1809;StaticMeshActor;SM_Billboard11;-1259;-117;109;L_Capital_Traverse;deplacer;"batiment Iclab pose dans le persistant ; Traverse a 218 m, Port a 263 m : a choisir"
+5 Persistant;QL_YellowWall;StaticMeshActor_24;StaticMeshActor1810;StaticMeshActor;SM_Billboard11;-1263;-117;109;L_Capital_Traverse;deplacer;"batiment Iclab pose dans le persistant ; Traverse a 218 m, Port a 263 m : a choisir"
+5 Persistant;QL_YellowWall;StaticMeshActor_3;StaticMeshActor1765;StaticMeshActor;Bloc_Beton;-1242;-100;116;L_Capital_Traverse;deplacer;"batiment Iclab pose dans le persistant ; Traverse a 218 m, Port a 263 m : a choisir"
+5 Persistant;QL_YellowWall;StaticMeshActor_4;StaticMeshActor1766;StaticMeshActor;SM_MERGE_Bat_Prefab_03;-1241;-111;118;L_Capital_Traverse;deplacer;"batiment Iclab pose dans le persistant ; Traverse a 218 m, Port a 263 m : a choisir"
+5 Persistant;QL_YellowWall;StaticMeshActor_5;StaticMeshActor1767;StaticMeshActor;SM_MERGE_Bat_Prefab_02;-1262;-110;117;L_Capital_Traverse;deplacer;"batiment Iclab pose dans le persistant ; Traverse a 218 m, Port a 263 m : a choisir"
+5 Persistant;QL_YellowWall;StaticMeshActor_6;StaticMeshActor1773;StaticMeshActor;cornicheBAT_Alex;-1252;-106;115;L_Capital_Traverse;deplacer;"batiment Iclab pose dans le persistant ; Traverse a 218 m, Port a 263 m : a choisir"
+5 Persistant;QL_YellowWall;StaticMeshActor_7;StaticMeshActor1774;StaticMeshActor;cornicheBAT_Alex;-1251;-106;114;L_Capital_Traverse;deplacer;"batiment Iclab pose dans le persistant ; Traverse a 218 m, Port a 263 m : a choisir"
+5 Persistant;QL_YellowWall;StaticMeshActor_8;StaticMeshActor1775;StaticMeshActor;SM_Awning_01;-1255;-117;113;L_Capital_Traverse;deplacer;"batiment Iclab pose dans le persistant ; Traverse a 218 m, Port a 263 m : a choisir"
+5 Persistant;QL_YellowWall;StaticMeshActor_9;StaticMeshActor1776;StaticMeshActor;SM_Awning_01;-1263;-117;113;L_Capital_Traverse;deplacer;"batiment Iclab pose dans le persistant ; Traverse a 218 m, Port a 263 m : a choisir"
+6 Tour;QL_YellowWall;L_Int_Complex_MiddleTower1;(sous-level);LevelStreamingDynamic;;0;0;0;;retirer du persistant;"doublon exact de L_Int_Complex_MiddleTower (931/931) ; le fichier reste sur disque"
+6 Tour;L_Int_Complex_MiddleTower;Actor_1;Actor1;Actor;robottest (ISM, _GENERATED/Zouzixx);0;0;0;;supprimer;acteur de test a l origine, gonfle les bounds de la tour de 170 m a 3 km : A VALIDER
