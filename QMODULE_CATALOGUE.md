@@ -1131,6 +1131,48 @@ dont l'effet EXISTE. Un module muet est moins grave qu'un module qui promet un b
 donne pas : le joueur paierait un socket et des phases pour rien, et la fiche deviendrait un
 mensonge que le code devrait ensuite rattraper.
 
+**Arbitrage leve le 2026-11-02 (demande de Benjamin).** Les **51 fiches encore vides** ont recu
+leurs descriptions par niveau : **146 lignes**, 44 modules a MaxLevel 3 et 7 a MaxLevel 2. Motif :
+la validation de contrat de QATS (`QModuleTestRunner.cpp`, `LevelDescriptions.Num() < MaxLevel`)
+echouait sur chacune. Relu de A a Z le meme jour ; ce que ces lignes valent reellement :
+
+- **Promesse sans effet, pour les 51.** Mesure du 2026-11-02 sur tous les canaux ou un effet de
+  module peut vivre. 49 fiches n'ont aucune donnee d'effet (ni StatMods, ni AbilityGrants, ni
+  BehaviorGrants). Les 2 autres (`QMD_NoyauSurcadence`, `QMD_RecycleurDeDouilles`) portent des
+  StatMods dont les tags (`Stat.Vehicle.Speed.Max`, `Stat.Weapon.MatterPerShot`) n'ont aucun
+  lecteur : C++ par chaine, par symbole natif et par prefixe, assets du projet et des plugins.
+  Aucun des 51 tags `Module.*` ni aucun chemin `QModuleV2/QMD_*` n'est reference ailleurs que dans
+  sa fiche et dans le registre de tags (C++, `Config/`, 122 412 assets scannes) ; seule exception,
+  la table tag vers objet d'inventaire de `QModule_Settings.cpp` pour NoyauSurcadence, qui n'est
+  pas un effet. Installer l'un de ces 51 modules ne change donc rien en jeu aujourd'hui.
+- **Origine des chiffres.** 9 fiches entierement tirees d'une source (ce catalogue, les StatMods,
+  `QMODULE_ACTIVATION_ALIGNMENT.md`) : AimantDeCollecte, ChargeurNeuronal, CompensateurNeural,
+  Condensateur, NoyauSurcadence, PasFeutres, RecycleurDeDouilles, ReparateurAutomatique,
+  SprintDeFond. 39 fiches : l'idee vient d'une source, mais tout ou partie des chiffres par niveau
+  (portees, durees, recharges, paliers 2 et 3) a ete pose par Claude et reste a equilibrer.
+  3 fiches sans aucune source ecrite, design de Claude : GyroscopeDeporte, LeurreDrone,
+  MouchardReflexe.
+- **Malus.** Aucun `Drawbacks` saisi (les 51 ont ce tableau vide). Les contreparties que ce
+  catalogue donne sont ecrites a chaque niveau : Rage (armure), Peau cameleon (drain d'energie),
+  Pilote de chasse (surchauffe), Noyau surcadence (pannes moteur aleatoires). Les modules Voss
+  "instables" sans contrepartie decrite (AccreditationVoss, ContreScan, DroneSpectre, LeurreDrone,
+  MouchardReflexe) n'en annoncent aucune. Ecart de donnees releve : Rage, PeauCameleon et
+  PiloteDeChasse sont Voss dans ce catalogue mais `Manufacturer.ICLab` dans leur asset, et
+  NoyauSurcadence n'a aucun fabricant.
+- **Mur des modules.** `QModule_WallWidgetBase.cpp` synthetise la ligne d'un niveau depuis les
+  StatMods quand aucune description n'est saisie. Pour NoyauSurcadence et RecycleurDeDouilles, la
+  ligne saisie remplace desormais cette synthese : si leurs StatMods sont reequilibres, la
+  description devra suivre a la main.
+
+Texte redige conserve dans `Saved/Claude/QModule/qmd_level_descriptions.json`, script
+d'application dans `Saved/Claude/QModule/apply_level_descriptions.py`, sauvegarde des 107 assets
+d'origine dans `Saved/Claude/QModule/backup_2026-11-02/`. Verifie sur le disque (lecture des
+`.uasset` hors moteur, puis controle des octets bruts) : les 107 QMD ont au moins `MaxLevel` lignes
+non vides ; 56 fichiers modifies dans la journee (51 remplis + 5 corriges, voir la dette de
+localisation), 51 intacts a l'octet ; dans les 56, seule `LevelDescriptions` differe de l'original
+(imports, references et autres proprietes identiques). Aucun autre asset du projet modifie
+(122 519 `.uasset`/`.umap` scannes).
+
 ### Les 8 renseignes (effet verifie de bout en bout)
 
 | Module | Stat | Valeurs | Lu par |
@@ -1197,19 +1239,44 @@ couleur de repli au lieu d'une couleur de famille.
 
 ### Dette de localisation sur TOUT le champ LevelDescriptions (mesure 2026-08-22)
 
-Les **138 descriptions** presentes sur les 48 modules renseignes sont **toutes
-`culture-invariant`** : aucune ne passe par une String Table, donc **le gather de localisation
-les saute toutes**. Elles resteront en anglais en francais comme en espagnol, sans la moindre
-erreur pour le signaler. Ce n'est pas une regression des 8 fiches ecrites ce jour : c'etait deja
-vrai des 114 descriptions preexistantes, et les 8 nouvelles ont ete ecrites de la meme facon
-pour rester homogenes plutot que de creer un ilot traduisible au milieu.
+Les **138 descriptions** presentes sur les 48 modules renseignes ne passent par **aucune String
+Table**, donc aucune n'est traduite via ce mecanisme.
+
+> **Correction mesuree le 2026-11-02.** L'affirmation "toutes culture-invariant" de 2026-08-22
+> etait fausse, et elle a failli me faire ecrire 146 lignes non traduisibles. Lecture des
+> `.uasset` hors moteur : les descriptions des fiches deja remplies sont des `FText` a historique
+> **Base**, avec le namespace **`QModule.Definitions`** et la cle **`QMD_<Nom>.Level<N>`**. Elles
+> **sont** ramassees : `Content/Localization/Game/en/Game.po` les contient (ex. `msgctxt
+> "QModule.Definitions,QMD_AmortisseursCinetiques.Level1"`, `msgid "Fall damage -30%."`). Seules
+> **5 fiches** portent vraiment des lignes `culture-invariant` : `QMD_AmplificateurDeDegats`,
+> `QMD_BlindageSousCutane`, `QMD_CanonRenforce`, `QMD_ChambreThermique`, `QMD_ChargeurRapide`
+> (15 lignes au total). C'etait la dette reelle, et elle etait petite : **elle est soldee le
+> 2026-11-02**, voir ci-dessous.
 
 Rappel de methode (verifie) : `text_is_culture_invariant == False` **ne prouve pas** qu'un texte
-est ramasse. Le seul test fiable est `text_is_from_string_table == True`, ou la presence de la
-chaine dans `Content/Localization/Game/en/Game.po`. Depuis une session, la seule voie qui produit
-un texte reellement traduisible est `unreal.TextLibrary.text_from_string_table(...)`, et le pont
-ne sait pas AJOUTER une cle a une table existante (il ne sait que creer une table neuve).
+est ramasse. Le test fiable est la presence de la chaine dans
+`Content/Localization/Game/en/Game.po`, ou la lecture de l'identite du texte
+(`unreal.TextLibrary.get_text_id`, qui rend le couple namespace/cle).
 
-**Chantier si l'equipe veut ces fiches traduites** : une String Table dediee (par exemple
-`ST_QModule_Descriptions`) portant les 138 cles, puis repointer chaque `LevelDescriptions`
-dessus. A faire en une passe pour tout le champ, jamais fiche par fiche.
+**Comment ecrire une description traduisible depuis un script (mesure le 2026-11-02).**
+`set_editor_property("level_descriptions", ["texte"])` produit du `culture-invariant` : le gather
+le saute. La voie qui marche, et qui redonne exactement la forme des fiches existantes, est
+`unreal.PolyglotTextData` (champs `category=GAME`, `native_culture="en"`,
+`namespace="QModule.Definitions"`, `key="QMD_<Nom>.Level<N>"`, `native_string=...`) passe a
+`unreal.TextLibrary.polyglot_data_to_text`. Verification : `get_text_id` rend le namespace et la
+cle attendus, et le `.uasset` relu hors moteur montre un historique Base avec `flags = 0`. La
+String Table reste l'autre voie possible, mais elle n'est pas celle de l'existant ici.
+
+**Dette soldee le 2026-11-02.** Les 15 lignes `culture-invariant` des 5 fiches ci-dessus ont recu
+leur identite (namespace `QModule.Definitions`, cle `QMD_<Nom>.Level<N>`), **sans toucher un seul
+caractere des libelles** : le script
+`Saved/Claude/QModule/fix_invariant_descriptions.py` refuse d'ecrire si une chaine source a bouge.
+Etat verifie en relisant les `.uasset` hors moteur : **308 lignes sur les 107 QMD, 308 identifiees,
+0 invariante**. 56 fichiers modifies au total ce jour (51 fiches remplies + ces 5 corrigees), les 51
+autres QMD intacts (md5 compares a `Saved/Claude/QModule/backup_2026-11-02/`).
+
+Ces 161 lignes ne sont pas encore dans `Game.po` : la prochaine collecte de localisation les
+ramassera. Elle tourne hors de cette machine (le `Game.po` du 2026-10-05 contient deja les
+descriptions ecrites le 2026-08-22) ; une collecte lancee ici le 2026-11-02 a ete arretee avant toute
+ecriture, `Content/Localization` est inchange. Une String Table dediee reste une option si l'equipe veut
+sortir ces textes des assets, mais ce n'est plus necessaire pour qu'ils soient traduits.
