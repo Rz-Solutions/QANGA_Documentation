@@ -68,8 +68,8 @@ Pieges :
 | `QuestAssetManager` | Core | **Doublon** | Decouverte de classes -- chevauche `QuestObjectiveFactory`. |
 | `QuestUIManager` | Core | **Complet** | Centralise le container de trackers + le dispatch des notifications toast via `QuestNotificationUtils`. |
 | `QuestNotificationUtils` | Core | **Complet** | Sequencage de notifications (bridge QNotification) + suivi du blocage de completion par `SourceContext`. |
-| `ProceduralQuestTemplate` | Core | **Complet** | 8 templates de quetes procedurales. |
-| `MultiStageQuestTemplate` | Core | **Complet** | 5 archetypes multi-etapes (`EQuestArchetypeID` en declare 11). |
+| `ProceduralContractBoard` | Core | **Complet** | Contrats proceduraux serveur : offres deterministes, acceptation, ledger joueur, retrait (section 4.10). |
+| `ProceduralQuestTemplate` | Core | **Complet** | Base des templates de contrat ; Bounty, Recon, Salvage, DataHeist dans DynamicQuestSystemObjectives. |
 | `QuestStringTableRuntime` | Core | **Complet** | Resolution de textes localises via StringTables locales par QuestID. |
 | `InteractableMeshDatabase` | Core | **Complet** | Classification de meshes par ~169 mots-cles codes en dur (placement procedural Interact/Scan). |
 | `LevelMeshScanner` | Core | **Complet** | Scan de niveaux. `PerformAsyncScan` differe la passe UObject sur le game thread (fix dd8b0e3b). |
@@ -137,10 +137,10 @@ Subtilites :
                              |
           +------------------+------------------+
           |                                     |
-    AssignQuestToPlayer()             GenerateProceduralQuest...()
-          |                                     |  (POI + faction + difficulte)
+    AssignQuestToPlayer()             ProceduralContractBoard::AcceptOffer()
+          |                                     |  (site + difficulte du slot)
           v                                     v
-    FRuntimeQuestInstance cree         Template/Archetype -> FQuestDefinition
+    FRuntimeQuestInstance cree         Template de contrat -> FQuestDefinition runtime
     Objectives/Actions instancies      -> AssignQuestToPlayer()
     (Reconstruct... si charge depuis disque/reconnexion)
           |
@@ -842,99 +842,65 @@ L'inspection du registre dynamique utilise la **reflexion UE** (`TFieldIterator<
 
 ---
 
-### 4.10 Quetes procedurales
+### 4.10 Contrats proceduraux
 
-**Fichiers :** `Data/ProceduralQuestTypes.h`, `Data/ProceduralQuestTemplate.h/.cpp` (193 / 1271 l.), `Data/MultiStageQuestTemplate.h/.cpp` (121 / 2697 l.), `Data/QuestArchetypeTypes.h` (375 l.), `Data/InteractableMeshDatabase.h/.cpp`
+**Fichiers :** `Subsystems/ProceduralContractBoard.h/.cpp`, `Data/ProceduralQuestTemplate.h`, `Data/ProceduralQuestTypes.h/.cpp`, `Utils/ContractPlacement.h/.cpp`, `Utils/LevelMeshScanner.h/.cpp`, `Data/QuestArchetypeTypes.h` (catalogues QLevel) ; contenu dans `DynamicQuestSystemObjectives/.../Contracts/` (`ContractTemplates`, `ContractSquadSpawnAction`, `ContractContentAsset`) ; donnees `/Game/Systems/QuestSystem/Contracts/DA_ContractContent`.
 
-#### Architecture
+#### Flux
 
 ```
-Monde (WorldScape + QLevel)
+Joueur au tableau (AQuestTriggerActor, bUseProceduralQuests)
+        |  requete RPC ; IsBoardInReach (2500 cm) cote serveur
+        v
+UProceduralContractBoard::BuildOffers (serveur)
+        |  3 slots deterministes par (joueur, tableau, rotation 30 min, slot)
+        |  sites : Wilderness (sol WorldScape analytique) ou Structure (catalogues QLevel)
+        v
+Template::BuildContract -> FQuestDefinition
+        |  encode en FRuntimeQuestPayload, decode, VerifyDecodedContract
+        v
+Offre envoyee au client proprietaire (WBP_QuestNPCMenu)
         |
         v
-Decouverte de POIs (FDiscoveredPOI)
-  EPOIType : SanglineNest, EnemySpawner, MineralDeposit,
-             Cave, Bunker, Outpost, Generic
+AcceptOffer : enregistre la definition runtime, AcceptQuest classique,
+              ledger joueur (actifs, cooldowns de site) dans la save de progression
         |
         v
-Selection de template (par type POI + faction)
-        |
-        +-- USanglineExterminationTemplate
-        +-- USpawnerClearanceTemplate
-        +-- UResourceCollectionTemplate
-        +-- UAreaExplorationTemplate
-        +-- UFactionEliminationTemplate
-        +-- UBunkerRaidTemplate
-        +-- UCaveExplorationTemplate
-        +-- UOutpostCaptureTemplate
-        +-- UMultiStageQuestTemplate (archetypes multi-etapes)
-        |
-        v
-GenerateQuest(POI, Difficulty, OutQuest)
-        |
-        v
-FQuestDefinition (objectifs + actions generes)
-        |
-        v
-Assignation via QuestManagerSubsystem
+HandleContractEnded -> cooldown du site, retrait de la definition apres les recompenses
 ```
 
-`UProceduralQuestTemplate` est `Abstract, EditInlineNew, DefaultToInstanced`. Parametres de base : `TemplateID`, `TitlePattern`/`DescriptionPattern`, `RequiredPOITypes`, `ValidFactions`, `BaseCredits` (500), `CreditsPerDifficulty` (100), `CooldownHours` (1), `MinDifficulty`/`MaxDifficulty` (1-10). Points d'extension : `CanGenerateForPOI` et `GenerateQuest` (BlueprintNativeEvent), plus helpers `CalculateRewards`, `GenerateQuestID`, `FormatQuestText`, `ConfigureBaseQuestDefinition`.
+Les templates sont sans etat : le tableau utilise le CDO de chaque sous-classe concrete de `UProceduralQuestTemplate`. Difficulte du slot = `clamp(1 + niveau/4 + slot, 1, 10)`. Recompense = `Round10(Base x (1 + 0.3 (d-1)) + 120 par km)`, x1.25 si garde ; XP = credits / 2.
 
-`FProceduralQuestCache` met en cache les quetes generees par localisation/rayon (`CachedQuests`, `CacheTime`, `QueryLocation`, `QueryRadius`, expiration par defaut 60 s).
+| Template | Site | Roster | Poids | Diff. min | Base | Objectifs |
+|---|---|---|---|---|---|---|
+| Bounty | Wilderness | Faction | 1.0 | 1 | 650 | Voyage, elimination d'une escouade |
+| Recon | Wilderness | - | 0.8 | 1 | 400 | Releve de 3-5 points |
+| Extermination | Wilderness | Creature | 1.0 | 1 | 700 | Voyage, gardiens du nid, puis 1-2 vagues de couvee qui chassent le joueur |
+| Holdout | Wilderness | Tous | 1.0 | 2 | 800 | Voyage, deploiement de l'emetteur, puis 2-3 vagues d'assaut qui chassent le joueur |
+| Salvage | Structure, >= 2 ancres pickup a 4 m l'une de l'autre | Tous (gardes) | 1.0 | 1 | 550 | Voyage, recuperation de 2-4 caisses ; gardes des d3 |
+| DataHeist | Structure, >= 2 ancres appareil a 4 m l'une de l'autre | Faction | 0.9 | 2 | 700 | Voyage, piratage de 2-3 terminaux ; toujours garde |
+| Sabotage | Structure, >= 2 ancres appareil a 4 m l'une de l'autre | Faction | 0.9 | 3 | 750 | Voyage, charges sur 2-3 machines, puis equipe d'intervention qui chasse le joueur ; gardes des d5 |
+| Courier | Structure, >= 1 ancre pickup | Faction (rivaux) | 1.0 | 1 | 600 | Voyage, collecte du colis, livraison a une boite morte a 400-900 m en terrain ouvert ; rivaux postes pres de la boite des d3 |
 
-#### Archetypes multi-etapes
+Effectifs par difficulte 1..10 (tables `ContractTemplates.cpp`) : escouade Bounty 2-6, gardes 2-4, vague d'assaut 2-4 (la deuxieme +1), vague de creatures 3-6, equipe d'intervention 2-5, rivaux 0-4. Le chef du roster remplace un membre de la derniere vague ou de l'escouade a partir de sa difficulte ; le specialiste (tireur d'elite Voss) remplace au plus un membre par escouade de 3 ou plus. Les vagues qui chassent (`UContractSquadSpawnAction::bHuntPlayer`) recoivent le pawn du joueur comme cible prioritaire de `Qanga_AI_Controller` ; elles se forment sur un anneau de 90-130 m (50-90 m pour la couvee), chaque vague a un cap different de la precedente d'au moins 70 degres quand le terrain le permet. L'equipe d'intervention du Sabotage se forme sur la premiere bande de sol ouvert au-dela du site (emprise + 70-110 m, puis par pas de 100 m jusqu'a emprise + 310 m, dans les 500 m de spawn IA).
 
-```cpp
-UMultiStageQuestTemplate (base)
-    +-- UInfiltrationArchetype
-    +-- UExterminationArchetype
-    +-- UMiningArchetype
-    +-- UInvestigationArchetype
-    +-- UDefenseArchetype
-```
+Le nombre de caisses, terminaux ou charges est le plus grand jeu d'ancres espacees de 4 m trouve sur le site, borne par la difficulte. Un site Structure est essaye jusqu'a 3 fois par template et par slot ; un site Wilderness en cooldown est retire jusqu'a 3 fois. Seuls les contrats acceptes et non termines comptent dans la limite de 3 ; `ClearAllQuests` vide aussi le ledger du joueur. `DQS.Contracts.SiteFilter <texte>` (cheat) limite les contrats Structure aux sites dont l'ID contient le texte, pour reproduire un echec propre a un site.
 
-Les 5 sous-classes ne fixent que leurs valeurs par defaut dans le constructeur ; toute la logique de generation est dans la base : `SelectArchetype` -> `GenerateStages` -> `CreateObjectiveForStage`/`CreateActionsForStage`, avec scaling (`BaseStageCount`=3, `StagesPerDifficultyLevel`, `MaxTotalStages`=8) et injection de complications (`ComplicationChancePerDifficulty`). Les etapes sont decalees spatialement (`GenerateOffsetLocation`, `LocationOffsetRadius`).
+Escouades, gardes et vagues passent par `UContractSquadSpawnAction` -> `Lib_AI_Manager.ServerSpawnAI_TargetingActor` (caps de population et zones sures) ; la maintenance du `UKillObjective` relance l'action tant que l'objectif est actif. Les classes de `DA_ContractContent.HostileRosters` doivent etre spawnables : `AI_Manager.Spawn_Filter_Exclude` refuse `AI_Cyborg_C`, `AI_Cyborg_Police_C` et les pirates (obsoletes, remplaces par les Voss) ; le roster Voss utilise les variantes `AI_Voss_*_AILean`. Les rosters `Creature` (infectes, Sanglines) ne servent qu'aux contrats qui l'acceptent. Un refus est logue avec la classe, la position et la distance du joueur le plus proche. L'emetteur deploye du Holdout est un prop d'affichage (`USpawnActorAction::SpawnEntries`, `AQuestInteractActorBase` sans interaction) leve a la premiere vague et rappele a chaque reprise du contrat.
 
-**Enumerations d'archetype** (`QuestArchetypeTypes.h`) :
+#### Placement sans meshes
 
-```cpp
-enum class EQuestStageType : uint8 {
-    Approach, Infiltrate, Combat, Investigate, Retrieve, Interact,
-    Defend, Escape, Deliver, Scan, Sabotage, Ambush, Boss, Mine
-};
+Le serveur dedie n'a pas de meshes : tout placement est calcule depuis le terrain analytique WorldScape et des donnees cuites dans chaque `UQLevel_Asset` (`FQLevelInteractableData`) :
 
-enum class EQuestArchetypeID : uint8 {
-    None, Infiltration, Extermination, Investigation, Mining,
-    Rescue, Sabotage, Defense, Assassination, Delivery, Exploration
-};
+- `QuestPropPlacementVersion` (2) : par entree de catalogue, `QuestPropLocation` pose un prop de 52 x 52 x 42 cm sur une vraie surface (dessus de l'ancre a 130 cm max de sa base, sinon sol a cote), sans recouvrement, vu sans obstacle par un joueur debout a 110 cm (oeil a 160 cm du sol trouve). Ce joueur est la capsule reelle du pawn (rayon 34 cm, demi-hauteur 90 cm) testee sur le canal Pawn : la version 1 testait une sphere de 25 cm sur Visibility et acceptait des caisses entre des conteneurs ou aucun joueur ne tient. Les contrats n'utilisent que ces entrees.
+- `PickupPlacementVersion` : degagement des disques de modules (loot QModule), independant.
+- `ObstacleFootprintVersion` (2) : cellules de 800 cm couvertes par des meshes bloquants de plus de 60 cm ; le sol ouvert des contrats Wilderness les evite. Un mesh plus large que 256 cellules contribue ses pieces de collision (elements simples, ou triangles en complex-as-simple) au lieu de sa boite : la boite de 2 km du SkyRoute fusionne de Q_L_Env_Djibouti_1 fermait toute la ville.
 
-enum class EStageObjectiveType : uint8 {
-    Location, Kill, KillStealth, KillTimed, Interact, Scan, Pickup,
-    Dialogue, Defend, Timer, EGState, QLevelLoad, MineOre
-};
+Toute modification d'un QLevel impose de recuire son catalogue : `ULevelMeshScanner::PopulateQLevelsWithInteractableData(Assets)` (un seul monde de collision par appel ; un monde par QLevel epuisait la VRAM) puis sauvegarde des assets.
 
-enum class EStageComplication : uint8 {
-    None, Reinforcements, TimedExplosives, Alarm, EnvironmentalHazard,
-    BossSpawn, Ambush, EquipmentFailure, HostageExecution, EscapeVehicle
-};
-```
+#### Validation QATS
 
-> **Note** : `EQuestArchetypeID` declare 11 archetypes mais seules 5 sous-classes `U*Archetype` existent ; Rescue/Sabotage/Assassination/Delivery/Exploration n'ont pas de sous-classe dediee.
-
-#### Base d'interactables (placement procedural d'objectifs Interact/Scan)
-
-`UInteractableMeshDatabase` (UDataAsset) mappe des noms de mesh vers une categorie via ~169 mots-cles codes en dur (`LoadDefaultKeywords`), avec un cache statique `CachedDatabase`. Categories :
-
-```cpp
-enum class EInteractableCategory : uint8 {
-    Terminal, Container, Machinery, Furniture, Switch, Generic
-};
-```
-
-Le scan d'un QLevel produit un `FQLevelInteractableData` (liste de `FDiscoveredInteractableMesh` + comptes par categorie) que les archetypes interrogent (`FindMeshNearLocation`, `GetRandomMeshOfCategory`).
-
-> **Piege** : un mot-cle contient la faute de frappe historique `"StorageContianer"` (categorie Container, priorite 2.3). Devrait etre externalise en config.
+`quest.test.start Contracts|Contract=<TemplateID> <Repetitions> <Seed> Heuristic ObjectiveLocal|FullRoute` prend l'offre suivante du template au tableau le plus proche ; chaque repetition prend le slot suivant (difficulte croissante).
 
 ---
 
@@ -1219,9 +1185,7 @@ Conteneur cle->valeur type pour les quetes procedureaux/scriptees. Types support
 
 12. **Audio dialogue non synchronise** : le VO du popup de dialogue n'est PAS synchronise au typewriter ; la synchro adaptative texte<->audio n'existe que pour les notifications de type `Communication`.
 
-13. **Archetypes incomplets** : `EQuestArchetypeID` declare 11 archetypes mais seules 5 sous-classes `U*Archetype` existent (Rescue/Sabotage/Assassination/Delivery/Exploration n'ont pas de sous-classe).
-
-14. **`EditorScriptingUtilities`** : active dans le `.uplugin` mais reference par aucun `Build.cs` (dependance d'activation morte cote C++).
+13. **`EditorScriptingUtilities`** : active dans le `.uplugin` mais reference par aucun `Build.cs` (dependance d'activation morte cote C++).
 
 ### 7.3 Hacks et dette technique
 
@@ -1234,7 +1198,6 @@ Conteneur cle->valeur type pour les quetes procedureaux/scriptees. Types support
 | `QuestConditionBase.cpp:107-127` | Jusqu'a 5 `DQS_LOG_WARNING` par evaluation de condition (masques par `GDQSLoggingEnabled`) | Logging de debug oublie |
 | `QuestActionBase.cpp:1352-1377` | `MarkActionCompleted` : 3 `if` independants (PC/PlayerState/Pawn) -> RPC potentiellement triple | Iteration de composants non factorisee |
 | `InteractableMeshDatabase.cpp:54` | ~169 mots-cles codes en dur, avec la faute `"StorageContianer"` | Base initiale, devrait etre en config |
-| `ProceduralQuestTemplate.cpp:92-168` | `static UClass* CachedClass = nullptr` dans les helpers -- persiste entre sessions PIE | Optimisation de performance |
 | `QuestDataTypes.h:359` | `FModularQuestArchiveProxy` duplique `FQuestSilentObjectProxyArchive` (`SerializeQuestUtils.h:14`) | Evolution independante des deux fichiers |
 | `QuestEditorWindow.h:279-280` | `UPROPERTY()` sur `QuestIconTexture` dans un `SCompoundWidget` (non-UObject) | Macro sans effet, jamais nettoye |
 | `ComponentOrganizationManager.h:138` | Commentaire `//BenFix ma guele` (a migre du `.cpp` vers le header) | Commentaire de dev oublie |
@@ -1260,8 +1223,8 @@ Public/
     QuestAssetManager.h                              -- Decouverte classes (doublon de Factory)
   Data/
     QuestDataTypes.h                                 -- TOUTES les structs/enums centrales (~1400 lignes)
-    QuestArchetypeTypes.h                            -- Types archetypes multi-etapes
-    ProceduralQuestTypes.h                           -- POI types, cache procedural
+    QuestArchetypeTypes.h                            -- Catalogues QLevel cuits (ancres, placements de props, empreinte d'obstacles)
+    ProceduralQuestTypes.h                           -- Sites, offres et payloads de contrats
     SerializeQuestUtils.h                            -- Archive proxy, FindClassWithFallbacks
     QuestDataAsset.h                                 -- UPrimaryDataAsset simple (legacy/alternatif)
     QuestDynamicRegistry.h                           -- Key-value store runtime type
@@ -1269,8 +1232,7 @@ Public/
     QuestSystemPrimaryAsset.h                        -- Catalogue refs assets pour cooking
     QuestStringTableRuntime.h                        -- Resolution textes localises
     InteractableMeshDatabase.h                       -- Classification meshes par mots-cles
-    ProceduralQuestTemplate.h                        -- 8 templates proceduraux
-    MultiStageQuestTemplate.h                        -- 5 archetypes multi-etapes
+    ProceduralQuestTemplate.h                        -- Base des templates de contrat
   Interfaces/
     IQuestDataSource.h                               -- Interface persistance
     IQuestEventHandler.h                             -- Interface traitement evenements
