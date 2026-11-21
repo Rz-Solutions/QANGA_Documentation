@@ -5,6 +5,8 @@
 > moteur des `.uasset`/`.umap` (`Saved/Claude/uasset_offline/`), décodage des heightmaps et des textures sources,
 > lecture du code WorldScape et QAI. L'éditeur n'a pas été lancé.
 > Repère : X = est, **Y négatif = nord**, origine = centre de la capitale, mètres.
+> Révision du 20/11 après relecture de Benjamin : ordre des volumes par `Priority`, outil de mesure du feuillage,
+> voies du CryoRoom, collision du sol cuit absente du serveur dédié, climat simulé partout.
 
 ---
 
@@ -15,8 +17,8 @@
    véhicules ; on libère du stockage).
 3. **La collision terrain sur le CPU est acceptée** (« la plupart des trucs sont en GPU, que le CPU soit utilisé pour
    la collision, c'est pas grave »). Le reste (rendu, bruit, feuillage) reste sur le GPU.
-4. Le climat (température, humidité) de l'enceinte vient de la bonne texture, pour que le feuillage suive les biomes
-   à l'intérieur du mur.
+4. Le climat (température, humidité) de l'enceinte suit les biomes voulus, pour que le feuillage les respecte à
+   l'intérieur du mur : **climat simulé retenu** (§2.6), mêmes parts de biome que la peinture d'origine.
 5. Masques de feuillage sur les zones construites au sol (levels). Les trous pour les tunnels : plus tard.
 
 ## 1. Réponse courte
@@ -29,8 +31,8 @@
 - **Le terrain WorldScape actuel est une cuvette** : `TerrainrWallHM` vaut 0 dans toute l'enceinte, le sol est à
   environ -600 m sous la ville, soit 614 à 1 295 m sous le sol cuit. On ne retouche pas `TerrainrWallHM`, on ajoute
   le volume de la capitale par-dessus.
-- **Le climat stocké dans `ComplexWallHM1_True` est cassé** (§2.6) : on le reprend dans la même texture source,
-  écrêté au lieu d'être replié.
+- **Le climat stocké dans `ComplexWallHM1_True` est cassé** (§2.6) : on le remplace par le **climat simulé** (le mur
+  tient un nord froid et un sud chaud, le relief module), avec les mêmes parts de biome que la peinture d'origine.
 - **Trois réglages à ne pas rater** : position du volume (9 m d'écart entre l'outil et l'acteur cuit), courbure
   (3,2 m au mur), taille des données (l'atlas GPU déborderait). Détail au §2.3 et au §5.
 
@@ -47,9 +49,16 @@
 Formule WorldScape (CPU `WorldScapeRoot_Noise.cpp:500`, GPU `WSHeightfieldVolumes.ush:430`, identiques) :
 hauteur = Altitude + valeur x MapHeight ; demi-côté = échelle X x 50 cm ; z monde à l'origine = hauteur - 10 700,16 m.
 
+**Ordre d'application** : les volumes sont triés par `Priority` **décroissante** (`StableSort`,
+`WorldScapeRoot_Helper.cpp:528` et `:562`), puis appliqués dans cet ordre ; avec Override, **le dernier appliqué
+gagne**, donc celui de plus petite `Priority`. La place dans `HeightMapVolumeList` ne départage que les égalités.
+Priorités lues : `TerrainWall_HMVolume2` et `OceanWall_HMVolume` n'en sérialisent pas, donc **0** (défaut
+`VolumeInterface.h:22`) ; `CapitalHangarLift_OceanExclusion_HMVolume` = **-1**.
+
 ### 2.2 Le sol cuit (`HM_Bake_Capital_Actor` dans `_SubLevel/L_YellowWallGround`)
-- Acteur en **(10,73 ; 16,85 ; 13,59) m**, sans rotation ; 203 tuiles `Proxy` (Nanite, collision `BlockAll`) sur 256,
-  les 53 manquantes dans les coins hors du mur. Les 256 `Collision_SM` ne sont pas posées par l'acteur.
+- Acteur en **(10,73 ; 16,85 ; 13,59) m**, sans rotation. Sur disque : 256 fichiers `Proxy` (Nanite, collision
+  `BlockAll`) et 256 fichiers `Collision_SM` ; **l'acteur pose 203 tuiles `Proxy`**, les 53 absentes sont dans les
+  coins hors du mur. Aucune `Collision_SM` n'est posée par l'acteur.
 - Sol cuit = 13,59 + valeur x 683,5 m, **plan** (pente de calage en r² : 0,02 m/km², une sphère donnerait -0,16).
 - Dans l'enceinte (63,6 km²) : **68 % du sol est sous l'eau** (fond à 13,6 à 66 m) ; **20,2 km² de sol sec** (croissant
   nord-est, île ouest, îles sud et sud-est du Complex), altitude médiane 142 m, pente médiane 27°.
@@ -66,7 +75,8 @@ Volume posé sur l'acteur cuit + heightmap qui compense la courbure (lot 1) : l'
 ### 2.4 Voies ZoneGraph, routes, bâtiments
 - **Voies ZoneGraph** (`L_ZoneGraph_Merging`, 239 853 points) : **aucun point à moins de 2 m du sol cuit** ; 99 % à
   plus de 20 m au-dessus (paliers 96, 113,6, 137, 155, 175 et 650-670 m). La ville piétonne est sur des dalles
-  au-dessus de l'eau. **Aucun recalage de voie n'est nécessaire.** 44 voies (0,4 km) passent sous le sol (tunnels).
+  au-dessus de l'eau. **Aucun recalage de voie n'est nécessaire.** Les 44 voies (0,4 km) sous le sol sont exactement
+  les 44 voies taguées `Crowd_Inside` (bit 7) : le **CryoRoom**, à z = -158 m vers (2 244 ; 2 256), pas des tunnels.
 - **Objets** (117 026 boîtes uniques dans l'enceinte) : **4 115 posés sur le sol**, surtout `L_YW_AirField_Sud` (1 407),
   `L_YW_UnderWater_Desert` (586), `L_Capital_CostaRive` (432), piles de `L_Capital_BaseStruct` (371),
   `L_YW_WeaponFactory` (301). Mesure sur les boîtes des acteurs, pas sur les points de contact exacts.
@@ -75,7 +85,12 @@ Volume posé sur l'acteur cuit + heightmap qui compense la courbure (lot 1) : l'
 - `QAI_Planetary_Manager` : `GetPawnDistanceFromGround`, `WS_GetTemperature/Humidity`. `QAI_Planetary_Client` :
   trace physique `CyTraceSphereByChannelSingle` + `GetDistanceFromWater`. Pions : `TryGetWorldScapeGround`
   (`QAI_FloatingPawnMovement.cpp:1189`) et `ResolveWorldScapeTerrainPenetration` (remonte un pion passé sous la surface).
-- Aujourd'hui ces requêtes voient la cuvette à -600 m sous l'eau : très probablement la raison pour laquelle le spawn
+- **Aujourd'hui, deux mondes différents selon le canal** : les requêtes WorldScape (`GetPawnDistanceFromGround`,
+  `GetDistanceFromWater`, climat) voient la cuvette à -600 m ; la trace physique côté client touche le sol cuit. Sur
+  le **serveur dédié**, le sol cuit n'a aucune collision : ses StaticMesh n'y sont pas chargés (règle du projet, le
+  serveur ne charge pas de géométrie ; le BP `LevelStreamingArea` teste `IsServer`/`IsStandalone`, graphe non relu
+  ici). Le serveur ne connaît donc que la cuvette. Le passage à 100 % WorldScape remet les trois canaux d'accord.
+- Les requêtes WorldScape voient la cuvette à -600 m sous l'eau : très probablement la raison pour laquelle le spawn
   planétaire ne donne rien dans l'enceinte (non vérifié en jeu). Après : les 20 km² d'îles deviennent un sol valide ;
   le centre (dalles au-dessus de l'eau) reste rejeté par le test d'eau. Restent à exclure les zones construites au sol
   des îles (aérodrome sud, usine, carrière).
@@ -91,7 +106,8 @@ Volume posé sur l'acteur cuit + heightmap qui compense la courbure (lot 1) : l'
   une ancienne hauteur en niveaux de gris (37 m d'écart moyen avec le bake) ; les assets les plus récents,
   `ComplexWallHM1_copy` et `ComplexWallHM1_cEzdopy` (13/10/2026), en sont des copies (hauteur = température =
   humidité). `ComplexWallHM1_True_Backup_Tex2D` a aussi des valeurs au-dessus de 1.
-- **Climat retenu (Benjamin : « l'asset le plus récent »)** : la texture la plus récente qui porte un climat,
+- Étape intermédiaire, **remplacée par le climat simulé ci-dessous** (Benjamin : « l'asset le plus récent ») : la
+  texture la plus récente qui porte un climat,
   **`ComplexWallHM1_coqdzqdpy_Tex2D`** (29/09/2023, la source du bake), canaux G (température) et B (humidité),
   **écrêtés à 0..1** au lieu d'être repliés. Résultat : le nord froid et humide, le sud chaud et sec, sans anneaux.
   Sur les îles sèches : température médiane 0,72 (bornes 0,26 à 1 du volume de l'outil), humidité médiane 0,04 ;
@@ -151,7 +167,7 @@ Jours de session, hors validation de Benjamin et compilation de RzZz. Chaque lot
 | 1 | Données de la capitale : hauteur tirée de `_True`, **4096²** (même densité que le bake, 2,2 m), courbure compensée (+r²/2R, MapHeight relevé à 690 m) ; température et humidité = climat simulé (§2.6), 4096². Calcul hors moteur, import en éditeur d'un nouveau HeightMapVolumeData. Vérif hors moteur : écart au sol cuit < 0,1 m | 0,5 à 1 j | 1 texture + 1 HeightMapVolumeData (nouveaux) |
 | 2 | Volume dans `L_Dev_Claude` (même planète, même bruit) : posé sur l'acteur cuit (10,73 ; 16,85), échelle 8968,686523, Altitude calée sur z 13,59, EdgeFalloff 0, Override, hauteur + température + humidité. Comparaison avec une copie du sol cuit, journaux GPU | 1 j | `L_Dev_Claude` seulement |
 | 3 | Masques de feuillage (`FoliageMaskVolume`) sur les zones construites au sol : aérodrome sud, usine, carrière, CostaRive, piles de BaseStruct, Complex | 0,5 à 1 j | nouveaux volumes |
-| 4 | Intégration Univers : volume dans `HeightMapVolumeList` d'`EarthScape` **après** `TerrainWall_HMVolume2` ; `L_YellowWallGround` retiré de `SL_YellowWallTerrain` ; `HM_Bake_Capital_HLOD` retiré des listes de `L_Steaming_On_Earth` | 0,5 j | persistant de jeu + streaming (accord explicite ; RzZz a modifié le persistant le 14/11) |
+| 4 | Intégration Univers : volume dans `HeightMapVolumeList` d'`EarthScape` avec **`Priority` -1** (appliqué après `TerrainWall_HMVolume2`, Priority 0 ; même rang que l'exclusion du monte-charge, qui ne touche que l'eau), placé après `TerrainWall` dans la liste ; `L_YellowWallGround` retiré de `SL_YellowWallTerrain` ; `HM_Bake_Capital_HLOD` retiré des listes de `L_Steaming_On_Earth` | 0,5 j | persistant de jeu + streaming (accord explicite ; RzZz a modifié le persistant le 14/11) |
 | 5 | QAI intra-muros (lot U du rapport piétons) : spawn sur les îles, exclusions des zones construites, intérieurs sous le sol | 1 j | volumes QAI |
 | 6 | Introduction et StarMap : décider (garder le cuit pour elles, ou passer l'intro au volume et la StarMap à un mesh plus léger), puis seulement supprimer `Baking_Capital` | 0,5 j + décision | levels intro / StarMap |
 | 7 | Test serveur dédié + 2 clients : collision (tuiles générées sous la ville, véhicules), mémoire, temps de frame, journaux GPU | 0,5 j | non |
@@ -169,20 +185,23 @@ Jours de session, hors validation de Benjamin et compilation de RzZz. Chaque lot
 5. **Feuillage** : aucun masque ni volume de trou autour de la capitale aujourd'hui ; sans le lot 3, il pousse sur
    l'aérodrome, l'usine et les routes au sol.
 6. **Aspect** : le bake utilise `/Game/Maps/LandscapeInst_Inst`, le terrain le matériau planétaire. Les îles changent.
-7. **Tunnels et intérieurs sous le sol** (puits du monte-charge, `L_Usine_Autonome_Stream`, 44 voies en tunnel) : le
+7. **Tunnels et intérieurs sous le sol** (puits du monte-charge, `L_Usine_Autonome_Stream`, CryoRoom à -158 m) : le
    terrain les recouvre, comme le bake, mais sans trou la collision WorldScape peut bloquer une entrée, et la remontée
    QAI peut sortir un pion. Reporté par Benjamin.
 8. **Introduction et StarMap** utilisent le sol cuit (§2.7) : ne pas supprimer les assets avant le lot 6.
 9. **Couture au bord du carré** : sur les axes cardinaux le carré s'arrête au pied du mur ; dehors le terrain est à
    -255/-600 m, donc une marche sous l'eau. Elle existe déjà avec le bake ; à regarder en éditeur.
-10. **Ordre des volumes** : avant `TerrainWall` dans la liste, le nouveau volume serait écrasé.
+10. **Ordre des volumes** : c'est la `Priority` qui décide (§2.1). Avec une `Priority` supérieure à 0, le nouveau
+    volume serait appliqué avant `TerrainWall` et écrasé par la cuvette.
 
 ## 6. Reste à mesurer en éditeur (lot 0, lecture seule)
 
 - Hauteur réelle du terrain WorldScape dans l'enceinte (grille `GetGroundNoise`) : confirmer la cuvette.
 - Ligne `WS IndirectTerrain` de l'atlas (taille, masques abandonnés), avant et après le volume.
 - Feuillage présent aujourd'hui dans l'enceinte, et sur `L_Dev_Claude` avec le nouveau climat.
-- Journal : `WS_FOLIAGE_GPU run (gpu)` avec 0 secteur sur le bruit CPU, `forced_cpu=0`.
+- Feuillage sur le GPU : commande `ws.Foliage.GPUStats` (`WorldScapeRoot_Foliages.cpp:670`). La découverte CPU du
+  feuillage a été retirée de QANGA ; les lignes `WS_FOLIAGE_GPU` / `forced_cpu` citées par le skill `terrain-gpu`
+  viennent de WorldScapeLab et n'existent pas dans ce code.
 - `QAI.Debug 1` en marchant sur une île, avant et après.
 - Collision : tuiles WorldScape générées sur les dalles (attendu 0 aujourd'hui).
 
@@ -193,5 +212,6 @@ Jours de session, hors validation de Benjamin et compilation de RzZz. Chaque lot
   `_True` et climat retenu).
 - Scripts de mesure : dossier de travail de la session (extraction des tableaux `Stored*`, décodage Oodle des textures,
   calage des tuiles, comparaison). À copier dans `Saved/Claude/uasset_offline/` si on les garde.
-- Doc à corriger après validation : `YELLOWWALL_PEDESTRIANS_STATE.md` (« les voies devront être recalées » est faux) et
-  `CAPITALE_YELLOWWALL_ARCHITECTURE.md` §4 bis (`TerrainrWallHM` creuse l'enceinte à -600 m ; `HM_WallComplex2`).
+- `YELLOWWALL_PEDESTRIANS_STATE.md` : déjà corrigé par la session piétons (« aucun recalage de voie nécessaire »,
+  renvoi au §2.4). Reste à corriger : `CAPITALE_YELLOWWALL_ARCHITECTURE.md` §4 bis (`TerrainrWallHM` creuse
+  l'enceinte à -600 m ; `HM_WallComplex2`).

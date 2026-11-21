@@ -59,14 +59,14 @@ Soit environ **0,9 piéton par km de trottoir** dans la capitale (à l'échelle 
   **réplication Mass** (`MassReplicationTrait` + bulles client). `Mass_Crowd_Character_Template_BaseConfig`
   (avec `Mass_Crowd_BaseCharacter_Server`) n'est parent d'**aucun** des 5 types utilisés.
 - Représentation : `MassCrowdVisualizationTrait`, LOD Medium **et** Low forcés en `HighResSpawnedActor`. Avec les
-  distances par défaut de MassCrowd (High 0 à 5 m, Medium 5 à 10 m, Low jusqu'à 50 m visible, Off au-delà de 100 m),
-  **tout piéton visible à moins de ~50 m est un `ACharacter` complet** (CharacterMovement, AnimBP, CombatComponent,
+  distances visibles par défaut de MassCrowd (High 0, Medium dès 10 m, Low dès 50 m, Off au-delà de 100 m ; 50 m est
+  la limite hors champ), **tout piéton visible à moins de 100 m est un `ACharacter` complet** (CharacterMovement, AnimBP, CombatComponent,
   GravityArea, son) ; le mesh VAT `Cyborg_SM` (ISM) n'est jamais utilisé ; **au-delà de ~100 m il n'y a plus personne**.
 - L'acteur (`Mass_Crowd_Cyborg_V1_High` etc., parent `Mass_Crowd_BaseCharacter_Server`, classe `Character`) : synchro
   `FeetLocation ActorToMass` + `MovementSync` (la position Mass suit l'acteur et sa collision capsule), réaction aux
   impacts (`AddImpulse`, `LaunchCharacter`), dégâts et mort (`ApplyDamage`, `Kill`, `KillEntity`), collisions joueur
   remontées au serveur par `PS_MassEventsRep` (composant du `QangaPlayerState`) et `Lib_MassAI.SendToServerCollisionMassAI`.
-- StateTree (les 4 types ont le même arbre, celui de City Sample allégé) : **Walk** (`ZG Find Wander Target` + path follow
+- StateTree (4 arbres pour les 5 types, `HumanCitizen` réutilise celui de `Human` ; tous ont la même structure, celle de City Sample allégée) : **Walk** (`ZG Find Wander Target` + path follow
   + LookAt) / **Idle** (`ZG Stand` avec délai) / **Escape** (`FindEscapeTarget` sur tag d'annotation).
   Pas de destination, pas de SmartObject, pas d'activité.
 
@@ -110,17 +110,18 @@ exactement cette règle sur le graphe réel (composantes fortement connexes, Tar
   (27 % de toute la foule au bout de 24 h). Un serveur dédié qui tourne des jours finit donc avec une bonne partie
   de la foule coincée dans 3 endroits.
 
-### 2.2 « Elles s'empilent à certains endroits » : deux causes cumulées
-1. **Les puits ci-dessus** (MESURÉ) : les IA qui y entrent font du ping-pong sur 17 m et s'accumulent.
-2. **L'évitement entre piétons est neutralisé par la config** (LU dans le code moteur, à confirmer au runtime) :
-   `Config/DefaultMass.ini` déplace `MassMovingAvoidanceProcessor` et `MassStandingAvoidanceProcessor` dans la phase
-   `FrameEnd` (par défaut `PrePhysics`). Dans le moteur 5.7.3 :
-   - `MassSteerToMoveTargetProcessor` (PrePhysics) **écrase** la force : `Force.Value = SteerK * (...)`
-     (`MassSteeringProcessors.cpp:238`), et la met à zéro pour un agent à l'arrêt (`:353`, `:363`) ;
-   - `MassApplyForceProcessor` (PrePhysics) applique la force puis la remet à zéro (`MassMovementProcessors.cpp:58`) ;
-   - l'évitement en `FrameEnd` calcule donc sa force **après** l'application, et elle est écrasée par le steering de la
-     frame suivante avant d'être lue. Résultat : ni évitement en marche, ni séparation à l'arrêt. Les piétons se
-     traversent et restent superposés dès qu'ils se croisent sur une voie étroite ou attendent au même endroit.
+### 2.2 « Elles s'empilent à certains endroits »
+1. **Les puits ci-dessus** (MESURÉ) : les IA qui y entrent font du ping-pong sur 17 m et s'accumulent. **C'est la
+   cause des piles à l'arrêt.**
+2. **L'évitement en marche est neutralisé par la config** (LU dans le code moteur 5.7.3, à confirmer au runtime) :
+   `Config/DefaultMass.ini` place `MassMovingAvoidanceProcessor` en `FrameEnd` (défaut `PrePhysics`).
+   `MassSteerToMoveTargetProcessor` (PrePhysics) **écrase** la force (`Force.Value = SteerK * (...)`,
+   `MassSteeringProcessors.cpp:238`) et `MassApplyForceProcessor` l'applique puis la remet à zéro
+   (`MassMovementProcessors.cpp:58`) : la force d'évitement calculée en fin de frame est écrasée avant d'être lue.
+   Les piétons en marche se traversent.
+3. **La séparation à l'arrêt marche** (correction du 20/11, relu dans le code) : `MassStandingAvoidanceProcessor` ne
+   touche pas la force, il déplace le *ghost* (`FMassGhostLocationFragment`), que le steering relit à la frame
+   suivante. En `FrameEnd` il n'a qu'une frame de retard. Ce n'est donc pas lui qui explique les piles.
 
 ### 2.3 Défauts secondaires mesurés
 - **Graphe chargé 3 fois** : les 3 `ZoneGraphData` de `L_ZoneGraph_Merging` ont chacun le graphe complet (12 855
@@ -142,7 +143,7 @@ exactement cette règle sur le graphe réel (composantes fortement connexes, Tar
 |---|---|---|
 | Configs, StateTrees, acteurs de foule enregistrés en format 5.3 (`UE5 = 1009`), sauf le StateTree CyborgV2 et les spawners (5.7) | lu dans les en-têtes | StateTree recompilé au chargement ; une erreur de liaison serait silencieuse en jeu : **lire le log** (§5) |
 | `Plugins/Traffic` désactivé, jamais compilé ici | pas de `Binaries` | contenu `Content/Mass/Traffic` mort ; ne pas le réactiver sans portage |
-| `DefaultMass.ini` : évitement, `DynamicObstacle`, `LODCollector` en `FrameEnd` | lu | évitement mort (§2.2) ; obstacles et LOD décalés d'une frame |
+| `DefaultMass.ini` : évitement, `DynamicObstacle`, `LODCollector` en `FrameEnd` | lu | évitement en marche mort, séparation à l'arrêt avec une frame de retard (§2.2) ; obstacles et LOD décalés d'une frame |
 | `CrossingTag` = `CrowdTag` | lu | §2.3 |
 | Réplication Mass | toujours présente en 5.7 mais peu documentée par Epic | à éprouver à 500 joueurs (lot 7) |
 | Logs disponibles (`Saved/Logs`, 19 fichiers) | aucune session Univers avec la foule | aucun diagnostic runtime possible sans relancer |
@@ -158,8 +159,8 @@ Autonomes, gardes, pirates, Voss. Ce qui existe et pourquoi ça n'arrive pas en 
 | | Foule Mass (capitale) | QAI (reste de l'univers) |
 |---|---|---|
 | Rôle | figurants d'ambiance | agents de gameplay (combat, poursuite, police) |
-| Nombre | ~220 x échelle, global | **32 vivants par joueur** (`MaxAgentPerClient`), 512 au total |
-| Déplacement | voies ZoneGraph | flow field (pas de NavMesh) |
+| Nombre | ~220 x échelle, global | `Clamp(512 / nb joueurs, 1, 32)` par joueur : 32 jusqu'à 16 joueurs, puis ça baisse, ~1 par joueur à 500 |
+| Déplacement | voies ZoneGraph | navmeshes Recast/Detour partagés (`QAI_GroundNavigation`) ; `QAI_ARCHITECTURE.md` §9 (flow field) n'est plus à jour |
 | Autorité | serveur + réplication Mass | serveur, pawns répliqués |
 | Rendu de loin | rien au-delà de ~100 m | **tier impostor VAT** (`QAI_ImpostorSubsystem`) |
 | Faction | `CombatComponent` = None (citoyen) | factions `E_Factions` / `EQAI_Faction` |
@@ -197,7 +198,9 @@ Aucun lien dans le code : ni QAI, ni QPolice, ni QCombat ne référencent Mass (
   centre et Complex très surveillés, ceinture sud et quartiers pauvres moins, zones « chaudes » où pirates et Voss
   peuvent apparaître.
 - **Présence de fond** : patrouilles à pied (`QAI_GuardPatrolSpawner`) sur les grands axes et autour des commissariats,
-  drones en altitude, gardes aux portes du mur ; budget pris sur les 32 IA par joueur (ex. 8 à 12 en ville).
+  drones en altitude, gardes aux portes du mur. **Budget** : le plafond QAI par joueur tombe à ~1 à 500 joueurs, donc
+  la présence policière de fond ne peut pas venir du quota par joueur. Il lui faut un budget propre à la ville (pool
+  fixe de patrouilles partagé par tous les joueurs présents), à chiffrer au lot 7.
 - **Cohérence des réactions** : un crime contre un citoyen alimente QPolice ; une fusillade ou une poursuite QPolice
   pose une annotation de perturbation ZoneGraph et la foule fuit (lot 4) ; la foule s'écarte d'une patrouille.
 - **Même rendu de loin** : réutiliser les bakes VAT du tier impostor QAI (`ImpostorBakes`, mêmes meshes
@@ -208,14 +211,17 @@ Aucun lien dans le code : ni QAI, ni QPolice, ni QCombat ne référencent Mass (
 ### Sol WorldScape et zones intra-muros (Benjamin, 19/11)
 Benjamin veut remplacer le sol cuit par le terrain WorldScape et faire tourner le spawn planétaire QAI dans
 l'enceinte, hors des rues. Mesuré sur disque :
-- Sol actuel = 256 tuiles static mesh `Content/Baking_Capital/HM_Bake_Capital_*`, cuites (WorldScape
+- Sol actuel = grille 16 x 16 de `Content/Baking_Capital/HM_Bake_Capital_*` (256 fichiers, 203 tuiles posées par
+  l'acteur, cf. `YELLOWWALL_SOL_WORLDSCAPE.md`), cuites (WorldScape
   `WS_BakingToStaticMesh`) depuis la heightmap **`/Game/Maps/ComplexWallHM1_coqdzqdpy_Tex2D`**.
 - Le terrain WorldScape de la capitale est déjà creusé par **`TerrainWall_HMVolume2`** (heightmap
   `/Game/Maps/TerrainrWallHM`, origine, MapHeight 35 000) + `OceanWall_HMVolume` (`OceanWallHM1`) +
   `CapitalHangarLift_OceanExclusion_HMVolume`, dans `L_Persistent_Universe`. **Ce sont deux heightmaps différentes** :
   la comparaison est le préalable.
 - Couplage à surveiller : les voies ZoneGraph, les routes et les bâtiments sont calés sur le sol cuit. Tout écart de
-  hauteur du nouveau sol fait flotter ou enterrer les piétons : les voies devront être recalées (mesure par voie).
+  hauteur du nouveau sol ferait flotter ou enterrer les piétons. **Mesuré par l'étude sol** : aucun point de voie à
+  moins de 2 m du sol cuit, 99 % à plus de 20 m au-dessus du sol WorldScape actuel ; le sol retenu est posé sur
+  l'acteur cuit, donc **aucun recalage de voie n'est nécessaire** (voir `YELLOWWALL_SOL_WORLDSCAPE.md` §2.4).
 - La décision du 22/10 (« ne pas toucher la version cuite ») est levée par cette demande : à confirmer noir sur blanc.
 
 **Trois zones, une seule source de vérité** (les zones StarMap + des volumes) lue par les deux systèmes :
@@ -225,7 +231,7 @@ l'enceinte, hors des rues. Mesuré sur disque :
 | Intra-muros hors ville (sol WorldScape, pas de route) | spawn planétaire QAI autour du joueur | liste « intra-muros » (police, drones, Autonomes, animaux urbains, incursions) |
 | Hors mur | spawn planétaire actuel | inchangé |
 Une bande de transition où la densité Mass décroît pendant que l'anneau QAI prend le relais, et un budget par joueur
-commun (les 32 IA QAI ne sont pas consommées par la foule Mass).
+commun (la foule Mass ne consomme pas le quota QAI).
 
 ---
 
@@ -259,18 +265,19 @@ positions de la foule toutes les 60 s pendant 15 min en PIE serveur + 2 clients 
 4. Liste de spawn « ville » (override par volume) : police, Autonomes, drones ; pirates et Voss seulement en zone chaude.
 5. Ponts de réaction foule / QPolice (avec le lot 4).
 - **Fini quand** : en 15 min de marche en ville on croise police et drones à des endroits plausibles, la foule réagit
-  à une intervention, et le budget de 32 IA par joueur reste respecté hors de la ville.
+  à une intervention, et le pool de la ville ne réduit pas le quota QAI des joueurs hors de la ville.
 
 ### Lot T : sol WorldScape dans l'enceinte (session dédiée, à chiffrer par elle)
 Comparer `ComplexWallHM1` (sol cuit) et `TerrainrWallHM` (WorldScape), choisir la heightmap, remplacer les tuiles
 `HM_Bake_Capital` sans rien casser (collision, serveur dédié, règle GPU du skill `terrain-gpu`). Prérequis de la
-zone « intra-muros » du lot U ; après lui, recaler les voies ZoneGraph (lot 1 bis).
+zone « intra-muros » du lot U. Pas de recalage des voies ZoneGraph (mesuré, voir ci-dessus).
 
 ### Lot 2 : destinations et itinéraires variés (3 à 4 j)
 Remplacer la marche aléatoire par des trajets : chaque piéton reçoit une destination (station QTrain, place, commerce,
 parc, arrêt) et suit un chemin calculé (`ZoneGraphAStar`, présent dans le moteur), avec variation d'itinéraire et
-retour à la marche libre en route. Tags de destination sur les zones. Nouvelles tâches StateTree en Blueprint d'abord ;
-C++ seulement si le coût le demande (compilation par RzZz).
+retour à la marche libre en route. Tags de destination sur les zones. Nouvelles tâches StateTree en
+**C++ natif** (règle native-first du projet), dans un module à créer ou à choisir avec RzZz ; compilation éditeur
+de notre côté, cibles jeu par RzZz.
 
 ### Lot 3 : activités (4 à 6 j + animations)
 SmartObjects (déjà activés, `MassSmartObjects` moteur) : s'asseoir sur les bancs, discuter à 2 ou 3, téléphoner,
